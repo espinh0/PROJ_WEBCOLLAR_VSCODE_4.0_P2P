@@ -1,0 +1,560 @@
+<!-- SEQUENCIADOR DE PULSOS v1.3 — UI com emojis grandes e sem &#8226; -->
+<style>
+  /* Escopo só dentro do widget */
+  #pulseSequencer .ps-emoji-lg {
+    font-size: 1.25rem;
+    line-height: 1;
+    vertical-align: -1px;
+  }
+
+  /* Melhor contraste nos toggles selecionados */
+  #pulseSequencer .btn-check:checked + .btn-outline-light {
+    background: #2563eb;          /* azul elétrico do tema */
+    color: #fff;
+    border-color: #2563eb;
+  }
+
+  /* Deixar badge com emoji alinhado */
+  #pulseSequencer .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /* Slider "apagado" quando desativado */
+  #pulseSequencer #edLevelGroup.opacity-50 {
+    opacity: 0.45;
+  }
+</style>
+
+<div class="card p-3 mt-3" id="pulseSequencer">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h6 class="m-0">Sequenciador de Pulsos</h6>
+    <div class="d-flex align-items-center gap-2">
+      <button id="btnAddPulse" class="btn btn-sm btn-outline-success">
+        <span class="ps-emoji-lg me-1">⚡</span> Pulso
+      </button>
+      <button id="btnAddPause" class="btn btn-sm btn-outline-secondary">
+        <span class="ps-emoji-lg me-1">⏸️</span> Pausa
+      </button>
+    </div>
+  </div>
+
+  <!-- Timeline (arrastar para reordenar) -->
+  <div id="timeline" class="d-flex align-items-stretch gap-2 flex-wrap mb-3" style="min-height:64px;">
+    <!-- blocos aparecem aqui -->
+  </div>
+
+  <!-- Controles de transporte -->
+  <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+    <button id="btnPlay" class="btn btn-primary"><i class="fa-solid fa-play"></i> Play</button>
+    <button id="btnPause" class="btn btn-outline-light" disabled><i class="fa-solid fa-pause"></i> Pausar</button>
+    <button id="btnResume" class="btn btn-outline-light" disabled><i class="fa-solid fa-play"></i> Continuar</button>
+    <button id="btnStop" class="btn btn-outline-danger" disabled><i class="fa-solid fa-stop"></i> Parar</button>
+    <div class="form-check ms-2">
+      <input class="form-check-input" type="checkbox" id="chkLoop" />
+      <label class="form-check-label" for="chkLoop">Loop ♻️</label>
+    </div>
+    <span class="ms-3 text-secondary small" id="seqStatus">Pronto.</span>
+  </div>
+
+  <!-- Editor do bloco selecionado -->
+  <div id="blockEditor" class="border rounded p-3 d-none" style="background:#15151a;">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <strong>Editar bloco</strong>
+      <button id="btnDeleteBlock" class="btn btn-sm btn-outline-danger">
+        <i class="fa-solid fa-trash"></i> Remover
+      </button>
+    </div>
+
+    <div class="row g-3">
+      <!-- Tipo: Pulso / Pausa -->
+      <div class="col-12 col-md-3">
+        <label class="form-label small d-block mb-1">Tipo</label>
+        <div class="btn-group w-100" role="group" aria-label="Tipo do bloco">
+          <input type="radio" class="btn-check" name="edTypeRadio" id="edTypePulse" value="PULSE" autocomplete="off">
+          <label class="btn btn-sm btn-outline-light" for="edTypePulse">
+            <span class="ps-emoji-lg">⚡</span> Pulso
+          </label>
+
+          <input type="radio" class="btn-check" name="edTypeRadio" id="edTypePause" value="PAUSE" autocomplete="off">
+          <label class="btn btn-sm btn-outline-light" for="edTypePause">
+            <span class="ps-emoji-lg">⏸️</span> Pausa
+          </label>
+        </div>
+      </div>
+
+      <!-- Modo: BEEP / VIBRATION / SHOCK / LIGHT -->
+      <div class="col-12 col-md-5">
+        <label class="form-label small d-block mb-1">Modo</label>
+        <div id="edModeGroup" class="btn-group w-100" role="group" aria-label="Modo de pulso">
+          <input type="radio" class="btn-check" name="edModeRadio" id="edModeBeep" value="BEEP" autocomplete="off">
+          <label class="btn btn-sm btn-outline-light" for="edModeBeep" title="Som">
+            <span class="ps-emoji-lg">🔊</span> BEEP
+          </label>
+
+          <input type="radio" class="btn-check" name="edModeRadio" id="edModeVib" value="VIBRATION" autocomplete="off">
+          <label class="btn btn-sm btn-outline-light" for="edModeVib" title="Vibração">
+            <span class="ps-emoji-lg">📳</span> VIBRA
+          </label>
+
+          <input type="radio" class="btn-check" name="edModeRadio" id="edModeShock" value="SHOCK" autocomplete="off">
+          <label class="btn btn-sm btn-outline-light" for="edModeShock" title="Choque">
+            <span class="ps-emoji-lg">⚡</span> SHOCK
+          </label>
+
+          <input type="radio" class="btn-check" name="edModeRadio" id="edModeLight" value="LIGHT" autocomplete="off">
+          <label class="btn btn-sm btn-outline-light" for="edModeLight" title="Luz">
+            <span class="ps-emoji-lg">💡</span> LIGHT
+          </label>
+        </div>
+      </div>
+
+      <!-- Canal: 1 / 2 -->
+      <div class="col-12 col-md-2">
+        <label class="form-label small d-block mb-1">Canal</label>
+        <div class="btn-group w-100" role="group" aria-label="Canal">
+          <input type="radio" class="btn-check" name="edChannelRadio" id="edChannel1" value="1" autocomplete="off">
+          <label class="btn btn-sm btn-outline-light" for="edChannel1">CH1</label>
+
+          <input type="radio" class="btn-check" name="edChannelRadio" id="edChannel2" value="2" autocomplete="off">
+          <label class="btn btn-sm btn-outline-light" for="edChannel2">CH2</label>
+        </div>
+      </div>
+
+      <!-- Duração -->
+      <div class="col-6 col-md-2">
+        <label class="form-label small">Duração (s)</label>
+        <input id="edDuration" type="number" min="0.05" step="0.05" class="form-control form-control-sm" value="0.5" />
+      </div>
+
+      <!-- Nível (slider) -->
+      <div class="col-12" id="edLevelGroup">
+        <label class="form-label small d-flex justify-content-between align-items-center mb-1">
+          <span>Nível (para <span class="ps-emoji-lg">📳</span> / <span class="ps-emoji-lg">⚡</span>)</span>
+          <span class="text-secondary">
+            <span id="edLevelValue">0</span>%
+          </span>
+        </label>
+        <input id="edLevel" type="range" min="0" max="100" step="1" class="form-range" value="0" />
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ====== Config / Firebase compat (igual ao seu chat) ======
+  const PATH_MESSAGES = "livechat_v1/messages";
+  const $  = s => document.querySelector(s);
+  const $$ = s => document.querySelectorAll(s);
+  const log = (m,l="info") => { try{ window.appLog ? window.appLog(m,l) : console.log(m);}catch{} };
+
+  function getRoomRef(){
+    if (!window.firebase || !firebase.apps || !firebase.apps.length) {
+      throw new Error("Firebase não inicializado (carregue o chat antes).");
+    }
+    return firebase.database().ref(PATH_MESSAGES);
+  }
+  const CID_KEY = "lc_cid";
+  const cid = sessionStorage.getItem(CID_KEY) || ("c_" + Math.random().toString(36).slice(2));
+  sessionStorage.setItem(CID_KEY, cid);
+
+  async function pushToChat(text){
+    if (!text || !text.trim()) return;
+    const roomRef = getRoomRef();
+    const msgRef = roomRef.push();
+    try { msgRef.onDisconnect().remove(); } catch(_) {}
+    await msgRef.set({
+      text: text.slice(0,400),
+      ts: firebase.database.ServerValue.TIMESTAMP,
+      cid: cid
+    });
+    log(`CHAT ⇢ ${text}`);
+  }
+
+  // ====== Integração com o controle (valores default) ======
+  const readMode    = () => window.currentMode || "BEEP";
+  const readLevel   = () => Number.isFinite(window.level) ? window.level : 0;
+  const readChannel = () => Number.isFinite(window.channel) ? window.channel : 1;
+
+  // ====== Estado do sequenciador ======
+  let blocks = []; // {id, type: 'PULSE'|'PAUSE', mode, level, channel, duration}
+  let selectedId = null;
+
+  // Execução
+  let isPlaying = false, isPaused = false, loop = false;
+  let playIndex = 0, playStartedAt = 0, remainingMs = 0, curTimeout = null;
+
+  // ====== UI refs ======
+  const timeline  = $("#timeline");
+  const btnAddPulse = $("#btnAddPulse");
+  const btnAddPause = $("#btnAddPause");
+  const btnPlay   = $("#btnPlay");
+  const btnPause  = $("#btnPause");
+  const btnResume = $("#btnResume");
+  const btnStop   = $("#btnStop");
+  const chkLoop   = $("#chkLoop");
+  const seqStatus = $("#seqStatus");
+
+  // Editor
+  const editor = $("#blockEditor");
+  const edDuration = $("#edDuration");
+  const edLevel = $("#edLevel");
+  const edLevelValue = $("#edLevelValue");
+  const edLevelGroup = $("#edLevelGroup");
+  const btnDeleteBlock = $("#btnDeleteBlock");
+
+  // Helpers para radios
+  const getEdType = () => {
+    const r = document.querySelector('input[name="edTypeRadio"]:checked');
+    return r ? r.value : "PULSE";
+  };
+  const setEdType = (val) => {
+    const r = document.querySelector(`input[name="edTypeRadio"][value="${val}"]`);
+    if (r) r.checked = true;
+  };
+
+  const getEdMode = () => {
+    const r = document.querySelector('input[name="edModeRadio"]:checked');
+    return r ? r.value : "BEEP";
+  };
+  const setEdMode = (val) => {
+    const r = document.querySelector(`input[name="edModeRadio"][value="${val}"]`);
+    if (r) r.checked = true;
+  };
+
+  const getEdChannel = () => {
+    const r = document.querySelector('input[name="edChannelRadio"]:checked');
+    return r ? parseInt(r.value,10) || 1 : 1;
+  };
+  const setEdChannel = (ch) => {
+    const r = document.querySelector(`input[name="edChannelRadio"][value="${ch}"]`);
+    if (r) r.checked = true;
+  };
+
+  function refreshLevelUI(){
+    const type = getEdType();
+    const mode = getEdMode();
+    const active = type === "PULSE" && (mode === "VIBRATION" || mode === "SHOCK");
+    edLevel.disabled = !active;
+    if (edLevelGroup) {
+      edLevelGroup.classList.toggle("opacity-50", !active);
+    }
+  }
+
+  const MODE_EMOJI = {
+    BEEP: "🔊",
+    VIBRATION: "📳",
+    SHOCK: "⚡",
+    LIGHT: "💡"
+  };
+
+  const newId = () => "b_" + Math.random().toString(36).slice(2,9);
+
+  function fmtDuration(d){
+    const v = Math.round(d * 100) / 100;
+    return String(v).replace(".", ",");
+  }
+
+  // Texto simples (para status, sem HTML)
+  function formatLabelPlain(b){
+    if (b.type === "PAUSE") {
+      return `Pausa · ${fmtDuration(b.duration)}s`;
+    }
+    const icon = MODE_EMOJI[b.mode] || "🔘";
+    const lvl = (b.mode === "VIBRATION" || b.mode === "SHOCK") ? ` · ${b.level}%` : "";
+    return `${icon} ${b.mode}${lvl} · ch${b.channel} · ${fmtDuration(b.duration)}s`;
+  }
+
+  // HTML para aparecer na timeline (com emoji grande)
+  function formatLabelHtml(b){
+    if (b.type === "PAUSE") {
+      return `<span class="ps-emoji-lg">⏸️</span> Pausa · ${fmtDuration(b.duration)}s`;
+    }
+    const icon = MODE_EMOJI[b.mode] || "🔘";
+    const lvl = (b.mode === "VIBRATION" || b.mode === "SHOCK") ? ` · ${b.level}%` : "";
+    return `<span class="ps-emoji-lg">${icon}</span> ${b.mode}${lvl} · ch${b.channel} · ${fmtDuration(b.duration)}s`;
+  }
+
+  function buildCmdLine(b){
+    const lvl = (b.mode==="VIBRATION"||b.mode==="SHOCK") ? b.level : 0;
+    return `${b.mode},${lvl},${b.channel}`;
+  }
+
+  function render(){
+    timeline.innerHTML = "";
+    blocks.forEach((b) => {
+      const el = document.createElement("div");
+      el.className = "border rounded px-2 py-1 d-flex align-items-center gap-2";
+      el.style.userSelect = "none";
+      el.style.cursor = "grab";
+      el.draggable = true;
+      el.dataset.id = b.id;
+
+      const minw = 80, scale = 40;
+      el.style.minWidth = Math.min(minw + b.duration*scale, 360) + "px";
+
+      const badge = document.createElement("span");
+      badge.className = "badge " + (b.type === "PAUSE" ? "bg-secondary" : "bg-primary");
+      badge.innerHTML = b.type === "PAUSE"
+        ? `<span class="ps-emoji-lg">⏸️</span> Pausa`
+        : `<span class="ps-emoji-lg">⚡</span> Pulso`;
+
+      const label = document.createElement("span");
+      label.className = "small";
+      label.innerHTML = formatLabelHtml(b);   // <-- sem &#8226;, só texto e emoji
+
+      const btnX = document.createElement("button");
+      btnX.className = "btn btn-sm btn-outline-danger ms-auto";
+      btnX.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+      btnX.addEventListener("click", (e) => {
+        e.stopPropagation();
+        removeBlock(b.id);
+      });
+
+      el.appendChild(badge);
+      el.appendChild(label);
+      el.appendChild(btnX);
+
+      el.addEventListener("click", () => selectBlock(b.id));
+
+      el.addEventListener("dragstart", (ev) => {
+        ev.dataTransfer.setData("text/plain", b.id);
+        el.classList.add("opacity-50");
+      });
+      el.addEventListener("dragend", () => el.classList.remove("opacity-50"));
+      el.addEventListener("dragover", (ev) => ev.preventDefault());
+      el.addEventListener("drop", (ev) => {
+        ev.preventDefault();
+        const draggedId = ev.dataTransfer.getData("text/plain");
+        if (!draggedId || draggedId === b.id) return;
+        reorderBlock(draggedId, b.id);
+      });
+
+      if (selectedId === b.id) {
+        el.classList.add("border-2");
+        el.style.borderColor = "var(--bs-info)";
+        el.style.boxShadow = "0 0 0 0.2rem rgba(13,110,253,.15)";
+      }
+
+      timeline.appendChild(el);
+    });
+
+    btnPlay.disabled   = isPlaying && !isPaused;
+    btnPause.disabled  = !(isPlaying && !isPaused);
+    btnResume.disabled = !(isPlaying && isPaused);
+    btnStop.disabled   = !isPlaying;
+  }
+
+  function addPulseFromControl(){
+    const b = {
+      id: newId(),
+      type: "PULSE",
+      mode: readMode(),
+      level: readLevel(),
+      channel: readChannel(),
+      duration: 0.5
+    };
+    blocks.push(b);
+    render();
+    selectBlock(b.id);
+  }
+
+  function addPause(){
+    const b = {
+      id: newId(),
+      type: "PAUSE",
+      mode: "BEEP",
+      level: 0,
+      channel: readChannel(),
+      duration: 0.3
+    };
+    blocks.push(b);
+    render();
+    selectBlock(b.id);
+  }
+
+  function removeBlock(id){
+    const i = blocks.findIndex(x=>x.id===id);
+    if (i>=0) {
+      blocks.splice(i,1);
+      if (selectedId===id) { selectedId=null; editor.classList.add("d-none"); }
+      render();
+    }
+  }
+
+  function selectBlock(id){
+    selectedId = id;
+    const b = blocks.find(x=>x.id===id);
+    if (!b){ editor.classList.add("d-none"); return; }
+    editor.classList.remove("d-none");
+
+    setEdType(b.type);
+    setEdMode(b.mode);
+    setEdChannel(b.channel);
+    edDuration.value = b.duration;
+    edLevel.value = b.level;
+    edLevelValue.textContent = b.level;
+
+    refreshLevelUI();
+    render();
+  }
+
+  function applyEditor(){
+    const b = blocks.find(x=>x.id===selectedId);
+    if (!b) return;
+
+    b.type    = getEdType();
+    b.mode    = getEdMode();
+    b.level   = Math.max(0, Math.min(100, Number(edLevel.value)||0));
+    b.channel = Math.max(1, Math.min(2, getEdChannel()));
+    b.duration= Math.max(0.05, Number(edDuration.value)||0.05);
+
+    edLevelValue.textContent = b.level;
+    refreshLevelUI();
+    render();
+  }
+
+  function reorderBlock(srcId, dstId){
+    const si = blocks.findIndex(x=>x.id===srcId);
+    const di = blocks.findIndex(x=>x.id===dstId);
+    if (si<0 || di<0 || si===di) return;
+    const [moved] = blocks.splice(si,1);
+    blocks.splice(di, 0, moved);
+    render();
+  }
+
+  // ====== Transporte ======
+  function setStatus(text){ seqStatus.textContent = text; }
+
+  async function sendHoldOn(b){
+    await pushToChat(`HOLDON ${buildCmdLine(b)}`);
+  }
+  async function sendHoldOff(){
+    await pushToChat("HOLDOFF");
+  }
+
+  function stepPlay(){
+    if (!isPlaying || isPaused) return;
+
+    if (playIndex >= blocks.length){
+      if (loop && blocks.length > 0){
+        playIndex = 0;
+      } else {
+        stopPlayback(false);
+        return;
+      }
+    }
+
+    const b = blocks[playIndex];
+    setStatus(`Executando ${playIndex+1}/${blocks.length}: ${formatLabelPlain(b)}`);
+
+    const durationMs = Math.max(50, Math.floor(b.duration * 1000));
+    playStartedAt = performance.now();
+    remainingMs = durationMs;
+
+    const run = async () => {
+      if (b.type === "PULSE") {
+        try { await sendHoldOn(b); } catch(e){ log(e.message,"error"); }
+        curTimeout = setTimeout(async () => {
+          try { await sendHoldOff(); } catch(e){ log(e.message,"error"); }
+          playIndex++; stepPlay();
+        }, remainingMs);
+      } else {
+        curTimeout = setTimeout(() => {
+          playIndex++; stepPlay();
+        }, remainingMs);
+      }
+    };
+    run();
+  }
+
+  function play(){
+    if (isPlaying) return;
+    if (blocks.length === 0) { setStatus("Adicione blocos para tocar."); return; }
+    isPlaying = true; isPaused = false;
+    loop = !!chkLoop.checked;
+    playIndex = 0; remainingMs = 0; curTimeout && clearTimeout(curTimeout);
+    setStatus("Tocando…");
+    render();
+    stepPlay();
+  }
+
+  function pause(){
+    if (!isPlaying || isPaused) return;
+    isPaused = true;
+    curTimeout && clearTimeout(curTimeout);
+    const elapsed = performance.now() - playStartedAt;
+    remainingMs = Math.max(0, remainingMs - elapsed);
+    const b = blocks[playIndex];
+    if (b && b.type === "PULSE"){
+      try { sendHoldOff(); } catch(_) {}
+    }
+    setStatus("Pausado.");
+    render();
+  }
+
+  function resume(){
+    if (!isPlaying || !isPaused) return;
+    isPaused = false;
+    setStatus("Continuando…");
+    render();
+
+    const b = blocks[playIndex];
+    playStartedAt = performance.now();
+    if (b.type === "PULSE"){
+      (async () => {
+        try { await sendHoldOn(b); } catch(_) {}
+        curTimeout = setTimeout(async () => {
+          try { await sendHoldOff(); } catch(_) {}
+          playIndex++; stepPlay();
+        }, Math.max(0, remainingMs || 0));
+      })();
+    } else {
+      curTimeout = setTimeout(() => { playIndex++; stepPlay(); }, Math.max(0, remainingMs || 0));
+    }
+  }
+
+  function stopPlayback(byUser=true){
+    if (!isPlaying) return;
+    isPlaying = false; isPaused = false;
+    curTimeout && clearTimeout(curTimeout); curTimeout = null;
+    remainingMs = 0; playIndex = 0;
+    try { sendHoldOff(); } catch(_) {}
+    setStatus(byUser ? "Parado." : "Concluído.");
+    render();
+  }
+
+  // ====== Eventos ======
+  btnAddPulse.addEventListener("click", addPulseFromControl);
+  btnAddPause.addEventListener("click", addPause);
+
+  $$('input[name="edTypeRadio"]').forEach(el => {
+    el.addEventListener("change", () => { applyEditor(); });
+  });
+  $$('input[name="edModeRadio"]').forEach(el => {
+    el.addEventListener("change", () => { applyEditor(); });
+  });
+  $$('input[name="edChannelRadio"]').forEach(el => {
+    el.addEventListener("change", () => { applyEditor(); });
+  });
+
+  edLevel.addEventListener("input", applyEditor);
+  edDuration.addEventListener("input", applyEditor);
+  btnDeleteBlock.addEventListener("click", () => { if (selectedId) removeBlock(selectedId); });
+
+  btnPlay.addEventListener("click", play);
+  btnPause.addEventListener("click", pause);
+  btnResume.addEventListener("click", resume);
+  btnStop.addEventListener("click", () => stopPlayback(true));
+  chkLoop.addEventListener("change", () => { loop = !!chkLoop.checked; });
+
+  // ====== Inicial ======
+  setEdType("PULSE");
+  setEdMode("BEEP");
+  setEdChannel(1);
+  refreshLevelUI();
+  render();
+})();
+</script>

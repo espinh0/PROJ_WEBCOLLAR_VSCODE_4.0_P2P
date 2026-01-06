@@ -1,0 +1,1118 @@
+<!-- PLAYER FLUTUANTE - V7.4 (snap inteligente, HLS + playlists M3U; corrige URLs de video com query/hash) -->
+<div class="card p-3 mt-3" id="video-link-widget"
+     style="background:#111;border:1px solid #333;border-radius:.75rem;color:#e5e7eb;">
+  <label style="font-weight:600;"></label>
+
+  <div class="input-group mt-1">
+    <input type="text" class="form-control video-link-input" placeholder="VIDEO LINK - URL" />
+
+    <button class="btn btn-primary btn-sm video-link-button" type="button">
+      Carregar
+    </button>
+
+    <button class="btn btn-outline-info btn-sm video-m3u-button" type="button" title="Ler playlist .m3u pela URL">
+      Playlist M3U
+    </button>
+
+    <button class="btn btn-outline-secondary btn-sm video-file-button" type="button" title="Arquivo local"
+      style="border-top-right-radius:.35rem; border-bottom-right-radius:.35rem;">
+      <i class="bi bi-folder2-open"></i>
+    </button>
+
+    <input type="file" class="video-file-input" accept=".m3u,.m3u8,video/*" style="display:none;" />
+  </div>
+
+  <div class="small text-secondary mt-2">
+    Suporta URLs diretas, HLS (.m3u8) e listas .m3u (link ou arquivo).
+  </div>
+
+  <div class="m3u-status small text-secondary mt-1" aria-live="polite"></div>
+  <div class="input-group input-group-sm mt-2 m3u-filter-row" style="display:none;">
+    <span class="input-group-text">Filtro</span>
+    <input type="text" class="form-control m3u-filter" placeholder="Buscar na playlist" aria-label="Filtrar playlist" />
+    <button class="btn btn-outline-secondary m3u-filter-clear" type="button" title="Limpar filtro">
+      <i class="bi bi-x-circle"></i>
+    </button>
+  </div>
+  <div class="list-group m3u-list mt-2" style="display:none; max-height:260px; overflow:auto;"></div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  /* -------------------------------------------------------------
+     CONSTANTES & STORAGE
+  ------------------------------------------------------------- */
+
+  const STORAGE_KEY = "FLOATING_PLAYER_STATE_V7_4";
+
+  const SIZE_NORMAL = { w: 420, h: 236 };
+  const SIZE_LARGE  = { w: 640, h: 360 };
+  const HLS_LIB_URL = "https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js";
+  const ICONS_CDN   = "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css";
+
+  let activeHls = null;
+  let hlsLibPromise = null;
+  let trRoom = null;
+  let sendVideoSync = null;
+  let videoSyncBound = false;
+  let suppressSyncEmit = false;
+  let lastRxSyncId = "";
+
+  let playlistListEl = null;
+  let playlistStatusEl = null;
+  let playlistFilterEl = null;
+  let playlistFilterRow = null;
+  let playlistFilterClear = null;
+  let currentPlaylist = [];
+  let playlistView = [];
+  let selectedPlaylistIndex = -1;
+  let playlistSource = "";
+
+  function ensureBootstrapIcons(){
+    if (document.querySelector('link[href*="bootstrap-icons"]')) return;
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = ICONS_CDN;
+    document.head.appendChild(link);
+  }
+
+  function loadState(){
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; }
+    catch { return {}; }
+  }
+
+  function saveState(s){
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); }
+    catch {}
+  }
+
+  function clearState(){
+    try { localStorage.removeItem(STORAGE_KEY); }
+    catch {}
+  }
+
+  /* -------------------------------------------------------------
+     UTILS
+  ------------------------------------------------------------- */
+
+  function destroyHls(){
+    try {
+      if (activeHls && typeof activeHls.destroy === "function") {
+        activeHls.destroy();
+      }
+    } catch(e){}
+    activeHls = null;
+  }
+
+  async function loadHlsLibrary(){
+    if (window.Hls) return window.Hls;
+    if (!hlsLibPromise) {
+      hlsLibPromise = new Promise((resolve, reject) => {
+        const s = document.createElement("script");
+        s.src = HLS_LIB_URL;
+        s.onload = () => resolve(window.Hls);
+        s.onerror = () => reject(new Error("Falha ao carregar Hls.js"));
+        document.head.appendChild(s);
+      });
+    }
+    try {
+      return await hlsLibPromise;
+    } catch(e) {
+      console.error(e);
+      return null;
+    }
+  }
+
+  function stopMedia(el){
+    destroyHls();
+    try {
+      if (!el) return;
+      if (el.tagName === "VIDEO") {
+        el.pause();
+        el.removeAttribute("src");
+        el.load();
+      } else if (el.tagName === "IFRAME") {
+        el.src = "about:blank";
+      }
+    } catch(e){}
+  }
+
+  function extractFilename(url){
+    try {
+      return decodeURIComponent(url.split("/").pop().split("?")[0]) || "Video";
+    } catch {
+      return "Video";
+    }
+  }
+
+  async function fetchYouTubeTitle(url){
+    try {
+      const resp = await fetch(url);
+      const txt  = await resp.text();
+      const m = txt.match(/<title>(.*?)<\/title>/i);
+      if (m) return m[1].replace("- YouTube", "").trim();
+      return "YouTube";
+    } catch {
+      return "YouTube";
+    }
+  }
+
+  async function setVideoSource(videoEl, url, onError){
+    if (isHlsUrl(url)) {
+      await setupHlsPlayback(videoEl, url, onError);
+      return;
+    }
+    videoEl.src = url;
+    if (onError) videoEl.addEventListener("error", () => onError(), { once: true });
+  }
+
+  async function setupHlsPlayback(videoEl, url, onFatal){
+    destroyHls();
+
+    const canNative = videoEl.canPlayType("application/vnd.apple.mpegurl");
+    if (canNative) {
+      videoEl.src = url;
+      if (onFatal) videoEl.addEventListener("error", () => onFatal(), { once: true });
+      return;
+    }
+
+    try {
+      const Hls = await loadHlsLibrary();
+      if (Hls && Hls.isSupported()) {
+        activeHls = new Hls({ enableWorker: true });
+        activeHls.on(Hls.Events.ERROR, (event, data) => {
+          if (data && data.fatal && onFatal) onFatal(data);
+        });
+        activeHls.loadSource(url);
+        activeHls.attachMedia(videoEl);
+        return;
+      }
+    } catch(err){
+      console.error(err);
+    }
+
+    videoEl.src = url;
+    if (onFatal) videoEl.addEventListener("error", () => onFatal(), { once: true });
+  }
+
+  function extractTitleFromExtinf(line){
+    const infoSplit = line.split(",", 2);
+    return (infoSplit[1] || "").trim();
+  }
+
+  function parseM3U(text){
+    if (!text) return [];
+    const lines = text.split(/\r?\n/);
+    const items = [];
+    let pendingTitle = null;
+    let pendingGroup = "";
+
+    for (let i = 0; i < lines.length; i++){
+      const raw = lines[i].trim();
+      if (!raw) continue;
+
+      if (raw.startsWith("#EXTINF")) {
+        pendingTitle = extractTitleFromExtinf(raw) || pendingTitle;
+        const groupMatch = raw.match(/group-title="([^"]*)"/i);
+        pendingGroup = groupMatch ? groupMatch[1] : pendingGroup;
+        continue;
+      }
+
+      if (raw.startsWith("#")) continue;
+
+      const url = raw;
+      const title = pendingTitle || extractFilename(url);
+      items.push({ title, url, group: pendingGroup });
+      pendingTitle = null;
+      pendingGroup = "";
+    }
+
+    return items;
+  }
+
+  function detectYouTubeID(url){
+    let id = null;
+    const m1 = url.match(/youtu\.be\/([^?&#]+)/);
+    if (m1) id = m1[1];
+    const m2 = url.match(/[?&]v=([^&#]+)/);
+    if (!id && m2) id = m2[1];
+    return id;
+  }
+
+  function isVideoURL(url){
+    const value = String(url || "");
+    return value.startsWith("blob:") ||
+           /\.(mp4|webm|ogg|ogv|m3u8|mpd)(?:$|[?#])/i.test(value);
+  }
+
+  function isHlsUrl(url){
+    return /\.m3u8($|[?#])/i.test(url || "");
+  }
+
+  function isM3UUrl(url){
+    return /\.m3u($|[?#])/i.test(url || "") && !isHlsUrl(url);
+  }
+
+  function headerButton(icon, title, color){
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn btn-sm " + (color || "btn-outline-light") + " fp-header-btn";
+    b.style.padding = "2px 10px";
+    b.style.fontWeight = "600";
+    b.style.lineHeight = "1.2";
+    b.innerHTML = '<i class="bi ' + icon + '"></i>';
+    b.title = title;
+    b.addEventListener("mousedown", e => e.stopPropagation());
+    b.addEventListener("click", e => e.stopPropagation());
+    return b;
+  }
+
+  function broadcastVideoSync(url, title){
+    if (suppressSyncEmit) return;
+    if (!sendVideoSync || !url || url.startsWith("blob:") || isM3UUrl(url)) return;
+    try {
+      const payload = {
+        id: `vp-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        url,
+        title: title || extractFilename(url),
+        ts: Date.now()
+      };
+      sendVideoSync(payload);
+    } catch(err){
+      console.warn("Falha ao emitir sync do video:", err);
+    }
+  }
+
+  /* -------------------------------------------------------------
+     PLAYLIST HELPERS
+  ------------------------------------------------------------- */
+
+  function setPlaylistStatus(message, isError){
+    if (!playlistStatusEl) return;
+    playlistStatusEl.textContent = message || "";
+    playlistStatusEl.classList.toggle("text-danger", !!isError && !!message);
+    playlistStatusEl.classList.toggle("text-secondary", !!message && !isError);
+  }
+
+  function clearPlaylistHighlight(){
+    if (!playlistListEl) return;
+    playlistListEl.querySelectorAll(".list-group-item").forEach(el => el.classList.remove("active"));
+    selectedPlaylistIndex = -1;
+  }
+
+  function buildPlaylistView(filterText){
+    const query = (filterText || "").trim().toLowerCase();
+    playlistView = currentPlaylist
+      .map((item, idx) => ({ item, idx }))
+      .filter(({ item }) => {
+        if (!query) return true;
+        const title = (item.title || "").toLowerCase();
+        const group = (item.group || "").toLowerCase();
+        const url = (item.url || "").toLowerCase();
+        return title.includes(query) || group.includes(query) || url.includes(query);
+      });
+  }
+
+  function drawPlaylist(fromFilter){
+    if (!playlistListEl) return;
+    playlistListEl.innerHTML = "";
+
+    if (!currentPlaylist.length) {
+      playlistListEl.style.display = "none";
+      setPlaylistStatus("Nenhum item encontrado na playlist.", true);
+      return;
+    }
+
+    if (!playlistView.length) {
+      playlistListEl.style.display = "none";
+      setPlaylistStatus(fromFilter ? "Nenhum item encontrado para esse filtro." : "Nenhum item encontrado na playlist.", true);
+      return;
+    }
+
+    playlistListEl.style.display = "block";
+    playlistView.forEach(({ item, idx }) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "list-group-item list-group-item-action d-flex justify-content-between align-items-start";
+      btn.dataset.idx = String(idx);
+      const title = item.title || `Item ${idx + 1}`;
+      const meta = item.group || playlistSource;
+      btn.innerHTML = `<div class="me-2 text-start">${title}</div><small class="text-muted">${meta || ""}</small>`;
+      btn.addEventListener("click", () => selectPlaylistItem(idx, true));
+      playlistListEl.append(btn);
+    });
+
+    setPlaylistStatus(`${playlistSource} carregada (${currentPlaylist.length} itens).`);
+    highlightPlaylistSelection();
+  }
+
+  function highlightPlaylistSelection(){
+    if (!playlistListEl) return;
+    const selected = selectedPlaylistIndex;
+    playlistListEl.querySelectorAll(".list-group-item").forEach(el => {
+      const idx = Number(el.dataset.idx);
+      el.classList.toggle("active", idx === selected);
+    });
+  }
+
+  function renderPlaylist(items, sourceLabel){
+    if (!playlistListEl) return;
+    currentPlaylist = items || [];
+    playlistSource = sourceLabel || "Playlist";
+    selectedPlaylistIndex = -1;
+
+    if (playlistFilterEl) playlistFilterEl.value = "";
+    const shouldShowFilter = currentPlaylist.length > 0;
+    if (playlistFilterRow) playlistFilterRow.style.display = shouldShowFilter ? "flex" : "none";
+
+    if (!currentPlaylist.length) {
+      playlistListEl.style.display = "none";
+      setPlaylistStatus("Nenhum item encontrado na playlist.", true);
+      return;
+    }
+
+    buildPlaylistView("");
+    drawPlaylist(false);
+    if (playlistView.length) selectPlaylistItem(playlistView[0].idx, true);
+  }
+
+  function selectPlaylistItem(idx, shouldLoad){
+    if (!playlistListEl || !currentPlaylist[idx]) return;
+    selectedPlaylistIndex = idx;
+    highlightPlaylistSelection();
+    if (shouldLoad) {
+      const item = currentPlaylist[idx];
+      buildPlayer(item.url, false, false, item.title || playlistSource || "Playlist");
+    }
+  }
+
+  function applyPlaylistFilter(){
+    const term = playlistFilterEl ? playlistFilterEl.value : "";
+    buildPlaylistView(term);
+    const stillVisible = playlistView.some(({ idx }) => idx === selectedPlaylistIndex);
+    const nextIdx = stillVisible ? selectedPlaylistIndex : (playlistView[0] ? playlistView[0].idx : -1);
+    drawPlaylist(true);
+    if (nextIdx >= 0) {
+      selectPlaylistItem(nextIdx, !stillVisible);
+    } else {
+      selectedPlaylistIndex = -1;
+    }
+  }
+
+  async function loadM3UFromURL(url){
+    setPlaylistStatus("Baixando playlist...");
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const text = await resp.text();
+      const parsed = parseM3U(text);
+      renderPlaylist(parsed, extractFilename(url));
+    } catch(err){
+      console.error(err);
+      setPlaylistStatus("Erro ao ler playlist: " + err.message, true);
+    }
+  }
+
+  async function loadM3UFromFile(file){
+    if (!file) return;
+    setPlaylistStatus(`Lendo ${file.name}...`);
+    try {
+      const text = await file.text();
+      const parsed = parseM3U(text);
+      renderPlaylist(parsed, file.name);
+    } catch(err){
+      console.error(err);
+      setPlaylistStatus("Erro ao ler arquivo M3U.", true);
+    }
+  }
+
+  async function handleFileSource(file){
+    if (!file) return;
+    const name = (file.name || "").toLowerCase();
+
+    if (isM3UUrl(name)) {
+      await loadM3UFromFile(file);
+      return;
+    }
+
+    const blobUrl = URL.createObjectURL(file);
+    buildPlayer(blobUrl, false, file, file.name);
+    clearPlaylistHighlight();
+    setPlaylistStatus("");
+  }
+
+  /* -------------------------------------------------------------
+     ELEMENT FACTORIES
+  ------------------------------------------------------------- */
+
+  function createVideo(initialSrc){
+    const v = document.createElement("video");
+    if (initialSrc) v.src = initialSrc;
+    v.controls = true;
+    v.style.width = "100%";
+    v.style.height = "100%";
+    v.preload = "metadata";
+    return v;
+  }
+
+  function createIframe(url){
+    const f = document.createElement("iframe");
+    f.src = url;
+    f.style.width = "100%";
+    f.style.height = "100%";
+    f.style.border = "none";
+    f.allowFullscreen = true;
+    f.setAttribute("allowfullscreen", "");
+    f.setAttribute("allow", "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen");
+    return f;
+  }
+
+  function createYouTube(url){
+    const id = detectYouTubeID(url);
+    if (!id) return null;
+    const f = document.createElement("iframe");
+    f.src = "https://www.youtube.com/embed/" + id;
+    f.style.width = "100%";
+    f.style.height = "100%";
+    f.style.border = "none";
+    f.allowFullscreen = true;
+    f.setAttribute("allowfullscreen", "");
+    f.setAttribute("allow", "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen");
+    return f;
+  }
+
+  /* -------------------------------------------------------------
+     BUILD PLAYER
+  ------------------------------------------------------------- */
+
+  async function buildPlayer(url, restore, fileObject, customTitle, fromSync){
+    const prevSuppress = suppressSyncEmit;
+    if (restore || fromSync) suppressSyncEmit = true;
+    try {
+      if (isM3UUrl(url)) {
+        await loadM3UFromURL(url);
+        return;
+      }
+
+      const old = document.getElementById("floating-player");
+      if (old) {
+        stopMedia(old.querySelector("video, iframe"));
+        old.remove();
+      }
+
+      let prev = loadState();
+
+      const box = document.createElement("div");
+      box.id = "floating-player";
+      box.style.position = "fixed";
+      box.style.zIndex = "99999";
+      box.style.borderRadius = "12px";
+      box.style.background = "#1a1a1d";
+      box.style.border = "1px solid #2a2a2e";
+      box.style.boxShadow = "0 4px 20px rgba(0,0,0,0.5)";
+      box.style.overflow = "hidden";
+
+      const W = restore && prev.width  ? prev.width  : SIZE_NORMAL.w;
+      const H = restore && prev.height ? prev.height : SIZE_NORMAL.h;
+
+      box.style.width  = W + "px";
+      box.style.height = H + "px";
+
+      if (restore && typeof prev.x === "number" && typeof prev.y === "number") {
+        box.style.left = prev.x + "px";
+        box.style.top  = prev.y + "px";
+      } else {
+        box.style.right = "20px";
+        box.style.bottom = "20px";
+      }
+
+      /* HEADER */
+      const header = document.createElement("div");
+      header.style.height = "40px";
+      header.style.background = "#0c0c0e";
+      header.style.display = "flex";
+      header.style.alignItems = "center";
+      header.style.justifyContent = "space-between";
+      header.style.padding = "0 12px";
+      header.style.cursor = "grab";
+
+      const titleSpan = document.createElement("span");
+      titleSpan.style.color = "#fff";
+      titleSpan.style.fontSize = "13px";
+      titleSpan.style.fontWeight = "700";
+      titleSpan.style.whiteSpace = "nowrap";
+      titleSpan.style.overflow = "hidden";
+      titleSpan.style.textOverflow = "ellipsis";
+      titleSpan.style.display = "block";
+      titleSpan.style.maxWidth = "240px";
+      titleSpan.textContent = "Carregando...";
+
+      const btnGroup = document.createElement("div");
+      btnGroup.style.display = "flex";
+      btnGroup.style.gap = "8px";
+
+      const btnMin   = headerButton("bi-dash",             "Minimizar / Restaurar", "btn-outline-secondary");
+      const btnMax   = headerButton("bi-aspect-ratio",     "Expandir / Reduzir",    "btn-outline-info");
+      const btnFull  = headerButton("bi-arrows-fullscreen","Tela cheia",            "btn-outline-warning");
+      const btnClose = headerButton("bi-x-lg",             "Fechar",                "btn-outline-danger");
+
+      btnGroup.append(btnMin, btnMax, btnFull, btnClose);
+      header.append(titleSpan, btnGroup);
+
+      /* CONTENT */
+      const content = document.createElement("div");
+      content.style.width = "100%";
+      content.style.height = "calc(100% - 40px)";
+      content.style.background = "#000";
+
+      let media = null;
+      let initialTitle = customTitle || "Video";
+
+      // cria mídia base sem bloquear UI; fontes serão carregadas após montar listeners
+      if (fileObject || isVideoURL(url) || isHlsUrl(url)) {
+        media = createVideo("");
+        initialTitle = customTitle || (fileObject ? fileObject.name : extractFilename(url));
+      } else if (url.includes("youtube.com") || url.includes("youtu.be")) {
+        media = createYouTube(url) || createIframe(url);
+        initialTitle = customTitle || "YouTube";
+      } else {
+        media = createIframe(url);
+        initialTitle = customTitle || extractFilename(url);
+      }
+      titleSpan.textContent = initialTitle;
+
+      content.append(media);
+      box.append(header, content);
+      document.body.appendChild(box);
+
+      // estado inicial
+      let rect = box.getBoundingClientRect();
+      let state = {
+        open: true,
+        url: url,
+        isLocal: !!fileObject,
+        width: rect.width,
+        height: rect.height,
+        x: rect.left,
+        y: rect.top,
+        title: titleSpan.textContent,
+        minimized: restore ? !!prev.minimized : false,
+        prevX: prev.prevX || rect.left,
+        prevY: prev.prevY || rect.top,
+        prevWidth: prev.prevWidth || rect.width,
+        prevHeight: prev.prevHeight || rect.height
+      };
+      saveState(state);
+
+      if (!restore && !fromSync && !fileObject) {
+        broadcastVideoSync(url, titleSpan.textContent);
+      }
+
+      // ------------------------------------------------------
+      // Carrega a fonte de vídeo de forma assíncrona
+      // ------------------------------------------------------
+      (async function loadSource(){
+        try {
+          if (fileObject) {
+            await setVideoSource(media, url, () => {
+              content.innerHTML = "";
+              media = createIframe(url);
+              content.append(media);
+            });
+            return;
+          }
+
+          if (url.includes("youtube.com") || url.includes("youtu.be")) {
+            try {
+              const t = await fetchYouTubeTitle(url);
+              titleSpan.textContent = customTitle || t || "YouTube";
+              const s = loadState();
+              s.title = titleSpan.textContent;
+              saveState(s);
+            } catch(_){}
+            return;
+          }
+
+          if (isVideoURL(url) || isHlsUrl(url)) {
+            let swapped = false;
+            const swapToIframe = () => {
+              if (swapped) return;
+              swapped = true;
+              destroyHls();
+              content.innerHTML = "";
+              media = createIframe(url);
+              content.append(media);
+            };
+            await setVideoSource(media, url, swapToIframe);
+            return;
+          }
+        } catch(err){
+          console.error("Erro carregando fonte de video:", err);
+        }
+      })();
+    } catch(err){
+      console.error("Erro ao construir player:", err);
+    } finally {
+      suppressSyncEmit = prevSuppress;
+    }
+
+    /* ---------------------------------------------------------
+       SNAP INTELIGENTE
+    --------------------------------------------------------- */
+
+    function applySmartSnap(x, y, width, height){
+      const snapEdge = 16;      // distancia para grudar nas bordas
+      const snapCenter = 24;    // distancia para grudar no centro
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+
+      // bordas
+      if (Math.abs(x) < snapEdge) x = 0;
+      if (Math.abs(y) < snapEdge) y = 0;
+      if (Math.abs(vw - (x + width)) < snapEdge) x = vw - width;
+      if (Math.abs(vh - (y + height)) < snapEdge) y = vh - height;
+
+      // centro da tela
+      const cx = x + width / 2;
+      const cy = y + height / 2;
+      const centerX = vw / 2;
+      const centerY = vh / 2;
+
+      if (Math.abs(cx - centerX) < snapCenter) {
+        x = Math.round(centerX - width / 2);
+      }
+      if (Math.abs(cy - centerY) < snapCenter) {
+        y = Math.round(centerY - height / 2);
+      }
+
+      return { x, y };
+    }
+
+    /* ---------------------------------------------------------
+       DRAG
+    --------------------------------------------------------- */
+
+    (function enableDrag(){
+      let dragging = false, offX = 0, offY = 0;
+
+      header.addEventListener("mousedown", function(e){
+        const s = loadState();
+        if (s.minimized) return;
+        if (e.target.closest(".fp-header-btn")) return;
+
+        dragging = true;
+        header.style.cursor = "grabbing";
+
+        const r = box.getBoundingClientRect();
+        offX = e.clientX - r.left;
+        offY = e.clientY - r.top;
+
+        box.style.right = "";
+        box.style.bottom = "";
+
+        function move(ev){
+          if (!dragging) return;
+          box.style.left = (ev.clientX - offX) + "px";
+          box.style.top  = (ev.clientY - offY) + "px";
+        }
+
+        function stop(){
+          if (!dragging) return;
+          dragging = false;
+          header.style.cursor = "grab";
+          document.removeEventListener("mousemove", move);
+          document.removeEventListener("mouseup", stop);
+
+          const r2 = box.getBoundingClientRect();
+          let x = r2.left;
+          let y = r2.top;
+          const w = r2.width;
+          const h = r2.height;
+
+          // aplica snap inteligente
+          const snapped = applySmartSnap(x, y, w, h);
+          x = snapped.x;
+          y = snapped.y;
+
+          box.style.left = x + "px";
+          box.style.top  = y + "px";
+
+          const s2 = loadState();
+          s2.x = x;
+          s2.y = y;
+          saveState(s2);
+        }
+
+        document.addEventListener("mousemove", move);
+        document.addEventListener("mouseup", stop);
+      });
+
+      // Minimizado -> clique no header (fora dos botoes) restaura
+      header.addEventListener("click", function(e){
+        const s = loadState();
+        if (!s.minimized) return;
+        if (e.target.closest(".fp-header-btn")) return;
+        restoreNormal();
+      });
+    })();
+
+    /* ---------------------------------------------------------
+       RESIZER VISIVEL (CANTO INFERIOR-DIREITO)
+    --------------------------------------------------------- */
+
+    const grip = document.createElement("div");
+    grip.style.position = "absolute";
+    grip.style.right = "0";
+    grip.style.bottom = "0";
+    grip.style.width = "22px";
+    grip.style.height = "22px";
+    grip.style.cursor = "nwse-resize";
+
+    const themeGray = "#3a3a3f";
+    grip.style.borderBottom = "2px solid " + themeGray;
+    grip.style.borderRight  = "2px solid " + themeGray;
+    grip.style.borderBottomRightRadius = "12px";
+
+    box.append(grip);
+
+    (function enableResize(){
+      let resizing = false, startW = 0, startH = 0, startX = 0, startY = 0;
+
+      grip.addEventListener("mousedown", function(e){
+        const s = loadState();
+        if (s.minimized) return;
+
+        resizing = true;
+        e.preventDefault();
+
+        const r = box.getBoundingClientRect();
+        startW = r.width;
+        startH = r.height;
+        startX = e.clientX;
+        startY = e.clientY;
+
+        function resize(ev){
+          if (!resizing) return;
+          const newW = startW + (ev.clientX - startX);
+          const newH = startH + (ev.clientY - startY);
+          if (newW > 260) box.style.width  = newW + "px";
+          if (newH > 140) box.style.height = newH + "px";
+        }
+
+        function stop(){
+          if (!resizing) return;
+          resizing = false;
+          document.removeEventListener("mousemove", resize);
+          document.removeEventListener("mouseup", stop);
+
+          const r2 = box.getBoundingClientRect();
+          const s2 = loadState();
+          s2.width = r2.width;
+          s2.height = r2.height;
+          saveState(s2);
+        }
+
+        document.addEventListener("mousemove", resize);
+        document.addEventListener("mouseup", stop);
+      });
+    })();
+
+    /* ---------------------------------------------------------
+       MINIMIZE / RESTORE
+    --------------------------------------------------------- */
+
+    function minimize(){
+      const s = loadState();
+      const r = box.getBoundingClientRect();
+
+      s.prevX = r.left;
+      s.prevY = r.top;
+      s.prevWidth  = r.width;
+      s.prevHeight = r.height;
+
+      box.style.width  = "260px";
+      box.style.height = "42px";
+      box.style.left   = "";
+      box.style.top    = "";
+      box.style.right  = "20px";
+      box.style.bottom = "20px";
+
+      content.style.display = "none";
+
+      s.minimized = true;
+      saveState(s);
+    }
+
+    function restoreNormal(){
+      const s = loadState();
+      const w = s.prevWidth  || SIZE_NORMAL.w;
+      const h = s.prevHeight || SIZE_NORMAL.h;
+      const x = typeof s.prevX === "number" ? s.prevX : 50;
+      const y = typeof s.prevY === "number" ? s.prevY : 50;
+
+      box.style.width  = w + "px";
+      box.style.height = h + "px";
+      box.style.left   = x + "px";
+      box.style.top    = y + "px";
+      box.style.right  = "";
+      box.style.bottom = "";
+
+      content.style.display = "block";
+
+      s.minimized = false;
+      s.width = w;
+      s.height = h;
+      s.x = x;
+      s.y = y;
+      saveState(s);
+    }
+
+    btnMin.addEventListener("click", () => {
+      const s = loadState();
+      if (s.minimized) restoreNormal();
+      else minimize();
+    });
+
+    /* ---------------------------------------------------------
+       EXPAND
+    --------------------------------------------------------- */
+
+    btnMax.addEventListener("click", () => {
+      const s = loadState();
+      if (s.minimized) {
+        restoreNormal();
+        return;
+      }
+
+      const r = box.getBoundingClientRect();
+      const isLarge = r.width > SIZE_NORMAL.w + 10;
+      const target = isLarge ? SIZE_NORMAL : SIZE_LARGE;
+
+      box.style.width  = target.w + "px";
+      box.style.height = target.h + "px";
+
+      s.width = target.w;
+      s.height = target.h;
+      saveState(s);
+    });
+
+    /* ---------------------------------------------------------
+       FULLSCREEN
+    --------------------------------------------------------- */
+
+    btnFull.addEventListener("click", () => {
+      if (document.fullscreenElement === box) {
+        document.exitFullscreen().catch(() => {});
+      } else {
+        box.requestFullscreen().catch(() => {});
+      }
+    });
+
+    /* ---------------------------------------------------------
+       CLOSE
+    --------------------------------------------------------- */
+
+    btnClose.addEventListener("click", () => {
+      stopMedia(media);
+      clearState();
+      box.remove();
+    });
+
+    /* ---------------------------------------------------------
+       DRAG & DROP (player)
+    --------------------------------------------------------- */
+
+    function enableDropZone(el){
+      el.addEventListener("dragover", e => {
+        e.preventDefault();
+        el.style.outline = "2px dashed #4af";
+      });
+      el.addEventListener("dragleave", () => {
+        el.style.outline = "none";
+      });
+      el.addEventListener("drop", async e => {
+        e.preventDefault();
+        el.style.outline = "none";
+        const f = e.dataTransfer.files && e.dataTransfer.files[0];
+        if (!f) return;
+        await handleFileSource(f);
+      });
+    }
+
+    enableDropZone(box);
+
+    /* ---------------------------------------------------------
+       RESTAURAR MINIMIZADO SE FOR O CASO
+    --------------------------------------------------------- */
+
+    if (state.minimized && restore) {
+      minimize();
+    }
+  }
+
+  /* -------------------------------------------------------------
+     RESTORE PLAYER ON PAGE LOAD
+  ------------------------------------------------------------- */
+
+  function restorePlayer(){
+    const s = loadState();
+    if (!s.open || !s.url) return;
+    if (s.isLocal) { clearState(); return; }
+    buildPlayer(s.url, true, false, s.title, true);
+  }
+
+  /* -------------------------------------------------------------
+     WIDGET SETUP
+  ------------------------------------------------------------- */
+
+  function initWidget(){
+    const widget   = document.getElementById("video-link-widget");
+    const input    = widget.querySelector(".video-link-input");
+    const btnURL   = widget.querySelector(".video-link-button");
+    const btnM3U   = widget.querySelector(".video-m3u-button");
+    const btnFile  = widget.querySelector(".video-file-button");
+    const fileInput= widget.querySelector(".video-file-input");
+
+    playlistListEl = widget.querySelector(".m3u-list");
+    playlistStatusEl = widget.querySelector(".m3u-status");
+    playlistFilterEl = widget.querySelector(".m3u-filter");
+    playlistFilterRow = widget.querySelector(".m3u-filter-row");
+    playlistFilterClear = widget.querySelector(".m3u-filter-clear");
+
+    ensureBootstrapIcons();
+
+    btnURL.addEventListener("click", async () => {
+      const url = (input.value || "").trim();
+      if (!url) {
+        alert("Cole a URL do video.");
+        return;
+      }
+      if (isM3UUrl(url)) {
+        await loadM3UFromURL(url);
+        return;
+      }
+      clearPlaylistHighlight();
+      setPlaylistStatus("");
+      buildPlayer(url, false, false);
+    });
+
+    btnM3U.addEventListener("click", async () => {
+      const url = (input.value || "").trim();
+      if (!url) {
+        alert("Cole o link .m3u que deseja ler.");
+        return;
+      }
+      await loadM3UFromURL(url);
+    });
+
+    input.addEventListener("keydown", e => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        btnURL.click();
+      }
+    });
+
+    btnFile.addEventListener("click", () => fileInput.click());
+
+    fileInput.addEventListener("change", async () => {
+      const f = fileInput.files && fileInput.files[0];
+      if (!f) return;
+      await handleFileSource(f);
+      fileInput.value = "";
+    });
+
+    if (playlistFilterEl) {
+      playlistFilterEl.addEventListener("input", () => applyPlaylistFilter());
+    }
+
+    if (playlistFilterClear) {
+      playlistFilterClear.addEventListener("click", () => {
+        if (playlistFilterEl) playlistFilterEl.value = "";
+        applyPlaylistFilter();
+        playlistFilterEl && playlistFilterEl.focus();
+      });
+    }
+
+    // drag & drop no widget
+    widget.addEventListener("dragover", e => {
+      e.preventDefault();
+      widget.style.outline = "2px dashed #4af";
+    });
+    widget.addEventListener("dragleave", () => {
+      widget.style.outline = "none";
+    });
+    widget.addEventListener("drop", async e => {
+      e.preventDefault();
+      widget.style.outline = "none";
+      const f = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (!f) return;
+      await handleFileSource(f);
+    });
+  }
+
+  /* -------------------------------------------------------------
+     TRYSTERO SYNC (abre o player nos peers)
+  ------------------------------------------------------------- */
+
+  function bindVideoSync(room){
+    trRoom = room || null;
+    sendVideoSync = null;
+    videoSyncBound = false;
+    if (!room || typeof room.makeAction !== "function") return;
+
+    try {
+      const pair = room.makeAction("video-sync");
+      const tx = Array.isArray(pair) ? pair[0] : null;
+      const rx = Array.isArray(pair) ? pair[1] : null;
+      if (typeof tx !== "function" || typeof rx !== "function") return;
+
+      sendVideoSync = (payload) => {
+        try { tx(payload); } catch(err){ console.warn("video-sync tx falhou:", err); }
+      };
+
+      rx(async (data) => {
+        const payload = (data && typeof data === "object") ? data : null;
+        if (!payload || !payload.url) return;
+        const pid = String(payload.id || "");
+        if (pid && pid === lastRxSyncId) return;
+        lastRxSyncId = pid;
+
+        suppressSyncEmit = true;
+        try {
+          await buildPlayer(payload.url, false, false, payload.title || extractFilename(payload.url), true);
+        } finally {
+          suppressSyncEmit = false;
+        }
+      });
+
+      videoSyncBound = true;
+    } catch(err){
+      console.warn("Falha ao bindar video-sync:", err);
+    }
+  }
+
+  /* -------------------------------------------------------------
+     INIT
+  ------------------------------------------------------------- */
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => {
+      initWidget();
+      restorePlayer();
+      if (window.__TRYSTERO_ROOM__) bindVideoSync(window.__TRYSTERO_ROOM__);
+    });
+  } else {
+    initWidget();
+    restorePlayer();
+    if (window.__TRYSTERO_ROOM__) bindVideoSync(window.__TRYSTERO_ROOM__);
+  }
+
+  window.addEventListener("trystero:room", (ev) => {
+    const detail = ev && ev.detail;
+    bindVideoSync(detail && detail.room ? detail.room : null);
+  });
+
+})();
+</script>

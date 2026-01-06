@@ -1,0 +1,69 @@
+﻿# Regras do Workflow
+
+## Host e Serial
+- O Host é o único que pode iniciar a conexão serial
+- Tudo que é exclusivo do host deve ser claramente identificado no código para evitar confusões durante o desenvolvimento e manutenção do sistema
+- Tudo que é exclusivo do host só deve ser executado quando o sistema estiver rodando no modo Host
+- O Serial_Connection é quem gerencia exclusivamente a comunicação serial (exclusivo do Host)
+- A conexão serial não deve ser gerenciada fora do Serial_Connection
+- O Executor é quem processa as ações do flowgate para a conexão serial (por isso ele só é executado no Host)
+- Os visitantes não podem iniciar ou controlar a conexão serial diretamente, apenas o Host tem essa permissão
+
+## flowgate: Configuração e Monitoramento
+- O flowgate é o meio de conexão entre todos os visitantes
+- O flowgate deve ser configurado corretamente para garantir a comunicação entre o Host e os visitantes com o mínimo de latência possível
+- O flowgate deve ser monitorado para garantir que todas as conexões estejam ativas e funcionando corretamente
+- Em caso de falha na comunicação, o flowgate deve tentar restabelecer a conexão automaticamente
+- Todos os widgets se comunicam de forma online e sincronizada através do flowgate
+- Cada widget tem um identificador único (ID) para que o flowgate possa gerenciar as conexões corretamente
+- O flowgate é o principal meio de comunicação dos widgets e deve abstrair o método de conexão
+- Mudanças futuras no método de conexão devem ser feitas apenas dentro do flowgate, sem patch nos widgets
+
+## Sincronização determinística (Widgets)
+- A sincronização deve ser determinística e baseada em timestamps compartilhados via flowgate
+- O host define eventos com parâmetros completos (ângulos/estados, velocidades, locks, durações) e é a autoridade do resultado
+- Os peers renderizam o estado com base no tempo do host ajustado por offset de relógio
+- Deve existir faseamento de eventos (ex.: hold/release) com IDs únicos e proteção contra duplicatas
+- A sincronização não deve depender de animação local rodando; o estado deve ser reproduzível a qualquer momento
+- Ao retornar do background (visibilitychange), o widget deve reconstituir o estado a partir do último evento
+- Exemplos genéricos de payload:
+  - hello: { t:"hello", from:"peer-id", ts:1735689600000 }
+  - ping: { t:"ping", from:"peer-id", t0:1735689600100 }
+  - pong: { t:"pong", to:"peer-id", t0:1735689600100, th:1735689600120 }
+  - hold: { t:"hold", id:"evt_abc123", startedAt:1735689601000, a0:{x:10,y:20,z:30}, dps:{x:120,y:180,z:90}, lock:{x:false,y:false,z:true}, lockIdx:{x:0,y:2,z:1} }
+  - release: { t:"release", id:"evt_abc123", startedAt:1735689601000, releasedAt:1735689602200, durationMs:1800, a0:{x:10,y:20,z:30}, dps:{x:120,y:180,z:90}, lock:{x:false,y:false,z:true}, targets:{x:-90,y:-180,z:-270}, spins:{x:4,y:5,z:3} }
+
+## Comandos e Estado
+- Os visitantes podem enviar comandos para o Host através do flowgate, que serão processados pelo Executor
+- O Host pode enviar atualizações de estado para os visitantes através do flowgate
+- Todos os visitantes recebem as mesmas atualizações de estado do Host para garantir a sincronização
+- O Executor deve garantir que os comandos recebidos dos visitantes sejam processados de forma segura e eficiente, evitando conflitos na comunicação serial
+
+## Heartbeat e Segurança
+- O heartbeat tem a função de manter o firmware informado sobre o estado da conexão, enviando sinais periódicos para garantir que a comunicação esteja ativa
+- Caso o heartbeat não receba uma resposta dentro de um tempo estipulado, o firmware pode assumir que a conexão foi perdida e tomar as medidas necessárias para interromper comandos em execução através de holdoff
+
+## Monitoramento e Log
+- O monitor serial deve exibir informações em tempo real sobre o estado da conexão serial, incluindo dados enviados e recebidos, status do Executor e quaisquer erros ou alertas
+- O log deve registrar todas as ações importantes, incluindo conexões, desconexões, comandos enviados e recebidos, e quaisquer erros ou falhas na comunicação
+- O log deve ter uma linguagem clara e objetiva para facilitar a compreensão dos eventos registrados, podendo usar ícones e cores para destacar diferentes tipos de eventos
+
+## UI e Experiência
+- A UI deve ser responsiva e adaptável a diferentes tamanhos de tela e dispositivos, garantindo uma experiência de usuário consistente
+- A UI deve ter persistência de estado, salvando as preferências e configurações do usuário para futuras sessões
+- A UI deve ser intuitiva e fácil de navegar, com uma organização clara dos elementos e funcionalidades
+- A UI deve fornecer feedback visual para as ações do usuário, como botões pressionados, carregamento de dados e mensagens de erro
+- A UI deve ser acessível, seguindo as diretrizes de acessibilidade para garantir que todos os usuários possam utilizar o sistema
+
+## Reuso e Versionamento
+- Funções utilizadas por múltiplos componentes devem ser centralizadas em módulos ou bibliotecas reutilizáveis para evitar duplicação de código (como countdown, formatação de dados, etc.)
+- Sempre que um arquivo for modificado, deve-se garantir que o número de versão seja atualizado para refletir as mudanças com comentários claros sobre o que foi alterado
+- Os scripts devem ser organizados em pastas lógicas, separando funcionalidades como UI, comunicação, lógica de negócios, etc. Não deve haver scripts na página index
+
+## Patches a Resolver
+- Blog-admin era o antigo método usado para definir o host, agora deve ser substituído pelo host do flowgate
+- Verificar se todas as funcionalidades exclusivas do host estão corretamente implementadas e isoladas no código
+
+Não reinstalar bibliotecas que já estão disponíveis.
+Modules são scripts fundamentais que não devem ser duplicados em Widgets ou outras pastas.
+Widgets são scripts que utilizam os modules para criar funcionalidades específicas da aplicação.

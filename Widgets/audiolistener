@@ -1,0 +1,1105 @@
+<!-- AUDIO→COLLAR (blog widget) — v1.4 (HOLD via holdSync Trystero)
+     - Controle por ESTADO (hold.state) em canal dedicado: makeAction('holdSync')
+     - Heartbeat enquanto ON + watchdog timeout no receiver
+     - Loopback local (funciona com 1 peer)
+     - Bridge: opcionalmente emite chat:message com HOLDON/HOLDOFF (silent) para reaproveitar executor existente
+-->
+<div class="card p-3 mt-3" id="audio-collar-widget"
+     style="background:#111;border:1px solid #333;border-radius:.85rem;color:#e5e7eb;">
+  <div class="d-flex align-items-center gap-2 mb-2">
+    <h5 class="m-0"><i class="fa-solid fa-wave-square me-2"></i>Audio</h5>
+    <span id="audio-collar-status" class="small ms-auto text-secondary">pronto</span>
+    <button id="audio-collar-log-toggle" class="btn btn-sm btn-outline-secondary"
+            type="button" title="Mostrar/ocultar log" aria-expanded="false">
+      <i class="fa-solid fa-terminal"></i>
+    </button>
+  </div>
+
+  <div>
+    <div id="audio-collar-bar"
+         style="position:relative;height:32px;background:linear-gradient(90deg,rgba(40,199,111,.95),rgba(220,53,69,.95));border-radius:9px;overflow:hidden;cursor:pointer">
+      <div id="audio-collar-fill"
+           style="position:absolute;right:0;top:0;height:100%;width:100%;background:rgba(9,9,12,.75);z-index:1"></div>
+      <div id="audio-collar-peak"
+           style="position:absolute;top:0;bottom:0;width:2px;background:#fff;opacity:.95;left:0%;z-index:2"></div>
+      <div id="audio-collar-threshold"
+           style="position:absolute;top:0;bottom:0;width:10px;height:150%;background:#ffd166;opacity:1;left:20%;z-index:3"></div>
+      <div id="audio-collar-th-emoji"
+           style="position:absolute;top:-16px;left:20%;transform:translateX(-50%);font-size:16px;line-height:1;z-index:4;">⚡</div>
+    </div>
+    <div class="d-flex justify-content-between mt-1">
+      <small>Volume (RMS): <span id="audio-collar-vol">0%</span></small>
+      <small>Pico: <span id="audio-collar-peaklbl">0%</span></small>
+      <small>Limite: <span id="audio-collar-th">20%</span></small>
+    </div>
+  </div>
+  <div class="row g-2 mt-2">
+    <div class="col-12 col-md-4 d-flex align-items-center gap-2">
+      <label class="small mb-0">Gamma</label>
+      <input id="audio-collar-gamma" type="range" min="1.0" max="4.0" step="0.1"
+             class="form-range" style="max-width:160px;">
+      <small id="audio-collar-gammalbl" class="text-secondary">2.4</small>
+    </div>
+    <div class="col-12 col-md-4 d-flex align-items-center gap-2">
+      <label class="small mb-0">Ruído</label>
+      <input id="audio-collar-nf" type="range" min="0" max="20" step="1"
+             class="form-range" style="max-width:160px;">
+      <small id="audio-collar-nflbl" class="text-secondary">6%</small>
+    </div>
+    <div class="col-12 col-md-4 d-flex align-items-center gap-2">
+      <label class="small mb-0">Sensibilidade</label>
+      <button id="audio-collar-sens-dec" type="button" class="btn btn-sm btn-outline-light px-2">−</button>
+      <input id="audio-collar-sens" type="number" step="1" min="-24" max="36"
+             class="form-control form-control-sm" style="max-width:80px;" />
+      <button id="audio-collar-sens-inc" type="button" class="btn btn-sm btn-outline-light px-2">+</button>
+      <small class="text-secondary small">dB</small>
+    </div>
+  </div>
+
+  <div class="mt-3">
+    <label class="form-label small mb-1">Fontes de áudio</label>
+    <div class="mb-2">
+      <label class="form-label small mb-1 text-secondary">Fontes de Áudio</label>
+      <div class="d-flex flex-wrap gap-2">
+        <button id="audio-collar-refresh-media" class="btn btn-sm btn-outline-light">
+          <i class="fa-solid fa-music me-1"></i> Escutar página
+        </button>
+        <button id="audio-collar-capture-tab" class="btn btn-sm btn-outline-light"
+                title="Capturar guia/janela com áudio (getDisplayMedia)">
+          <i class="fa-solid fa-desktop me-1"></i> Capturar guia/janela
+        </button>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <label for="audio-collar-mic-select" class="small mb-0 text-secondary">Microfone</label>
+          <select id="audio-collar-mic-select" class="form-select form-select-sm" style="min-width: 120px; max-width: 140px;">
+            <option value="">Padrão do sistema</option>
+          </select>
+          <button id="audio-collar-mic" class="btn btn-sm btn-outline-light"
+                  title="Capturar microfone (getUserMedia)">
+            <i class="fa-solid fa-microphone-lines me-1"></i> Escutar
+          </button>
+          <button id="audio-collar-stop-source" class="btn btn-sm btn-outline-danger"
+                  title="Parar fonte de áudio ativa">
+            <i class="fa-solid fa-circle-stop me-1"></i> Stop
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-text text-secondary small mt-1">
+      Guia/janela e microfone usam as permissões padrão do navegador.
+      A lista de microfones aparece completa após conceder permissão de áudio.
+    </div>
+  </div>
+
+  <div id="audio-collar-log-wrap" class="mt-3 d-none">
+    <div id="audio-collar-log"
+         class="small"
+         style="max-height:160px;overflow:auto;background:#0b0b0f;border-radius:6px;padding:6px;font-family:ui-monospace,Menlo,Consolas,monospace;">
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  if (window.__AUDIO_COLLAR_WIDGET_V14__) return;
+  window.__AUDIO_COLLAR_WIDGET_V14__ = true;
+
+  // ---------- CONFIG ----------
+  const POLL_MS   = 35;     // leitura do audio (mais rapida)
+  const COMMIT_MS = 120;    // commit do estado hold (baixo delay / baixo jitter)
+  const STEP_PCT  = 10;
+  const LS_PREFIX = 'audioCollarWidget.';
+
+  const PEAK_ENV_DECAY = 0.85;
+  const SENS_DB_MIN  = -24;
+  const SENS_DB_MAX  =  36;
+  const SENS_DB_STEP =   3;
+
+  // Estabilidade do limiar
+  const THRESH_HYST = 2;        // histerese (%)
+  const DWELL_ON_MS = 40;       // precisa ficar acima por X ms (antes 80; evita perder picos)
+  const DWELL_OFF_MS = 120;     // precisa ficar abaixo por X ms
+  const FAST_TRIP_MARGIN = 10;  // se passar muito do threshold, dispara sem dwell
+  const HOLD_MUTE_MS = 1200;    // janela de silencio apos STOP para evitar HOLDON atrasado
+  const HOLDOFF_BURST_COUNT = 3;
+  const HOLDOFF_BURST_GAP_MS = 180;
+
+  // Receiver watchdog (se perder heartbeat, solta)
+  const RX_TIMEOUT_MS = 950;
+  const CFG_SYNC_ACTION = 'audioCollar';
+  const LEVEL_SYNC_ACTION = 'audioLevel';
+
+  // Bridge: converte hold.state em chat:message HOLDON/HOLDOFF (para seu executor legado)
+  const EMIT_CHAT_BRIDGE = true;
+  const SIMPLIFY_LEGACY_COMMANDS = false;
+
+  // ---------- STORAGE ----------
+  const LS = {
+    get(k, d){
+      try {
+        const v = localStorage.getItem(LS_PREFIX + k);
+        return v === null ? d : JSON.parse(v);
+      } catch(e){ return d; }
+    },
+    set(k, v){
+      try { localStorage.setItem(LS_PREFIX + k, JSON.stringify(v)); } catch(e){}
+    }
+  };
+
+  // ---------- UI helpers ----------
+  const clamp = (n,min,max) => Math.max(min, Math.min(max, n));
+  const $  = sel => document.querySelector(sel);
+  const ALLOWED_MODES = ['BEEP','VIBRATION','SHOCK','LIGHT'];
+  const sanitizeMode = (m) => {
+    const v = String(m || '').toUpperCase();
+    return ALLOWED_MODES.includes(v) ? v : 'BEEP';
+  };
+  const normalizeChannel = (c) => (Number(c) === 2 ? 2 : 1);
+
+  function setStatus(txt, ok){
+    const s = $('#audio-collar-status');
+    if (!s) return;
+    s.textContent = txt;
+    s.classList.toggle('text-success', !!ok);
+  }
+
+  function appendLog(txt){
+    const el = $('#audio-collar-log'); if (!el) return;
+    const d = document.createElement('div');
+    const t = new Date();
+    const hh = String(t.getHours()).padStart(2,'0');
+    const mm = String(t.getMinutes()).padStart(2,'0');
+    const ss = String(t.getSeconds()).padStart(2,'0');
+    d.textContent = `[${hh}:${mm}:${ss}] ${txt}`;
+    el.appendChild(d);
+    el.scrollTop = el.scrollHeight;
+    try { window.appLog && window.appLog('[Audio→Collar] ' + txt, 'info'); } catch(_) {}
+  }
+
+  // ---------- STATE ----------
+  let control = {
+    mode: sanitizeMode(window.currentMode || 'BEEP'),
+    channel: normalizeChannel(window.channel || 1)
+  };
+  let cfg = {
+    thresholdPct:  LS.get('thresholdPct', 90),
+    gamma:         LS.get('gamma', 2.4),
+    noiseFloorPct: LS.get('noiseFloorPct', 6),
+    sensDb:        LS.get('sensDb', 0)
+  };
+
+  // Áudio
+  let audioCtx = null, analyser = null;
+  let elementSources = [];
+  let streamSource   = null;
+  let micStream = null;
+  let tabStream = null;
+  let envPeakAbs = 0;
+
+  // holdSync transport
+  let holdTx = null;          // sendHold
+  let holdRxBound = false;    // listener instalado?
+  let roomBound = null;
+  let cfgSyncTx = null;
+  let cfgSyncRxBound = false;
+  let lastCfgTs = 0;
+  let levelSyncTx = null;
+  let levelSyncRxBound = false;
+  let lastLevelTs = 0;
+  let lastLevelSentAt = 0;
+  let lastLevelSentPeak = 0;
+  let remoteLevel = null;
+
+  // Controle por estado
+  let seq = 1;
+  let desired = { on:false, mode: control.mode, level: 0, ch: control.channel, seq: 0 };
+  let lastCommittedSeq = 0;
+  let controlBusBound = false;
+  let lastRxSig = null;
+  let warnedNoHoldTx = false;
+  let holdMuteUntil = 0;
+
+  function setControlState(next){
+    appendLog(`setControlState: next=${JSON.stringify(next)}`);
+    const nextMode = (next && next.mode != null) ? sanitizeMode(next.mode) : control.mode;
+    const nextChan = (next && next.channel != null) ? normalizeChannel(next.channel) : control.channel;
+    const changed = nextMode !== control.mode || nextChan !== control.channel;
+    control.mode = nextMode;
+    control.channel = nextChan;
+    if (changed) {
+      const nextSeq = desired.on ? ++seq : desired.seq;
+      desired = Object.assign({}, desired, { mode: control.mode, ch: control.channel, seq: nextSeq });
+      appendLog(`Controle Manual: modo ${control.mode}, canal ${control.channel}. Desired state updated.`);
+    } else {
+      appendLog(`Controle Manual: modo ${control.mode}, canal ${control.channel}. No change.`);
+    }
+  }
+
+  // Anti-chatter (dwell)
+  let aboveSince = 0;
+  let belowSince = 0;
+
+  // Receiver state (aplicação local + watchdog)
+  let rxLastSeq = 0;
+  let rxLastSeenAt = 0;
+  let rxWatchdogTimer = null;
+
+  // ---------- Bridge (opcional) ----------
+  function emitChatMessage(text, origin, extra){
+    const t = String(text || '').trim();
+    if (!t) return;
+
+    const tunnel = window.__COLLAR_TUNNEL__;
+    if (tunnel && typeof tunnel.send === 'function') {
+      try { tunnel.send(t, { via: 'holdSync', kind: 'cmd', meta: extra?.meta }); } catch(_){}
+      return;
+    }
+    if (typeof window.collarSend === 'function') {
+      try { window.collarSend(t); } catch(_){}
+      return;
+    }
+    if (window.SerialBridge && typeof window.SerialBridge.send === 'function') {
+      try { window.SerialBridge.send(t); } catch(_){}
+      return;
+    }
+
+    const now = Date.now();
+    const id = `holdSync:${now}:${Math.random().toString(36).slice(2,8)}`;
+    try {
+      window.dispatchEvent(new CustomEvent('chat:message', {
+        detail: Object.assign({
+          id,
+          key: id,
+          text: t,
+          origin: origin || 'trystero-in',
+          ts: now,
+          username: 'audio-collar',
+          peerId: 'holdSync'
+        }, extra || {})
+      }));
+    } catch(_){}
+  }
+
+  function applyHoldStateLocal(state, meta){
+    // Emite evento próprio
+    try { window.dispatchEvent(new CustomEvent('hold:state', { detail: { state, meta } })); } catch(_){}
+
+    if (!EMIT_CHAT_BRIDGE) return;
+
+    // Converte para comandos legados (para o executor atual)
+    if (state.on) {
+      if (SIMPLIFY_LEGACY_COMMANDS) {
+        emitChatMessage(`H ${state.mode.charAt(0)} ${state.level} ${state.ch}`, 'trystero-in', {
+          loopback: true,
+          silent: true,
+          meta: Object.assign({ via: 'holdSync.bridge' }, meta || {})
+        });
+      } else {
+        emitChatMessage(`HOLDON ${state.mode},${state.level},${state.ch}`, 'trystero-in', {
+          loopback: true,
+          silent: true,
+          meta: Object.assign({ via: 'holdSync.bridge' }, meta || {})
+        });
+      }
+    } else {
+      if (SIMPLIFY_LEGACY_COMMANDS) {
+        emitChatMessage('O', 'trystero-in', {
+          loopback: true,
+          silent: true,
+          meta: Object.assign({ via: 'holdSync.bridge' }, meta || {})
+        });
+      } else {
+        emitChatMessage('HOLDOFF', 'trystero-in', {
+          loopback: true,
+          silent: true,
+          meta: Object.assign({ via: 'holdSync.bridge' }, meta || {})
+        });
+      }
+    }
+  }
+
+  // ---------- Transport bind ----------
+  function bindHoldSyncToRoom(room){
+    roomBound = room || null;
+    holdTx = null;
+    holdRxBound = false;
+
+    if (!room) {
+      setStatus('conecte no Trystero', false);
+      appendLog('Sem sala Trystero: aguardando conexão.');
+      return;
+    }
+
+    try {
+      const pair = room.makeAction('holdSync');
+      const sendHold = Array.isArray(pair) ? pair[0] : null;
+      const onHold   = Array.isArray(pair) ? pair[1] : null;
+
+      if (typeof sendHold !== 'function' || typeof onHold !== 'function') {
+        setStatus('erro holdSync', false);
+        appendLog('Falha ao criar action holdSync.');
+        return;
+      }
+
+      holdTx = sendHold;
+
+      // Receiver: aplica qualquer hold.state recebido
+      onHold((data, peerId) => {
+        const s = (data && typeof data === 'object') ? data : null;
+        if (!s || s.type !== 'hold.state') return;
+
+        const sseq = Number(s.seq || 0);
+        if (sseq <= rxLastSeq) return; // idempotência
+        rxLastSeq = sseq;
+        rxLastSeenAt = Date.now();
+
+        const state = {
+          on: !!s.on,
+          mode: String(s.mode || control.mode),
+          level: clamp(Number(s.level || 0), 0, 100),
+          ch: clamp(Number(s.ch || 1), 1, 2),
+          seq: sseq
+        };
+
+        applyHoldStateLocal(state, { fromPeer: String(peerId || ''), via: 'holdSync.rx' });
+      });
+
+      holdRxBound = true;
+      setStatus('holdSync pronto', true);
+      appendLog('holdSync ligado (TX/RX).');
+
+      // Watchdog: se parar heartbeat, solta
+      if (rxWatchdogTimer) clearInterval(rxWatchdogTimer);
+      rxWatchdogTimer = setInterval(() => {
+        if (!rxLastSeenAt) return;
+        const age = Date.now() - rxLastSeenAt;
+        // só faz sentido se o último estado aplicado foi ON
+        // (não guardamos "rxOn" separado porque o executor legado já lida; aqui garantimos soltura)
+        if (age > RX_TIMEOUT_MS) {
+          rxLastSeenAt = 0;
+          applyHoldStateLocal({ on:false, mode: control.mode, level:0, ch: control.channel, seq: ++rxLastSeq }, { via: 'holdSync.watchdog' });
+        }
+      }, 200);
+
+    } catch (e) {
+      setStatus('erro holdSync', false);
+      appendLog('Erro bind holdSync: ' + (e?.message || String(e)));
+    }
+  }
+
+  // Bind imediato se ja existir sala
+  if (window.__TRYSTERO_ROOM__) bindRoom(window.__TRYSTERO_ROOM__);
+  window.addEventListener('trystero:room', (ev) => bindRoom(ev?.detail?.room || null));
+
+ 
+  // ---------- Config sync (gamma / sens / threshold / noise) ----------
+  function applyRemoteCfg(payload){
+    const patch = payload || {};
+    let changed = false;
+    if (Number.isFinite(patch.thresholdPct)) {
+      cfg.thresholdPct = clamp(patch.thresholdPct, 0, 100);
+      LS.set('thresholdPct', cfg.thresholdPct);
+      changed = true;
+    }
+    if (Number.isFinite(patch.gamma)) {
+      cfg.gamma = clamp(patch.gamma, 1.0, 4.0);
+      LS.set('gamma', cfg.gamma);
+      changed = true;
+    }
+    if (Number.isFinite(patch.noiseFloorPct)) {
+      cfg.noiseFloorPct = clamp(patch.noiseFloorPct, 0, 50);
+      LS.set('noiseFloorPct', cfg.noiseFloorPct);
+      changed = true;
+    }
+    if (Number.isFinite(patch.sensDb)) {
+      cfg.sensDb = clamp(patch.sensDb, SENS_DB_MIN, SENS_DB_MAX);
+      LS.set('sensDb', cfg.sensDb);
+      changed = true;
+    }
+    if (changed) {
+      updateThresholdUI();
+      updateSensUI();
+      const g = $('#audio-collar-gamma');
+      const gl = $('#audio-collar-gammalbl');
+      const nf = $('#audio-collar-nf');
+      const nfl = $('#audio-collar-nflbl');
+      if (g && gl) { g.value = String(cfg.gamma); gl.textContent = String(cfg.gamma); }
+      if (nf && nfl) { nf.value = String(cfg.noiseFloorPct); nfl.textContent = cfg.noiseFloorPct + '%'; }
+      appendLog('Config recebida via Trystero.');
+    }
+  }
+
+  function broadcastCfg(reason){
+    if (!cfgSyncTx) return;
+    try {
+      cfgSyncTx({
+        type: 'audio.cfg',
+        thresholdPct: cfg.thresholdPct,
+        gamma: cfg.gamma,
+        noiseFloorPct: cfg.noiseFloorPct,
+        sensDb: cfg.sensDb,
+        ts: Date.now(),
+        reason: reason || 'update'
+      });
+    } catch(_){}
+  }
+
+  function bindCfgSyncToRoom(room){
+    cfgSyncTx = null;
+    cfgSyncRxBound = false;
+    if (!room) return;
+    try {
+      const pair = room.makeAction(CFG_SYNC_ACTION);
+      const tx = Array.isArray(pair) ? pair[0] : null;
+      const rx = Array.isArray(pair) ? pair[1] : null;
+      if (typeof tx !== 'function' || typeof rx !== 'function') {
+        appendLog('Falha ao criar action audioCollar (cfg sync).');
+        return;
+      }
+      cfgSyncTx = tx;
+      rx((data) => {
+        if (!data || data.type !== 'audio.cfg') return;
+        const ts = Number(data.ts || 0);
+        if (ts && ts <= lastCfgTs) return;
+        lastCfgTs = ts || Date.now();
+        applyRemoteCfg(data);
+      });
+      cfgSyncRxBound = true;
+      appendLog('Sync de config ligado (Trystero).');
+      broadcastCfg('bind');
+    } catch(e){
+      appendLog('Erro bind audio.cfg: ' + (e?.message || String(e)));
+    }
+  }
+
+  function bindRoom(room){
+    bindHoldSyncToRoom(room);
+    bindCfgSyncToRoom(room);
+    bindLevelSyncToRoom(room);
+  }
+
+  // ---------- Level sync (picos em tempo real) ----------
+  function applyRemoteLevel(payload){
+    const p = payload || {};
+    const ts = Number(p.ts || 0);
+    if (ts && ts <= lastLevelTs) return;
+    lastLevelTs = ts || Date.now();
+    const pct = clamp(Number(p.pct || 0), 0, 100);
+    const peakPct = clamp(Number(p.peakPct || 0), 0, 100);
+    remoteLevel = { pct, peakPct, ts: lastLevelTs };
+  }
+
+  function broadcastLevel(pct, peakPct){
+    if (!levelSyncTx) return;
+    const now = Date.now();
+    if ((now - lastLevelSentAt) < 30) return;
+    lastLevelSentAt = now;
+    lastLevelSentPeak = peakPct;
+    try {
+      levelSyncTx({ type: 'audio.level', pct, peakPct, ts: now });
+    } catch(_){}
+  }
+
+  function bindLevelSyncToRoom(room){
+    levelSyncTx = null;
+    levelSyncRxBound = false;
+    if (!room) return;
+    try {
+      const pair = room.makeAction(LEVEL_SYNC_ACTION);
+      const tx = Array.isArray(pair) ? pair[0] : null;
+      const rx = Array.isArray(pair) ? pair[1] : null;
+      if (typeof tx !== 'function' || typeof rx !== 'function') {
+        appendLog('Falha ao criar action audioLevel.');
+        return;
+      }
+      levelSyncTx = tx;
+      rx((data) => {
+        if (!data || data.type !== 'audio.level') return;
+        applyRemoteLevel(data);
+      });
+      levelSyncRxBound = true;
+      appendLog('Sync de pico ligado (Trystero).');
+    } catch(e){
+      appendLog('Erro bind audioLevel: ' + (e?.message || String(e)));
+    }
+  }
+
+  // ---------- AUDIO ----------
+  async function ensureAudio(rescanElements){
+    if (!audioCtx){
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (!analyser){
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0.0;
+    }
+
+    if (rescanElements || !elementSources.length){
+      const mediaEls = Array.from(document.querySelectorAll('audio,video'));
+      mediaEls.forEach(el=>{
+        try {
+          if (el.__audioCollarAttached) return;
+          const src = audioCtx.createMediaElementSource(el);
+          src.connect(analyser);
+          src.connect(audioCtx.destination);
+          elementSources.push(src);
+          el.__audioCollarAttached = true;
+        } catch(e){}
+      });
+    }
+
+    if (audioCtx.state === 'suspended'){
+      const resume = ()=>{
+        audioCtx.resume().catch(()=>{});
+        document.removeEventListener('pointerdown', resume);
+      };
+      document.addEventListener('pointerdown', resume, {once:true});
+    }
+  }
+
+  async function tryTabCapture(){
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia){
+      throw new Error('getDisplayMedia não suportado neste navegador.');
+    }
+    if (tabStream){
+      tabStream.getTracks().forEach(t=>t.stop());
+      tabStream = null;
+    }
+    const s = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: { echoCancellation:false, noiseSuppression:false }
+    });
+    tabStream = s;
+    attachStream(s);
+  }
+
+  async function tryMicCapture(){
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      throw new Error('getUserMedia não suportado neste navegador.');
+    }
+
+    if (micStream){
+      micStream.getTracks().forEach(t=>t.stop());
+      micStream = null;
+    }
+
+    const sel = $('#audio-collar-mic-select');
+    const deviceId = sel ? (sel.value || null) : null;
+
+    const constraints = {
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false
+      },
+      video: false
+    };
+    if (deviceId) constraints.audio.deviceId = { exact: deviceId };
+
+    const s = await navigator.mediaDevices.getUserMedia(constraints);
+    micStream = s;
+    attachStream(s);
+  }
+
+  function attachStream(stream){
+    if (!audioCtx){
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (!analyser){
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0.0;
+    }
+    try { streamSource && streamSource.disconnect(); } catch(_){}
+    streamSource = audioCtx.createMediaStreamSource(stream);
+    streamSource.connect(analyser);
+  }
+
+  function stopAllSources(){
+    try {
+      if (tabStream) { tabStream.getTracks().forEach(t => t.stop()); tabStream = null; }
+      if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+      if (streamSource) { streamSource.disconnect(); streamSource = null; }
+      elementSources.forEach(src => { try { src.disconnect(); } catch(_){} });
+      elementSources = [];
+      envPeakAbs = 0;
+      remoteLevel = null;
+      const fill    = $('#audio-collar-fill');
+      const volEl   = $('#audio-collar-vol');
+      const peakEl  = $('#audio-collar-peak');
+      const peakLbl = $('#audio-collar-peaklbl');
+      if (fill)    fill.style.width = '100%';
+      if (volEl)   volEl.textContent = '0%';
+      if (peakEl)  peakEl.style.left = '0%';
+      if (peakLbl) peakLbl.textContent = '0%';
+      appendLog('Fonte de áudio interrompida.');
+    } catch(e){
+      appendLog('Falha ao parar fonte: ' + (e?.message || String(e)));
+    }
+  }
+
+  function forceHoldOff(reason, force){
+    if (!force && !desired.on) return;
+    holdMuteUntil = Math.max(holdMuteUntil, Date.now() + HOLD_MUTE_MS);
+    desired = { on:false, mode: control.mode, level: 0, ch: control.channel, seq: ++seq };
+    aboveSince = 0;
+    belowSince = 0;
+    sendHoldState(desired, { reason: reason || 'manual-stop' });
+    lastCommittedSeq = desired.seq;
+    setStatus('pronto', false);
+    appendLog(`FORCE HOLDOFF (${reason || 'manual-stop'})`);
+
+    if (force) {
+      for (let i = 1; i <= HOLDOFF_BURST_COUNT; i++) {
+        setTimeout(() => {
+          if (Date.now() >= holdMuteUntil) return;
+          desired = { on:false, mode: control.mode, level: 0, ch: control.channel, seq: ++seq };
+          sendHoldState(desired, { reason: `${reason || 'manual-stop'}-burst${i}` });
+          lastCommittedSeq = desired.seq;
+        }, i * HOLDOFF_BURST_GAP_MS);
+      }
+    }
+  }
+
+  function readLevelsInstant(){
+    if (!analyser) return {pct:0, peakPct:0};
+
+    const n = analyser.fftSize;
+    const buf = new Float32Array(n);
+
+    if (analyser.getFloatTimeDomainData){
+      analyser.getFloatTimeDomainData(buf);
+    } else {
+      const b8 = new Uint8Array(n);
+      analyser.getByteTimeDomainData(b8);
+      for (let i=0;i<n;i++) buf[i] = (b8[i]-128)/128;
+    }
+
+    let sum = 0, peakAbs = 0;
+    for (let i=0;i<n;i++){
+      const v = buf[i];
+      sum += v*v;
+      const a = Math.abs(v);
+      if (a > peakAbs) peakAbs = a;
+    }
+
+    envPeakAbs = Math.max(peakAbs, envPeakAbs * PEAK_ENV_DECAY);
+
+    const sensDb = clamp(cfg.sensDb || 0, SENS_DB_MIN, SENS_DB_MAX);
+    const gain = Math.pow(10, sensDb / 20);
+
+    let rms = Math.sqrt(sum/n);
+    rms = Math.min(1, rms * gain);
+    const pct = clamp(Math.round(rms * 100 * 1.4), 0, 100);
+
+    let env = Math.min(1, envPeakAbs * gain);
+
+    const nf = clamp(cfg.noiseFloorPct/100, 0, 0.99);
+    let p = env;
+    if (p <= nf) p = 0;
+    else {
+      p = (p - nf) / (1 - nf);
+      p = Math.pow(p, Math.max(1.0, cfg.gamma));
+    }
+    const peakPct = clamp(Math.round(p*100), 0, 100);
+
+    return { pct, peakPct };
+  }
+
+  // ---------- Desired-state update (dwell + hysterese) ----------
+  function updateDesiredFromPeak(peakPct){
+    const now = Date.now();
+    const thrOn  = clamp(cfg.thresholdPct, 0, 100);
+    const thrOff = clamp(thrOn - THRESH_HYST, 0, 100);
+    const onThreshold = thrOn === 0 ? 1 : thrOn;
+    const offThreshold = thrOn === 0 ? 0 : thrOff;
+    const minLevelBase = thrOn === 0 ? STEP_PCT : Math.ceil(thrOn / STEP_PCT) * STEP_PCT;
+
+    if (holdMuteUntil && now < holdMuteUntil) {
+      if (desired.on) {
+        desired = { on:false, mode: control.mode, level: 0, ch: control.channel, seq: ++seq };
+      }
+      aboveSince = 0;
+      belowSince = 0;
+      return;
+    }
+
+    if (!desired.on) {
+      // Fast-path: pico bem acima do threshold dispara sem esperar dwell
+      if (peakPct >= (onThreshold + FAST_TRIP_MARGIN)) {
+        const minLevel = minLevelBase;
+        const lvl = Math.max(minLevel, Math.floor(peakPct/STEP_PCT)*STEP_PCT);
+        desired = { on:true, mode: control.mode, level: clamp(lvl, 0, 100), ch: control.channel, seq: ++seq };
+        aboveSince = 0;
+        belowSince = 0;
+        return;
+      }
+
+      if (peakPct >= onThreshold) {
+        if (!aboveSince) aboveSince = now;
+        if ((now - aboveSince) >= DWELL_ON_MS) {
+          // vira ON
+          const minLevel = minLevelBase;
+          const lvl = Math.max(minLevel, Math.floor(peakPct/STEP_PCT)*STEP_PCT);
+
+          desired = { on:true, mode: control.mode, level: clamp(lvl, 0, 100), ch: control.channel, seq: ++seq };
+          belowSince = 0;
+          aboveSince = 0;
+        }
+      } else {
+        aboveSince = 0;
+      }
+      return;
+    }
+
+    // desired.on === true
+    if (peakPct <= offThreshold) {
+      if (!belowSince) belowSince = now;
+      if ((now - belowSince) >= DWELL_OFF_MS) {
+        desired = { on:false, mode: control.mode, level: 0, ch: control.channel, seq: ++seq };
+        aboveSince = 0;
+        belowSince = 0;
+        return;
+      }
+    } else {
+      belowSince = 0;
+    }
+
+    // Atualiza nível enquanto ON (seguindo pico)
+    const minLevel = Math.ceil(thrOn/STEP_PCT)*STEP_PCT;
+    const newLevel = Math.max(minLevel, Math.floor(peakPct/STEP_PCT)*STEP_PCT);
+
+    if (newLevel !== desired.level || control.mode !== desired.mode || control.channel !== desired.ch) {
+      desired = {
+        on:true,
+        mode: control.mode,
+        level: clamp(newLevel, 0, 100),
+        ch: control.channel,
+        seq: ++seq
+      };
+    }
+  }
+
+  // ---------- Commit loop (heartbeat + loopback) ----------
+  function sendHoldState(state, meta){
+    const tx = holdTx;
+    const roomOk = !!(roomBound && typeof roomBound.makeAction === 'function' && holdRxBound);
+
+    // 1) loopback local: aplica sempre no próprio cliente (resolve "1 peer")
+    applyHoldStateLocal(state, Object.assign({ via: 'holdSync.loopback' }, meta || {}));
+
+    // 2) envia para os outros (se possível)
+    if (!tx || !roomOk) {
+      if (!warnedNoHoldTx) {
+        appendLog('WARN: holdSync TX não disponível ou sala não conectada.');
+        warnedNoHoldTx = true;
+      }
+      return;
+    }
+    warnedNoHoldTx = false; // reset warning if it becomes available
+
+    try {
+      const payload = {
+        type: 'hold.state',
+        on: !!state.on,
+        mode: String(state.mode || control.mode),
+        level: clamp(Number(state.level || 0), 0, 100),
+        ch: clamp(Number(state.ch || 1), 1, 2),
+        seq: Number(state.seq || 0),
+        t: Date.now()
+      };
+      appendLog('Enviando hold.state: ' + JSON.stringify(payload));
+      tx(payload);
+    } catch (e) {
+      appendLog('ERRO ao enviar hold.state: ' + (e?.message || e));
+    }
+  }
+
+  function startCommitLoop(){
+    setInterval(() => {
+      // Heartbeat: se ON, reenviar mesmo sem mudança (robustez)
+      if (desired.on) {
+        // Se não mudou, ainda assim reenviamos com o mesmo seq para manter idempotência?
+        // Melhor: heartbeat com seq novo, para o receiver saber que é fresco.
+        // Mas o receiver ignora seq menor/igual; então heartbeat precisa incrementar seq.
+        // Fazemos um heartbeat leve só se não houve commit recente.
+        const age = (Date.now() - (rxLastSeenAt || 0)); // local apenas para referência
+        const shouldHeartbeat = true; // simplificado: sempre
+
+        if (shouldHeartbeat) {
+          // se já commitou este seq, criamos heartbeat com novo seq sem mudar estado
+          if (desired.seq === lastCommittedSeq) {
+            desired = Object.assign({}, desired, { seq: ++seq });
+          }
+        }
+      }
+
+      // Commit: se mudou seq, envia
+      if (desired.seq !== lastCommittedSeq) {
+        lastCommittedSeq = desired.seq;
+        sendHoldState(desired, { reason: 'commit' });
+        setStatus(desired.on ? `HOLD ${desired.level}` : 'pronto', desired.on);
+        appendLog(`commit hold.state: on=${desired.on} lvl=${desired.level} ch=${desired.ch} seq=${desired.seq}`);
+      } else if (desired.on) {
+        // Mesmo seq não acontece por conta do heartbeat acima; aqui fica como fallback
+        // sendHoldState(desired, { reason: 'heartbeat' });
+      }
+    }, COMMIT_MS);
+  }
+
+  // ---------- Controle manual (modo/canal) ----------
+  function bindControlBus(){
+    const bus = window.__FS_BUS__;
+    if (controlBusBound || !bus || typeof bus.on !== 'function') return;
+    try {
+      controlBusBound = true;
+      bus.on((msg) => {
+        if (msg && msg.type === 'fs-control' && msg.payload) {
+          setControlState({ mode: msg.payload.mode, channel: msg.payload.channel });
+        }
+      });
+    } catch(_) {
+      controlBusBound = false;
+    }
+  }
+
+  function startControlPolling(){
+    setInterval(() => {
+      if (!controlBusBound) bindControlBus();
+      const nextMode = sanitizeMode(window.currentMode || control.mode);
+      const nextChan = normalizeChannel(window.channel || control.channel);
+      if (nextMode !== control.mode || nextChan !== control.channel) {
+        setControlState({ mode: nextMode, channel: nextChan });
+      }
+    }, 500);
+  }
+
+  // ---------- UI ----------
+  function updateThresholdUI(){
+    const thr = $('#audio-collar-threshold');
+    const thLabel = $('#audio-collar-th');
+    const emoji = $('#audio-collar-th-emoji');
+    if (thr)   thr.style.left = cfg.thresholdPct + '%';
+    if (thLabel) thLabel.textContent = cfg.thresholdPct + '%';
+    if (emoji) emoji.style.left = cfg.thresholdPct + '%';
+  }
+  function updateSensUI(){
+    const input = $('#audio-collar-sens');
+    if (input) input.value = cfg.sensDb.toFixed(0);
+  }
+
+  async function populateMicSelect(){
+    const sel = $('#audio-collar-mic-select');
+    if (!sel || !navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const mics = devices.filter(d => d.kind === 'audioinput');
+      sel.innerHTML = '<option value="">Padrão do sistema</option>';
+      mics.forEach((d, idx)=>{
+        const opt = document.createElement('option');
+        opt.value = d.deviceId || '';
+        opt.textContent = d.label || `Microfone ${idx+1}`;
+        sel.appendChild(opt);
+      });
+      appendLog(`Foram encontrados ${mics.length} microfones.`);
+    } catch(e){
+      appendLog('Não foi possível listar microfones (talvez sem permissão ainda).');
+    }
+  }
+
+  function makeUIBindings(){
+    const btnTest = $('#audio-collar-test');
+    if (btnTest){
+      btnTest.addEventListener('click', ()=>{
+        // publica um pulso ON curto via desired-state
+        desired = { on:true, mode: control.mode, level: 100, ch: control.channel, seq: ++seq };
+        setTimeout(() => {
+          desired = { on:false, mode: control.mode, level: 0, ch: control.channel, seq: ++seq };
+        }, 250);
+      });
+    }
+
+    const g   = $('#audio-collar-gamma');
+    const gl  = $('#audio-collar-gammalbl');
+    const nf  = $('#audio-collar-nf');
+    const nfl = $('#audio-collar-nflbl');
+
+    if (g && gl){
+      g.value = String(cfg.gamma);
+      gl.textContent = String(cfg.gamma);
+      g.addEventListener('input', ()=>{
+        cfg.gamma = parseFloat(g.value) || 1.0;
+        gl.textContent = g.value;
+        LS.set('gamma', cfg.gamma);
+        broadcastCfg('gamma');
+      });
+    }
+    if (nf && nfl){
+      nf.value = String(cfg.noiseFloorPct);
+      nfl.textContent = cfg.noiseFloorPct + '%';
+      nf.addEventListener('input', ()=>{
+        cfg.noiseFloorPct = parseInt(nf.value, 10) || 0;
+        nfl.textContent = cfg.noiseFloorPct + '%';
+        LS.set('noiseFloorPct', cfg.noiseFloorPct);
+        broadcastCfg('noise');
+      });
+    }
+
+    const sensInput = $('#audio-collar-sens');
+    const sensDec   = $('#audio-collar-sens-dec');
+    const sensInc   = $('#audio-collar-sens-inc');
+
+    function setSensDb(val){
+      const v = clamp(parseFloat(val) || 0, SENS_DB_MIN, SENS_DB_MAX);
+      cfg.sensDb = v;
+      LS.set('sensDb', cfg.sensDb);
+      broadcastCfg('sens');
+      updateSensUI();
+    }
+
+    if (sensInput){
+      sensInput.value = cfg.sensDb.toFixed(0);
+      sensInput.addEventListener('change', ()=> setSensDb(sensInput.value));
+    }
+    sensDec && sensDec.addEventListener('click', ()=> setSensDb(cfg.sensDb - SENS_DB_STEP));
+    sensInc && sensInc.addEventListener('click', ()=> setSensDb(cfg.sensDb + SENS_DB_STEP));
+
+    const bar = $('#audio-collar-bar');
+    if (bar){
+      let dragging = false;
+      const onMove = clientX => {
+        const r = bar.getBoundingClientRect();
+        let pct = Math.round(((clientX - r.left)/r.width) * 100);
+        pct = clamp(pct, 0, 100);
+        cfg.thresholdPct = pct;
+        LS.set('thresholdPct', pct);
+        updateThresholdUI();
+        broadcastCfg('threshold');
+      };
+      bar.addEventListener('pointerdown', ev=>{
+        dragging = true;
+        bar.setPointerCapture(ev.pointerId);
+        onMove(ev.clientX);
+      });
+      window.addEventListener('pointermove', ev=>{ if (dragging) onMove(ev.clientX); });
+      window.addEventListener('pointerup', ev=>{
+        if (!dragging) return;
+        dragging = false;
+        try { bar.releasePointerCapture(ev.pointerId); } catch(_){}
+      });
+    }
+
+    const btnRefresh = $('#audio-collar-refresh-media');
+    const btnTab     = $('#audio-collar-capture-tab');
+    const btnMic     = $('#audio-collar-mic');
+    const btnStop    = $('#audio-collar-stop-source');
+
+    btnRefresh && btnRefresh.addEventListener('click', async ()=>{
+      await ensureAudio(true);
+      appendLog('Reanalisando elementos <audio>/<video> desta página.');
+    });
+
+    btnTab && btnTab.addEventListener('click', async ()=>{
+      btnTab.disabled = true;
+      try {
+        await tryTabCapture();
+        appendLog('Captura guia/janela iniciada — selecione a guia/janela com áudio.');
+      } catch(e){
+        appendLog('Falha captura guia/janela: ' + (e?.name ? `${e.name}: ${e.message||''}` : String(e)));
+      } finally {
+        btnTab.disabled = false;
+      }
+    });
+
+    btnMic && btnMic.addEventListener('click', async ()=>{
+      btnMic.disabled = true;
+      try {
+        await tryMicCapture();
+        appendLog('Captura de microfone iniciada.');
+        await populateMicSelect();
+      } catch(e){
+        appendLog('Falha captura microfone: ' + (e?.name ? `${e.name}: ${e.message||''}` : String(e)));
+      } finally {
+        btnMic.disabled = false;
+      }
+    });
+
+    btnStop && btnStop.addEventListener('click', async ()=>{
+      btnStop.disabled = true;
+      try {
+        forceHoldOff('manual-stop', true);
+        stopAllSources();
+      } finally {
+        btnStop.disabled = false;
+      }
+    });
+
+    const logToggle = $('#audio-collar-log-toggle');
+    const logWrap = $('#audio-collar-log-wrap');
+    if (logToggle && logWrap) {
+      const setVis = (show) => {
+        logWrap.classList.toggle('d-none', !show);
+        logToggle.setAttribute('aria-expanded', show ? 'true' : 'false');
+      };
+      logToggle.addEventListener('click', () => {
+        const next = logWrap.classList.contains('d-none');
+        setVis(next);
+      });
+      setVis(false);
+    }
+
+    updateThresholdUI();
+    updateSensUI();
+  }
+
+  // ---------- main loops ----------
+  async function tickAudio(){
+    try { await ensureAudio(false); } catch(e){}
+    const { pct, peakPct } = readLevelsInstant();
+
+    broadcastLevel(pct, peakPct);
+
+    let dispPct = pct;
+    let dispPeak = peakPct;
+    const now = Date.now();
+    if (remoteLevel && (now - (remoteLevel.ts || 0)) < 2500) {
+      dispPct = Math.max(pct, remoteLevel.pct);
+      dispPeak = Math.max(peakPct, remoteLevel.peakPct);
+    } else {
+      remoteLevel = null;
+    }
+
+    const fill    = $('#audio-collar-fill');
+    const volEl   = $('#audio-collar-vol');
+    const peakEl  = $('#audio-collar-peak');
+    const peakLbl = $('#audio-collar-peaklbl');
+
+    if (fill)    fill.style.width = Math.max(0, 100 - dispPeak) + '%'; // mask que revela gradient do bar
+    if (volEl)   volEl.textContent = dispPct + '%';
+    if (peakEl)  peakEl.style.left = clamp(dispPeak, 0, 100) + '%';
+    if (peakLbl) peakLbl.textContent = clamp(dispPeak, 0, 100) + '%';
+
+    updateDesiredFromPeak(peakPct);
+  }
+
+  function boot(){
+    appendLog('Booting Audio→Collar widget...');
+    makeUIBindings();
+    setControlState({ mode: window.currentMode, channel: window.channel });
+    bindControlBus();
+    startControlPolling();
+    setStatus('pronto', false);
+    appendLog('Audio→Collar v1.4 inicializado.');
+    appendLog('Modo robusto: holdSync (estado + heartbeat + timeout).');
+
+    populateMicSelect();
+
+    setInterval(tickAudio, POLL_MS);
+    startCommitLoop();
+  }
+
+  boot();
+})();
+</script>

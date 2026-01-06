@@ -1,0 +1,682 @@
+<!-- GRAFICO EXECUCOES x INTENSIDADE (SHOCK/VIBRATION/LIGHT/BEEP) -->
+<div class="card shadow-sm" id="collarEventChartCard" style="background:#111;border:1px solid #333;border-radius:.75rem;color:#e5e7eb;">
+  <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2" style="background:#0c0c0e;border-bottom:1px solid #333;color:#e5e7eb;border-top-left-radius:.65rem;border-top-right-radius:.65rem;">
+    <div class="d-flex align-items-center gap-2">
+      <i class="fa-solid fa-wave-square"></i>
+      <div class="fw-semibold">Eventos do Collar - Execucoes x Intensidade</div>
+    </div>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <span id="collarEventStatus" class="small text-secondary">Carregando Chart.js...</span>
+      <button id="collarEventClear" class="btn btn-sm btn-outline-light" type="button">
+        <i class="fa-solid fa-eraser me-1"></i>Limpar
+      </button>
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="small text-secondary mb-2">
+      Escuta o monitor serial e plota SHOCK, VIBRATION, LIGHT, BEEP e BTN STATE (ON/OFF). Eixo X = numero de execucao (0,1,2,...), eixo Y = intensidade.
+    </div>
+    <div class="position-relative" style="min-height:280px;">
+      <canvas id="collarEventCanvas" height="320" role="img" aria-label="Grafico de eventos do collar"></canvas>
+    </div>
+    <div class="d-flex flex-wrap align-items-center gap-2 mt-3" id="collarEventLegend"></div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const STATUS_EL = document.getElementById("collarEventStatus");
+  const CANVAS = document.getElementById("collarEventCanvas");
+  const LEGEND = document.getElementById("collarEventLegend");
+  const CLEAR_BTN = document.getElementById("collarEventClear");
+
+  if (!CANVAS || !STATUS_EL || !CLEAR_BTN || !LEGEND) return;
+
+  const TYPES = {
+    SHOCK:     { label: "SHOCK",     color: "#f97316", iconClass: "fa-bolt-lightning", glyph: "\u26A1" },
+    VIBRATION: { label: "VIBRATION", color: "#10b981", iconClass: "fa-mobile-screen-button", glyph: "\u{1F4F3}" },
+    LIGHT:     { label: "LIGHT",     color: "#facc15", iconClass: "fa-lightbulb", glyph: "\u{1F4A1}" },
+    BEEP:      { label: "BEEP",      color: "#60a5fa", iconClass: "fa-volume-high", glyph: "\u{1F50A}" },
+    BTN_STATE: { label: "BTN STATE", color: "#f43f5e", iconClass: "fa-toggle-on", glyph: "\u23FB" }
+  };
+  const MAX_POINTS = 1000;
+
+  const state = {
+    chart: null,
+    iconCache: {},
+    pending: [],
+    lastChatSig: { text: "", ts: 0 },
+    counters: {},
+    seenChatIds: new Map(),
+    activeHold: null,
+    holdSeq: 0,
+    tunnelBound: false,
+    tunnelUnsub: null,
+    serialListener: null,
+    serialStats: {
+      seen: 0,
+      parsed: 0,
+      ignored: 0,
+      lastLine: "",
+      lastOkSig: "",
+      lastOkTs: 0
+    }
+  };
+
+  function resetCounters() {
+    state.counters = { SHOCK: 0, VIBRATION: 0, LIGHT: 0, BEEP: 0, BTN_STATE: 0 };
+  }
+  resetCounters();
+
+  function setStatus(text) {
+    try { STATUS_EL.textContent = text; } catch(_) {}
+  }
+
+  function debugLog(msg) {
+    if (!window.__CHART_SERIAL_DEBUG__) return;
+    try {
+      if (window.appLog) window.appLog(msg, "info");
+      else console.log(msg);
+    } catch(_) {}
+  }
+
+  function loadChartJs() {
+    if (window.Chart) return Promise.resolve(window.Chart);
+    return new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js";
+      s.async = true;
+      s.onload = () => resolve(window.Chart);
+      s.onerror = () => reject(new Error("Falha ao carregar Chart.js"));
+      document.head.appendChild(s);
+    });
+  }
+
+  function buildLegend() {
+    LEGEND.innerHTML = "";
+    Object.entries(TYPES).forEach(([key, cfg]) => {
+      const badge = document.createElement("span");
+      badge.className = "badge rounded-pill d-inline-flex align-items-center gap-2";
+      badge.style.background = "rgba(255,255,255,0.05)";
+      badge.style.border = `1px solid ${cfg.color}`;
+      badge.style.color = cfg.color;
+      badge.innerHTML = `<i class="fa-solid ${cfg.iconClass}"></i> ${cfg.label}`;
+      badge.setAttribute("data-mode", key);
+      LEGEND.appendChild(badge);
+    });
+  }
+
+  function createIconCanvas(glyph, color) {
+    const size = 28;
+    const c = document.createElement("canvas");
+    c.width = size;
+    c.height = size;
+    const ctx = c.getContext("2d");
+
+    ctx.fillStyle = "rgba(15, 17, 26, 0.9)";
+    ctx.beginPath();
+    ctx.arc(size / 2, size / 2, (size / 2) - 1, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = color;
+    ctx.font = '900 16px "Font Awesome 6 Free", "Segoe UI Symbol", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(glyph, size / 2, size / 2 + 1);
+
+    return c;
+  }
+
+  function ensureIcons() {
+    Object.entries(TYPES).forEach(([key, cfg]) => {
+      if (!state.iconCache[key]) {
+        state.iconCache[key] = createIconCanvas(cfg.glyph, cfg.color);
+      }
+    });
+  }
+
+  function isLastPoint(ctx) {
+    if (!ctx || !ctx.dataset || !Array.isArray(ctx.dataset.data)) return false;
+    return ctx.dataIndex === ctx.dataset.data.length - 1;
+  }
+
+  function isSeedPoint(ctx) {
+    return !!(ctx && ctx.raw && ctx.raw._seed);
+  }
+
+  function makeDatasets() {
+    return Object.entries(TYPES).map(([key, cfg]) => ({
+      label: cfg.label,
+      mode: key,
+      data: [],
+      borderColor: cfg.color,
+      backgroundColor: cfg.color,
+      tension: 0.25,
+      pointRadius: (ctx) => isSeedPoint(ctx) ? 0 : (isLastPoint(ctx) ? 8 : 0),
+      pointHoverRadius: (ctx) => isSeedPoint(ctx) ? 0 : (isLastPoint(ctx) ? 9 : 0),
+      pointHitRadius: (ctx) => isSeedPoint(ctx) ? 0 : (isLastPoint(ctx) ? 16 : 10), // permite hover/crosshair em todos os pontos
+      borderWidth: 2,
+      cubicInterpolationMode: "monotone",
+      pointStyle: (ctx) => isLastPoint(ctx) ? (state.iconCache[key] || "circle") : "circle",
+      spanGaps: true
+    }));
+  }
+
+  function normalizeSig(text) {
+    return String(text || "")
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, " ");
+  }
+
+  function clampLevel(n) {
+    const num = Number(n);
+    if (!Number.isFinite(num)) return 0;
+    return Math.max(0, Math.min(100, Math.round(num)));
+  }
+
+  function parseBtnState(raw) {
+    const match = String(raw || "").match(/\bBTN\s*STATE\s*->\s*(ON|OFF)\b/i);
+    if (!match) return null;
+    const stateText = match[1].toUpperCase();
+    return {
+      kind: "pulse",
+      mode: "BTN_STATE",
+      level: stateText === "ON" ? 100 : 0,
+      channel: "-",
+      btnState: stateText
+    };
+  }
+
+  function parseCommand(text) {
+    if (!text) return null;
+    const raw = String(text || "").trim();
+    const btn = parseBtnState(raw);
+    if (btn) return btn;
+    if (!/^OK\b/i.test(raw)) return null;
+    const cleaned = raw.replace(/^OK\s+/i, "").trim();
+
+    const isHoldOff = /\bHOLDOFF\b/i.test(cleaned);
+    const isHoldOn = /\bHOLDON\b/i.test(cleaned);
+
+    if (isHoldOff) return { kind: "holdoff" };
+
+    const match = cleaned.match(/\b(SHOCK|BEEP|BIP|VIBRATION|LIGHT|LUZ)\b\s*,\s*([+-]?\d+(?:\.\d+)?)\s*,\s*(\d+)/i);
+    if (!match) return null;
+
+    const rawMode = match[1].toUpperCase();
+    const mode =
+      rawMode === "BIP" ? "BEEP" :
+      rawMode === "LUZ" ? "LIGHT" :
+      rawMode;
+
+    const level = clampLevel(match[2]);
+    const channel = Math.max(1, Math.min(2, Number(match[3]) || 1));
+
+    return { kind: isHoldOn ? "holdon" : "pulse", mode, level, channel };
+  }
+
+  function extractTextFromMessage(detail) {
+    if (!detail) return "";
+    if (typeof detail.text === "string") return detail.text;
+    if (detail.raw) {
+      if (typeof detail.raw.text === "string") return detail.raw.text;
+      if (typeof detail.raw.msg === "string") return detail.raw.msg;
+      if (typeof detail.raw.command === "string") return detail.raw.command;
+    }
+    if (typeof detail.msg === "string") return detail.msg;
+    if (typeof detail.command === "string") return detail.command;
+    return "";
+  }
+
+  function extractTextFromTunnel(detail) {
+    if (!detail) return "";
+    if (typeof detail === "string") return detail;
+    if (typeof detail.line === "string") return detail.line;
+    if (typeof detail.text === "string") return detail.text;
+    if (detail.raw && typeof detail.raw.text === "string") return detail.raw.text;
+    return "";
+  }
+
+  function onSerialLine(line) {
+    const text = String(line || "").trim();
+    if (!text) return;
+    state.serialStats.seen += 1;
+    state.serialStats.lastLine = text;
+    if (/^OK\b/i.test(text)) {
+      const now = Date.now();
+      if (state.serialStats.lastOkSig === text && (now - state.serialStats.lastOkTs) < 250) {
+        debugLog(`Chart serial OK duplicado em ${now - state.serialStats.lastOkTs}ms: ${text}`);
+      }
+      state.serialStats.lastOkSig = text;
+      state.serialStats.lastOkTs = now;
+    }
+    const parsed = parseCommand(text);
+    if (!parsed) {
+      state.serialStats.ignored += 1;
+      debugLog(`Chart serial ignorado: ${text}`);
+      setStatus(`Serial RX ${state.serialStats.seen} (validos: ${state.serialStats.parsed}).`);
+      return;
+    }
+    state.serialStats.parsed += 1;
+    const ts = Date.now();
+    if (parsed.kind === "holdoff") {
+      finalizeHold(ts);
+      return;
+    }
+    enqueuePoint(makePoint(parsed, { ts, source: "serial" }));
+    flushPending();
+  }
+
+  function hasFanout(fn) {
+    let cur = fn;
+    let guard = 0;
+    while (cur && guard < 12) {
+      if (cur._chartFanout) return true;
+      cur = cur._orig;
+      guard += 1;
+    }
+    return false;
+  }
+
+  function ensureSerialHook(reason) {
+    if (!window.__SERIAL_LINE_LISTENERS__) {
+      window.__SERIAL_LINE_LISTENERS__ = [];
+    }
+
+    const current = window.logSerialLine;
+    if (!current || !hasFanout(current)) {
+      const original = current;
+      const wrapped = function(line) {
+        try {
+          const list = window.__SERIAL_LINE_LISTENERS__ || [];
+          for (const cb of list) cb(line);
+        } catch(_) {}
+        if (typeof original === "function") original(line);
+      };
+      wrapped._chartFanout = true;
+      wrapped._orig = original;
+      window.logSerialLine = wrapped;
+      debugLog(`Chart serial hook aplicado (${reason || "init"}).`);
+    } else {
+      debugLog(`Chart serial hook ja presente (${reason || "init"}).`);
+    }
+
+    const handler = state.serialListener;
+    const list = window.__SERIAL_LINE_LISTENERS__;
+    if (Array.isArray(list) && handler && !list.includes(handler)) {
+      list.push(handler);
+    }
+  }
+
+  function bindSerialMonitor() {
+    const handler = (line) => onSerialLine(line);
+    state.serialListener = handler;
+    ensureSerialHook("bind");
+    setStatus("Escutando monitor serial.");
+  }
+
+  function setBounds() {
+    if (!state.chart) return;
+    const counts = Object.values(state.counters);
+    const maxCount = counts.length ? Math.max(...counts) : 0;
+    const min = Math.max(0, maxCount - MAX_POINTS);
+    const max = Math.max(min + 6, maxCount + 1);
+    state.chart.options.scales.x.suggestedMin = min;
+    state.chart.options.scales.x.suggestedMax = max;
+  }
+
+  function addPointToChart(payload) {
+    if (!payload || !payload.mode || !state.chart) {
+      if (payload) state.pending.push(payload);
+      return;
+    }
+    const ds = state.chart.data.datasets.find((d) => d.mode === payload.mode);
+    if (!ds) return;
+
+    if (!ds.data.length) {
+      ds.data.push({
+        x: 0,
+        y: 0,
+        ch: "-",
+        ts: payload.ts,
+        source: "seed",
+        hold: false,
+        holdId: null,
+        durationSec: null,
+        exec: 0,
+        _seed: true
+      });
+    }
+
+    ds.data.push({
+      x: payload.idx,
+      y: payload.level,
+      ch: payload.channel,
+      ts: payload.ts,
+      source: payload.source || "bus",
+      hold: payload.hold || false,
+      holdId: payload.holdId || null,
+      durationSec: payload.durationSec ?? null,
+      exec: payload.exec ?? null
+    });
+    if (ds.data.length > MAX_POINTS) {
+      ds.data.splice(0, ds.data.length - MAX_POINTS);
+    }
+  }
+
+  function flushPending() {
+    if (!state.chart || !state.pending.length) return;
+    const queue = state.pending.slice();
+    state.pending.length = 0;
+    queue.forEach(addPointToChart);
+    setBounds();
+    state.chart.update("none");
+    const last = queue[queue.length - 1];
+    if (last) setStatus(`Exec #${last.exec ?? last.idx} - ${last.mode} ${last.level}% ch${last.channel}`);
+  }
+
+  function enqueuePoint(payload) {
+    if (!payload) return;
+    addPointToChart(payload);
+    setBounds();
+    setStatus(`Exec #${payload.exec ?? payload.idx} - ${payload.mode} ${payload.level}% ch${payload.channel}`);
+    if (state.chart) {
+      state.chart.update("none");
+    }
+  }
+
+  function makePoint(parsed, meta) {
+    const mode = parsed.mode;
+    if (!(mode in state.counters)) state.counters[mode] = 0;
+    const isHold = parsed.kind === "holdon";
+    const isPulse = parsed.kind === "pulse";
+    let holdId = null;
+    if (isHold) {
+      holdId = ++state.holdSeq;
+      state.activeHold = { id: holdId, mode, channel: parsed.channel, ts: Number(meta && meta.ts) || Date.now() };
+    }
+    return {
+      ...parsed,
+      idx: ++state.counters[mode],
+      exec: state.counters[mode],
+      ts: Number(meta && meta.ts) || Date.now(),
+      source: meta && meta.source ? meta.source : "bus",
+      hold: isHold,
+      holdId,
+      durationSec: isPulse ? 0.05 : null
+    };
+  }
+
+  function finalizeHold(endTs) {
+    const active = state.activeHold;
+    if (!active) return;
+    const ds = state.chart?.data?.datasets?.find((d) => d.mode === active.mode);
+    if (ds && Array.isArray(ds.data)) {
+      for (let i = ds.data.length - 1; i >= 0; i--) {
+        const p = ds.data[i];
+        if (p && p.holdId === active.id) {
+          p.durationSec = Math.max(0, (endTs - active.ts) / 1000);
+          break;
+        }
+      }
+    }
+    state.activeHold = null;
+    if (state.chart) state.chart.update("none");
+  }
+
+  function onChat(ev) {
+    if (state.tunnelBound) return;
+    const detail = ev && ev.detail ? ev.detail : ev;
+    if (detail && detail.loopback === true && detail.silent === true) return;
+    const text = extractTextFromMessage(detail);
+    const parsed = parseCommand(text);
+    if (!parsed) return;
+
+    const ts = Number(detail && (detail.ts || detail.timestamp)) || Date.now();
+    const id = detail && (detail.id || detail.key || detail.raw?.id);
+    if (id) {
+      if (state.seenChatIds.has(id)) return;
+      state.seenChatIds.set(id, ts);
+      if (state.seenChatIds.size > 200) {
+        for (const [key, t] of state.seenChatIds) {
+          if ((ts - t) > 30000 || state.seenChatIds.size > 200) state.seenChatIds.delete(key);
+        }
+      }
+    }
+    state.lastChatSig = { text: normalizeSig(text), ts };
+    if (parsed.kind === "holdoff") {
+      finalizeHold(ts);
+      return;
+    }
+    enqueuePoint(makePoint(parsed, { ts, source: "chat" }));
+    flushPending();
+  }
+
+  function onCollar(ev) {
+    if (state.tunnelBound) return;
+    const text = ev?.detail?.line ? String(ev.detail.line) : "";
+    if (!text) return;
+    const sig = normalizeSig(text);
+    const now = Date.now();
+    if (state.lastChatSig.text === sig && (now - state.lastChatSig.ts) < 400) {
+      return; // ja registrado via chat
+    }
+    const parsed = parseCommand(text);
+    if (!parsed) return;
+    if (state.lastChatSig.text === sig && (now - state.lastChatSig.ts) < 600) {
+      return; // duplicado do chat
+    }
+    if (parsed.kind === "holdoff") {
+      finalizeHold(now);
+      return;
+    }
+    enqueuePoint(makePoint(parsed, { ts: now, source: "collar" }));
+    flushPending();
+  }
+
+  function onTunnel(ev) {
+    const detail = ev && ev.detail ? ev.detail : ev;
+    const text = extractTextFromTunnel(detail);
+    const parsed = parseCommand(text);
+    if (!parsed) return;
+    const ts = Number(detail && (detail.ts || detail.timestamp)) || Date.now();
+    if (parsed.kind === "holdoff") {
+      finalizeHold(ts);
+      return;
+    }
+    enqueuePoint(makePoint(parsed, { ts, source: "tunnel" }));
+    flushPending();
+  }
+
+  function bindTunnel() {
+    if (state.tunnelBound) return;
+    const tunnel = window.__COLLAR_TUNNEL__;
+    if (!tunnel || typeof tunnel.on !== "function") return;
+    try {
+      const unsub = tunnel.on("cmd", onTunnel);
+      state.tunnelUnsub = typeof unsub === "function" ? unsub : null;
+      state.tunnelBound = true;
+      setStatus("Escutando tunnel (sem duplicar chat/serial).");
+    } catch(_) {}
+  }
+
+  function resetChart() {
+    if (state.chart) {
+      state.chart.data.datasets.forEach((ds) => { ds.data = []; });
+      state.chart.update("none");
+    }
+    state.pending.length = 0;
+    resetCounters();
+    setBounds();
+    setStatus("Limpo. Aguardando eventos.");
+  }
+
+  function initChart(Chart) {
+    ensureIcons();
+    buildLegend();
+
+    let cursorX = null;
+    const crosshairPlugin = {
+      id: "collarCrosshair",
+      afterEvent(chart, args) {
+        const e = args?.event;
+        const area = chart.chartArea;
+        if (!area || !e) return;
+        const inside = e.x >= area.left && e.x <= area.right && e.y >= area.top && e.y <= area.bottom;
+        if (e.type === "mouseout" || e.type === "pointerout" || e.type === "pointerleave" || !inside) {
+          cursorX = null;
+          return;
+        }
+        if (e.type === "mousemove" || e.type === "pointermove" || e.type === "pointerdown" || e.type === "touchmove" || e.type === "touchstart") {
+          const hits = chart.getElementsAtEventForMode(
+            e,
+            "nearest",
+            { intersect: false, axis: "x" },
+            false
+          );
+          cursorX = hits[0]?.element?.x ?? e.x;
+        }
+      },
+      afterDraw(chart) {
+        if (cursorX == null) return;
+        const area = chart.chartArea;
+        if (!area) return;
+        const { ctx } = chart;
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(cursorX, area.top);
+        ctx.lineTo(cursorX, area.bottom);
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 3]);
+        ctx.strokeStyle = "rgba(255,255,255,0.35)";
+        ctx.stroke();
+        ctx.restore();
+      }
+    };
+
+    const pointsOnTopPlugin = {
+      id: "collarPointsOnTop",
+      afterDatasetsDraw(chart) {
+        const { ctx } = chart;
+        chart.data.datasets.forEach((_, i) => {
+          const meta = chart.getDatasetMeta(i);
+          if (!meta || meta.hidden) return;
+          const points = meta.data || [];
+          for (const pt of points) {
+            if (!pt || pt.skip || typeof pt.draw !== "function") continue;
+            pt.draw(ctx);
+          }
+        });
+      }
+    };
+
+    state.chart = new Chart(CANVAS.getContext("2d"), {
+      type: "line",
+      data: { datasets: makeDatasets() },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        interaction: {
+          mode: "nearest",
+          intersect: false,
+          axis: "x"
+        },
+        hover: {
+          mode: "nearest",
+          intersect: false,
+          axis: "x"
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const ds = ctx.dataset;
+                if (ctx.raw && ctx.raw._seed) return "";
+                const ch = ctx.raw && ctx.raw.ch ? ctx.raw.ch : "-";
+                const base = `${ds.label}: ${ctx.parsed.y}% (ch ${ch})`;
+                let total = 0;
+                if (Array.isArray(ds.data)) {
+                  for (const p of ds.data) {
+                    if (!p || !Number.isFinite(p.durationSec)) continue;
+                    if (typeof p.x === "number" && p.x <= ctx.parsed.x) {
+                      total += p.durationSec;
+                    }
+                  }
+                }
+                if (ctx.raw && ctx.raw.hold && Number.isFinite(ctx.raw.durationSec)) {
+                  return [
+                    base,
+                    `Duracao: ${ctx.raw.durationSec.toFixed(2)}s`,
+                    `Total acumulado: ${total.toFixed(2)}s`
+                  ];
+                }
+                return [
+                  base,
+                  `Total acumulado: ${total.toFixed(2)}s`
+                ];
+              },
+              title: (items) => {
+                if (!items?.length) return "";
+                const idx = items[0].parsed.x;
+                const exec = items[0].raw && Number.isFinite(items[0].raw.exec)
+                  ? items[0].raw.exec
+                  : (Number.isFinite(idx) ? idx + 1 : idx);
+                return `Execucao #${exec}`;
+              }
+            },
+            intersect: false,
+            mode: "nearest"
+          }
+        },
+        scales: {
+          x: {
+            type: "linear",
+            title: { display: true, text: "Execucao (#)" },
+            ticks: { stepSize: 1, autoSkip: true, autoSkipPadding: 12 },
+            grid: { color: "rgba(255,255,255,0.05)" }
+          },
+          y: {
+            beginAtZero: true,
+            suggestedMax: 100,
+            title: { display: true, text: "Intensidade" },
+            ticks: { stepSize: 10 },
+            grid: { color: "rgba(255,255,255,0.05)" }
+          }
+        }
+      },
+      plugins: [crosshairPlugin, pointsOnTopPlugin]
+    });
+    setBounds();
+    flushPending();
+    setStatus("Pronto. Aguardando eventos (SHOCK/VIBRATION/LIGHT/BEEP/BTN STATE).");
+  }
+
+  CLEAR_BTN.addEventListener("click", resetChart);
+  bindSerialMonitor();
+  window.addEventListener("serial-connected", () => ensureSerialHook("serial-connected"));
+  window.addEventListener("beforeunload", () => {
+    try { if (state.tunnelUnsub) state.tunnelUnsub(); } catch(_){}
+    try {
+      const list = window.__SERIAL_LINE_LISTENERS__;
+      if (Array.isArray(list) && state.serialListener) {
+        const idx = list.indexOf(state.serialListener);
+        if (idx >= 0) list.splice(idx, 1);
+      }
+    } catch(_){}
+  });
+
+  loadChartJs()
+    .then((Chart) => initChart(Chart))
+    .catch((err) => {
+      console.error(err);
+      setStatus("Falha ao carregar Chart.js");
+    });
+})();
+</script>

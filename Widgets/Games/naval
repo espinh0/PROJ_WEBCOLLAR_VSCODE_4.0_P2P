@@ -1,0 +1,2247 @@
+﻿<!-- BATTLESHIP COLLAR WIDGET – v1.8 -->
+<style>
+  #battleship-widget {
+    --grid-size: min(100%, 65vh, 560px);
+    --grid-gap: 4px;
+    --grid-pad: 8px;
+    --grid-label: 22px;
+    max-width: 1200px;
+    width: 100%;
+    margin: 1rem auto 2rem;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 14px;
+    color: #e5e7eb;
+  }
+  #battleship-widget .bs-card {
+    background: #17171b;
+    border: 1px solid #2a2a2e;
+    border-radius: 12px;
+    padding: 1rem 1.15rem 1.1rem;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    box-sizing: border-box;
+    width: 100%;
+  }
+  #battleship-widget h5 {
+    margin: 0 0 .35rem;
+    font-size: 1.08rem;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: #f9fafb;
+  }
+  #battleship-widget small,
+  #battleship-widget .bs-muted {
+    color: #9ca3af;
+    font-size: 0.8rem;
+  }
+  #battleship-widget .bs-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .9rem;
+    margin-top: .5rem;
+  }
+  #battleship-widget .bs-panels {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  #battleship-widget .bs-panel {
+    flex: 1 1 360px;
+    min-width: 320px;
+  }
+  #battleship-widget .bs-panels .bs-row {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+  }
+  #battleship-widget .bs-panels .bs-col-half {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+  #battleship-widget .bs-col {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  #battleship-widget .bs-col-half {
+    flex: 0 0 calc(50% - 0.45rem);
+  }
+  #battleship-widget .bs-grid-shell {
+    display: grid;
+    grid-template-columns: var(--grid-label) 1fr;
+    grid-template-rows: var(--grid-label) 1fr;
+    gap: 6px;
+    width: var(--grid-size);
+    max-width: 100%;
+    margin-inline: auto;
+  }
+  #battleship-widget .bs-grid-top {
+    grid-column: 2;
+    grid-row: 1;
+    display: grid;
+    grid-template-columns: repeat(10, minmax(0, 1fr));
+    gap: var(--grid-gap);
+    padding: 0 var(--grid-pad);
+    color: #9ca3af;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    pointer-events: none;
+  }
+  #battleship-widget .bs-grid-left {
+    grid-column: 1;
+    grid-row: 2;
+    display: grid;
+    grid-template-rows: repeat(10, minmax(0, 1fr));
+    gap: var(--grid-gap);
+    padding: var(--grid-pad) 0;
+    color: #9ca3af;
+    font-size: 0.72rem;
+    font-weight: 600;
+    pointer-events: none;
+  }
+  #battleship-widget .bs-grid-top span,
+  #battleship-widget .bs-grid-left span {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* GRID (visitante + host) */
+  #battleship-widget .bs-grid {
+    grid-column: 2;
+    grid-row: 2;
+    display: grid;
+    grid-template-columns: repeat(10, minmax(0, 1fr));
+    gap: var(--grid-gap);
+    background: #0c0c0f;
+    border-radius: 12px;
+    padding: var(--grid-pad);
+    border: 1px solid #2a2a2e;
+    touch-action: manipulation;
+    box-sizing: border-box;
+    width: 100%;
+  }
+  #battleship-widget .bs-cell {
+    position: relative;
+    aspect-ratio: 1/1;
+    min-height: 36px;
+    background: radial-gradient(circle at 20% 15%, #101014, #050508 60%, #000000 100%);
+    border-radius: 7px;
+    border: 1px solid #6b7280;
+    cursor: pointer;
+    transition: background .12s ease, transform .06s ease, box-shadow .12s ease, border-color .12s ease;
+    overflow: hidden;
+  }
+  #battleship-widget .bs-cell span {
+    position: absolute;
+    inset: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.1rem;
+    color: #e5e7eb;
+    pointer-events: none;
+    user-select: none;
+  }
+  #battleship-widget .bs-cell:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 0 0 2px rgba(248,250,252,0.7);
+    border-color: #e5e7eb;
+  }
+  #battleship-widget .bs-cell.bs-disabled {
+    cursor: default;
+    opacity: 0.7;
+    box-shadow: none;
+    transform: none;
+  }
+
+  /* Estados no grid público */
+  #battleship-widget .bs-cell-public.bs-state-empty { }
+  #battleship-widget .bs-cell-public.bs-state-miss {
+    background: radial-gradient(circle at 30% 20%, #020617, #020617 40%, #000000 100%);
+    border-color: #374151;
+  }
+  #battleship-widget .bs-cell-public.bs-state-hit {
+    background: radial-gradient(circle at 35% 20%, #7f1d1d, #450a0a);
+    border-color: #f97373;
+    box-shadow: 0 0 0 3px rgba(248,113,113,0.7);
+  }
+  #battleship-widget .bs-cell-public.bs-state-sunk {
+    background: linear-gradient(135deg, #f97316 0%, #b91c1c 50%, #f97316 100%);
+    border-color: #fbbf24;
+    box-shadow: 0 0 18px rgba(251,191,36,1);
+  }
+
+  /* Grid host mostrando navios */
+  #battleship-widget .bs-cell-admin {
+    background: radial-gradient(circle at 30% 20%, #050508, #000000 80%);
+  }
+  #battleship-widget .bs-cell-admin.bs-has-ship {
+    background: linear-gradient(135deg, #0369a1 0%, #0b1120 50%, #0369a1 100%);
+    border-color: #38bdf8;
+  }
+  #battleship-widget .bs-cell-admin.bs-hit {
+    background: linear-gradient(135deg, #b91c1c 0%, #7f1d1d 50%, #b91c1c 100%);
+    border-color: #f97373;
+    box-shadow: 0 0 12px rgba(248,113,113,0.9);
+  }
+  #battleship-widget .bs-cell-admin.bs-miss {
+    background: radial-gradient(circle at 30% 20%, #020617, #000000 80%);
+    border-color: #374151;
+    opacity: 0.9;
+  }
+  #battleship-widget .bs-cell-admin.bs-sunk {
+    background: linear-gradient(135deg, #f97316 0%, #b91c1c 50%, #f97316 100%);
+    border-color: #fbbf24;
+    box-shadow: 0 0 18px rgba(251,191,36,1);
+  }
+
+  /* Preview host */
+  #battleship-widget .bs-cell-admin.bs-preview-valid {
+    box-shadow: 0 0 0 3px rgba(74,222,128,0.9);
+    border-color: #4ade80;
+  }
+  #battleship-widget .bs-cell-admin.bs-preview-invalid {
+    box-shadow: 0 0 0 3px rgba(248,113,113,0.9);
+    border-color: #f87171;
+    background: radial-gradient(circle at 35% 20%, #7f1d1d, #020617);
+  }
+
+  /* UI controles */
+  #battleship-widget label {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    font-size: 0.82rem;
+    color: #e5e7eb;
+  }
+  #battleship-widget input[type="number"],
+  #battleship-widget select {
+    background: #101014;
+    border: 1px solid #2a2a2e;
+    border-radius: 6px;
+    padding: 4px 7px;
+    color: #e5e7eb;
+    font-size: 0.82rem;
+    outline: none;
+    min-width: 0;
+  }
+  #battleship-widget input:focus,
+  #battleship-widget select:focus {
+    border-color: #4ade80;
+    box-shadow: 0 0 0 1px rgba(74,222,128,0.3);
+  }
+  #battleship-widget button {
+    border-radius: 9999px;
+    border: 1px solid #2a2a2e;
+    background: radial-gradient(circle at 30% 0, #22c55e, #16a34a);
+    color: #f9fafb;
+    font-size: .8rem;
+    padding: 5px 11px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    transition: transform .08s ease, box-shadow .12s ease, background .12s ease, border-color .12s ease;
+    white-space: nowrap;
+  }
+  #battleship-widget button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 25px rgba(34,197,94,0.25);
+    border-color: #22c55e;
+  }
+  #battleship-widget button:disabled {
+    opacity: .5;
+    cursor: default;
+    box-shadow: none;
+    transform: none;
+    background: #111827;
+    border-color: #1f2937;
+  }
+  #battleship-widget .bs-btn-secondary {
+    background: #101014;
+    border-color: #2a2a2e;
+    color: #e5e7eb;
+  }
+  #battleship-widget .bs-btn-secondary:hover {
+    background: #111827;
+    border-color: #4b5563;
+    box-shadow: 0 6px 18px rgba(15,23,42,0.6);
+  }
+
+  #battleship-widget .bs-ship-selector {
+    display: flex;
+    flex-wrap: nowrap; /* Ensure buttons stay in a single line */
+    gap: 0; /* Remove gap between buttons */
+    margin-top: .45rem;
+    border: 1px solid #2a2a2e; /* Apply border to the container */
+    border-radius: 9999px; /* Rounded ends for the group */
+    overflow: hidden; /* Hide individual button borders at the ends */
+    background: #101014; /* Background for the whole selector */
+  }
+  #battleship-widget .bs-ship-btn {
+    flex: 1; /* Distribute space equally */
+    border: none; /* Remove individual button borders */
+    border-radius: 0; /* Remove individual button border-radius */
+    background: transparent; /* Let container define background */
+    color: #9ca3af; /* Default color for inactive buttons */
+    font-size: .8rem;
+    padding: 5px 8px; /* Adjusted padding */
+    cursor: pointer;
+    display: flex; /* Use flex to align inner spans */
+    align-items: center;
+    justify-content: center;
+    gap: .25rem; /* Gap between visual squares and length number */
+    transition: background .12s ease, color .12s ease;
+    white-space: nowrap;
+    text-align: center; /* Center text if flex is not used for direct content */
+    border-right: 1px solid #2a2a2e; /* Separator between buttons */
+  }
+  #battleship-widget .bs-ship-btn:last-child {
+    border-right: none; /* No separator on the last button */
+  }
+  #battleship-widget .bs-ship-btn:hover {
+    background: #111827; /* Darker background on hover */
+    color: #e5e7eb; /* Brighter text on hover */
+    transform: none; /* Override general button transform */
+    box-shadow: none; /* Override general button box-shadow */
+    border: none; /* Ensure no border is accidentally applied */
+  }
+  #battleship-widget .bs-ship-btn.bs-active {
+    background: radial-gradient(circle at 30% 0, #22c55e, #16a34a); /* Active background */
+    color: #f9fafb; /* Active text color */
+    box-shadow: none; /* Remove box-shadow */
+    transform: none; /* Remove translateY */
+    border: none; /* Explicitly set border to none */
+  }
+  #battleship-widget .bs-ship-btn span:first-child {
+    letter-spacing: 1px; /* Spacing for the block characters */
+    color: #38bdf8; /* Color for the block characters */
+    font-weight: bold;
+  }
+  #battleship-widget .bs-ship-btn span:last-child {
+    font-size: 0.75rem; /* Smaller font for number */
+    color: #9ca3af; /* Muted color for number */
+  }
+  #battleship-widget .bs-ship-btn.bs-active span:first-child {
+    color: #f9fafb; /* Active block character color */
+  }
+  #battleship-widget .bs-ship-btn.bs-active span:last-child {
+    color: #f9fafb; /* Active number color */
+  }
+  #battleship-widget .bs-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    border-radius: 9999px;
+    border: 1px solid #2a2a2e;
+    padding: 2px 8px;
+    font-size: .72rem;
+    color: #9ca3af;
+    background: #101014;
+  }
+  #battleship-widget .bs-tag strong {
+    color: #e5e7eb;
+    font-weight: 500;
+  }
+  #battleship-widget .bs-status-main {
+    margin-top: .35rem;
+    font-size: .85rem;
+  }
+  #battleship-widget .bs-status-main strong {
+    color: #e5e7eb;
+  }
+  #battleship-widget .bs-status-secondary {
+    margin-top: .18rem;
+    font-size: .78rem;
+  }
+  #battleship-widget .bs-log {
+    margin-top: .4rem;
+    max-height: 140px;
+    overflow-y: auto;
+    font-size: .73rem;
+    padding-right: 4px;
+  }
+  #battleship-widget .bs-log-line span {
+    color: #6b7280;
+    margin-right: .25rem;
+  }
+  #battleship-widget .bs-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    border-radius: 9999px;
+    border: 1px solid #2a2a2e;
+    padding: 2px 7px;
+    font-size: .7rem;
+    background: #101014;
+  }
+  #battleship-widget .bs-badge.ok {
+    border-color: rgba(34,197,94,0.5);
+    color: #bbf7d0;
+  }
+  #battleship-widget .bs-badge.warn {
+    border-color: rgba(252,211,77,0.6);
+    color: #fef9c3;
+  }
+  #battleship-widget .bs-badge.err {
+    border-color: rgba(248,113,113,0.7);
+    color: #fecaca;
+  }
+  #battleship-widget .bs-ship-list {
+    margin-top: .35rem;
+    font-size: .76rem;
+  }
+  #battleship-widget .bs-ship-list div {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 2px;
+  }
+  #battleship-widget .bs-ship-list .bs-ship-sunk {
+    text-decoration: line-through;
+    opacity: 0.55;
+  }
+  #battleship-widget .bs-ship-viz {
+    display: inline-flex;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+  }
+  #battleship-widget .bs-ship-seg {
+    color: #38bdf8;
+    letter-spacing: 2px;
+  }
+  #battleship-widget .bs-ship-seg.bs-ship-sunk {
+    color: #94a3b8;
+  }
+
+  /* ANIMAÇÃO DE HIT (OVO + MARRETA) – ~2.4s total */
+  #battleship-widget .bs-hit-overlay {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 99999;
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  #battleship-widget .bs-hit-overlay-inner {
+    position: relative;
+    width: 240px;
+    height: 240px;
+  }
+  #battleship-widget .bs-hit-egg,
+  #battleship-widget .bs-hit-hammer,
+  #battleship-widget .bs-hit-fry {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 7.2rem;
+  }
+  #battleship-widget .bs-hit-hammer {
+    transform-origin: top right;
+  }
+  #battleship-widget .bs-hit-fry {
+    opacity: 0;
+  }
+  #battleship-widget .bs-hit-overlay.bs-hit-play {
+    animation: bsHitFade 2.4s ease-out forwards;
+  }
+  #battleship-widget .bs-hit-overlay.bs-hit-play .bs-hit-egg {
+    animation: bsHitEgg 2.4s ease-out forwards;
+  }
+  #battleship-widget .bs-hit-overlay.bs-hit-play .bs-hit-hammer {
+    animation: bsHitHammer 2.4s ease-out forwards;
+  }
+  #battleship-widget .bs-hit-overlay.bs-hit-play .bs-hit-fry {
+    animation: bsHitFry 2.4s ease-out forwards;
+  }
+
+  @keyframes bsHitFade {
+    0%   { opacity: 0; transform: scale(0.95); background: transparent; }
+    15%  { opacity: 1; transform: scale(1); background: radial-gradient(circle, rgba(15,23,42,0.95) 0, rgba(15,23,42,0.7) 40%, transparent 70%); }
+    80%  { opacity: 1; }
+    100% { opacity: 0; transform: scale(1.02); background: transparent; }
+  }
+  @keyframes bsHitEgg {
+    0%   { transform: scale(0.7); opacity: 0; }
+    20%  { transform: scale(1);   opacity: 1; }
+    45%  { transform: scale(1.05); opacity: 1; }
+    60%  { transform: scale(0.95); opacity: 1; }
+    70%  { opacity: 0; transform: scale(0.9); }
+    100% { opacity: 0; transform: scale(0.8); }
+  }
+  @keyframes bsHitHammer {
+    0%   { transform: translate(90px,-130px) rotate(-45deg); opacity: 0; }
+    30%  { opacity: 0; transform: translate(70px,-110px) rotate(-40deg); }
+    50%  { opacity: 1; transform: translate(35px,-40px) rotate(-15deg); }
+    60%  { opacity: 1; transform: translate(0px,0px) rotate(8deg); }
+    80%  { opacity: 0.1; transform: translate(-40px,30px) rotate(0deg); }
+    100% { opacity: 0; transform: translate(-60px,50px) rotate(0deg); }
+  }
+  @keyframes bsHitFry {
+    0%   { opacity: 0; transform: scale(0.6); }
+    60%  { opacity: 0; transform: scale(0.6); }
+    75%  { opacity: 1; transform: scale(1); }
+    90%  { opacity: 1; transform: scale(1); }
+    100% { opacity: 0; transform: scale(0.9); }
+  }
+
+  @media (max-width: 700px) {
+    #battleship-widget .bs-panels {
+      flex-direction: column;
+    }
+    #battleship-widget .bs-col-half {
+      flex: 1 1 100%;
+    }
+  }
+  @media (max-width: 640px) {
+    #battleship-widget {
+      margin: .75rem .5rem 1.5rem;
+      font-size: 13px;
+    }
+    #battleship-widget .bs-cell {
+      min-height: 34px;
+    }
+    #battleship-widget .bs-cell span {
+      font-size: 2.3rem;
+    }
+    #battleship-widget .bs-hit-overlay-inner {
+      width: 200px;
+      height: 200px;
+    }
+    #battleship-widget .bs-hit-egg,
+    #battleship-widget .bs-hit-hammer,
+    #battleship-widget .bs-hit-fry {
+      font-size: 6.4rem;
+    }
+  }
+
+  .bs-endgame-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .3s ease;
+  }
+  .bs-endgame-overlay.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .bs-endgame-box {
+    background: #17171b;
+    border: 1px solid #4ade80;
+    border-radius: 1rem;
+    padding: 2rem 2.5rem;
+    text-align: center;
+    box-shadow: 0 10px 40px rgba(74,222,128,0.4);
+    transform: scale(0.95);
+    transition: transform .3s ease;
+  }
+  .bs-endgame-overlay.visible .bs-endgame-box {
+    transform: scale(1);
+  }
+  #bs-endgame-title {
+    font-size: 2.5rem;
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+  }
+  #bs-endgame-title.win { color: #4ade80; }
+  #bs-endgame-title.lose { color: #f87171; }
+  #bs-endgame-subtitle {
+    font-size: 1rem;
+    color: #9ca3af;
+    margin-bottom: 1.5rem;
+  }
+</style>
+
+<div id="battleship-widget">
+  <div class="bs-panels">
+    <div class="bs-panel">
+  <!-- VISITANTE / TABULEIRO PÚBLICO -->
+  <div class="bs-card" id="bs-public-card">
+    <div style="display:flex;align-items:center;gap:.35rem;margin-bottom:.25rem;">
+      <h5 style="flex:1;">Batalha Naval</h5>
+      <span id="bs-conn-indicator" class="bs-badge warn">
+        <span>●</span> aguardando trystero
+      </span>
+    </div>
+    <div class="bs-status-main" id="bs-public-main-status">
+      <strong>Navios de carregamento de ovos estão a caminho do porto, e você deve impedir.</strong>
+    </div>
+    <div class="bs-status-secondary" id="bs-public-sub-status">
+      Assim que o host publicar o tabuleiro, você terá um número limitado de tiros para tentar afundar todos os navios.
+    </div>
+
+    <div class="bs-row" style="margin-top:.6rem;">
+      <div class="bs-col-half">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.35rem;">
+          <span class="bs-muted">Tabuleiro (você não vê onde estão os navios)</span>
+        </div>
+        <div class="bs-grid-shell">
+          <div class="bs-grid-top" data-grid-labels="top"></div>
+          <div class="bs-grid-left" data-grid-labels="left"></div>
+          <div id="bs-public-grid" class="bs-grid"></div>
+        </div>
+      </div>
+      <div class="bs-col-half">
+        <div style="display:flex;flex-direction:column;gap:.35rem;">
+          <div style="display:flex;flex-wrap:wrap;gap:.3rem;">
+            <span class="bs-tag"><span>🎯</span><strong>Tiros</strong>&nbsp;<span id="bs-public-shots">0 / ?</span></span>
+            <span class="bs-tag"><span>💥</span><strong>Acertos</strong>&nbsp;<span id="bs-public-hits">0</span></span>
+          </div>
+          <div class="bs-status-secondary" id="bs-public-last-shot">
+            Nenhum tiro ainda.
+          </div>
+          <div id="bs-public-ship-list" class="bs-ship-list" style="margin-top: 0.5rem;"></div>
+          <div class="bs-status-secondary">
+            Acertos viram ovos fritos 🍳, tiros na água mostram 🌊.  
+            Cada acerto usa o modo e nível do controle.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+    </div>
+
+  <!-- HOST / ADMIN -->
+  <div class="bs-panel host-only">
+    <div class="bs-card" id="bs-admin-card">
+      <div style="display:flex;align-items:center;gap:.35rem;margin-bottom:.35rem;">
+        <h5 style="flex:1;">Painel do Host – Batalha Naval</h5>
+        <span id="bs-host-role-indicator" class="bs-badge err">
+          <span>●</span> admin oculto
+        </span>
+      </div>
+      <small class="bs-muted">
+        Monte o tabuleiro, publique o layout e deixe o visitante tentar impedir o carregamento.  
+        Passe o mouse para pré-visualizar, clique para posicionar um navio, arraste um navio para movê-lo  
+        e clique com o botão direito em uma célula do navio para removê-lo.
+      </small>
+
+      <div class="bs-row">
+        <div class="bs-col-half">
+          <div style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin-top:.5rem;margin-bottom:.45rem;">
+            <label>
+              Máx. tiros:
+              <input type="number" id="bs-max-shots" min="1" max="200" value="35" style="width:80px;" />
+            </label>
+          </div>
+
+          <div style="display:flex;flex-wrap:wrap;gap:.45rem;align-items:center;margin-bottom:.4rem;">
+            <div class="bs-ship-selector" id="bs-ship-selector">
+              <button type="button" class="bs-ship-btn bs-active" data-ship-type="A"><span>■■■■■</span> <span>(5)</span></button>
+              <button type="button" class="bs-ship-btn" data-ship-type="B"><span>■■■■</span> <span>(4)</span></button>
+              <button type="button" class="bs-ship-btn" data-ship-type="C"><span>■■■</span> <span>(3)</span></button>
+              <button type="button" class="bs-ship-btn" data-ship-type="S"><span>■■■</span> <span>(3)</span></button>
+              <button type="button" class="bs-ship-btn" data-ship-type="D"><span>■■</span> <span>(2)</span></button>
+              <button type="button" class="bs-ship-btn" data-ship-type="H"><span>■</span> <span>(1)</span></button>
+            </div>
+
+            <!-- Toggle de orientação amigável -->
+            <button type="button" id="bs-orientation-toggle" class="bs-btn-secondary">
+              <span data-role="icon">H</span>
+              <span data-role="label">Horizontal</span>
+            </button>
+
+            <!-- Dado para layout automático -->
+            <button type="button" id="bs-auto-btn" class="bs-btn-secondary">
+              <span>🎲</span> Sortear layout
+            </button>
+
+            <button id="bs-publish-layout-btn">
+              <span>📡</span> Publicar layout
+            </button>
+
+            <button id="bs-reset-btn" class="bs-btn-secondary" type="button">
+              <span>🔄</span> Resetar partida
+            </button>
+          </div>
+
+          <div class="bs-muted" style="margin-bottom:.35rem;">
+            Clique no grid abaixo para posicionar ovos (navios).  
+            🥚 = navio, 🍳 = célula atingida, 🌊 = água.
+          </div>
+          <div class="bs-grid-shell">
+            <div class="bs-grid-top" data-grid-labels="top"></div>
+            <div class="bs-grid-left" data-grid-labels="left"></div>
+            <div id="bs-admin-grid" class="bs-grid"></div>
+          </div>
+
+          <div class="bs-ship-list" id="bs-ship-list"></div>
+        </div>
+
+        <div class="bs-col-half">
+          <div style="display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.45rem;">
+            <span class="bs-tag">
+              <span>🎯</span><strong>Tiros (host)</strong>&nbsp;<span id="bs-host-shots">0 / ?</span>
+            </span>
+            <span class="bs-tag">
+              <span>💥</span><strong>Hits</strong>&nbsp;<span id="bs-host-hits">0</span>
+            </span>
+            <span class="bs-tag">
+              <span>🚢</span><strong>Afundados</strong>&nbsp;<span id="bs-host-sunk">0 / 5</span>
+            </span>
+          </div>
+          <div class="bs-status-main" id="bs-host-main-status" style="margin-top:.5rem;">
+            <strong>Aguardando você montar o tabuleiro…</strong>
+          </div>
+          <div class="bs-status-secondary" id="bs-host-sub-status">
+            Posicione navios manualmente ou use o sorteio automático, depois clique em "Publicar layout".
+          </div>
+
+          <div class="bs-log" id="bs-host-log"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  </div>
+
+  <!-- OVERLAY GLOBAL DE HIT (OVO + MARRETA) -->
+  <div class="bs-hit-overlay" id="bs-hit-overlay">
+    <div class="bs-hit-overlay-inner">
+      <div class="bs-hit-egg">🥚</div>
+      <div class="bs-hit-hammer">🔨</div>
+      <div class="bs-hit-fry">🍳</div>
+    </div>
+  </div>
+
+  <!-- OVERLAY DE FIM DE JOGO -->
+  <div id="bs-endgame-overlay" class="bs-endgame-overlay">
+      <div class="bs-endgame-box">
+          <div id="bs-endgame-title"></div>
+          <div id="bs-endgame-subtitle"></div>
+          <div style="display: flex; gap: 1rem; justify-content: center; margin-top: 1.5rem;">
+            <button id="bs-endgame-missile-btn" class="bs-btn-secondary" style="display: none; border-radius: 8px; padding: 8px 16px; border-color: #f87171;">Marretada Final 🔨</button>
+            <button id="bs-endgame-dismiss" class="bs-btn-secondary" style="border-radius: 8px; padding: 8px 16px;">OK</button>
+          </div>
+      </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const ROOT_ID = "battleship-widget";
+
+  const BS_PREFIX     = "BSHIP:";
+  const LAYOUT_PREFIX = BS_PREFIX + "LAYOUT:";
+  const SHOT_PREFIX   = BS_PREFIX + "SHOT:";
+  const RESULT_PREFIX = BS_PREFIX + "RESULT:";
+  const END_PREFIX    = BS_PREFIX + "END:";
+  const RESET_PREFIX  = BS_PREFIX + "RESET:";
+  const DISMISS_HOST_ENDGAME_PREFIX = BS_PREFIX + "DISMISS_HOST_ENDGAME:";
+
+  const SHOCK_HIT_LEVEL  = 10;
+  const SHOCK_SUNK_LEVEL = 100;
+
+  const HIT_ANIM_TOTAL   = 2400;
+  const HIT_IMPACT_MS    = 1450;
+
+  const SHIP_BLOCK = "\u25A0";
+  const SHIP_DEFS = {
+    "A": { name: "Porta-aviões", len: 5 },
+    "B": { name: "Encouraçado", len: 4 },
+    "C": { name: "Cruzador",    len: 3 },
+    "S": { name: "Submarino",   len: 3 },
+    "D": { name: "Destroyer",   len: 2 },
+    "H": { name: "Hidroavião", len: 1 } // Substituído pelo Hidroavião
+  };
+
+  const root = document.getElementById(ROOT_ID);
+  if (!root) return;
+  function $(sel){ return root.querySelector(sel); }
+
+  function logHost(msg) {
+    const box = $("#bs-host-log");
+    if (!box) return;
+    const line = document.createElement("div");
+    line.className = "bs-log-line";
+    const ts = new Date();
+    const hh = String(ts.getHours()).padStart(2,"0");
+    const mm = String(ts.getMinutes()).padStart(2,"0");
+    const span = document.createElement("span");
+    span.textContent = "["+hh+":"+mm+"]";
+    line.appendChild(span);
+    line.appendChild(document.createTextNode(" " + msg));
+    box.appendChild(line);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function detectAdminVisible() {
+    try {
+      if (document.documentElement.classList.contains("host-on")) return true;
+      const node = root.querySelector(".host-only");
+      if (!node) return false;
+      const cs = window.getComputedStyle(node);
+      if (!cs) return false;
+      if (cs.display === "none" || cs.visibility === "hidden" || cs.opacity === "0") return false;
+      return true;
+    } catch(e){ return false; }
+  }
+
+  const hostRoleIndicator = $("#bs-host-role-indicator");
+  if (hostRoleIndicator) {
+    const isVisible = detectAdminVisible();
+    if (isVisible) {
+      hostRoleIndicator.classList.remove("err","warn");
+      hostRoleIndicator.classList.add("ok");
+      hostRoleIndicator.innerHTML = "<span>●</span> host/admin ativo";
+    } else {
+      hostRoleIndicator.classList.remove("ok","warn");
+      hostRoleIndicator.classList.add("err");
+      hostRoleIndicator.innerHTML = "<span>●</span> admin oculto (sem lógica do host)";
+    }
+  }
+
+  window.addEventListener("trystero:localTags", () => {
+    if (!hostRoleIndicator) return;
+    const isVisible = detectAdminVisible();
+    if (isVisible) {
+      hostRoleIndicator.classList.remove("err","warn");
+      hostRoleIndicator.classList.add("ok");
+      hostRoleIndicator.innerHTML = "<span>?</span> host/admin ativo";
+    } else {
+      hostRoleIndicator.classList.remove("ok","warn");
+      hostRoleIndicator.classList.add("err");
+      hostRoleIndicator.innerHTML = "<span>?</span> admin oculto (sem l▆ica do host)";
+    }
+  });
+
+  const publicGridEl = $("#bs-public-grid");
+  const adminGridEl  = $("#bs-admin-grid");
+
+  const publicMainStatus = $("#bs-public-main-status");
+  const publicSubStatus  = $("#bs-public-sub-status");
+  const publicLastShot   = $("#bs-public-last-shot");
+  const publicShotsEl    = $("#bs-public-shots");
+  const publicHitsEl     = $("#bs-public-hits");
+  const connIndicator    = $("#bs-conn-indicator");
+  const hitOverlay       = $("#bs-hit-overlay");
+  const publicShipListEl = $("#bs-public-ship-list");
+
+  const endgameOverlay = $("#bs-endgame-overlay");
+  const endgameTitle = $("#bs-endgame-title");
+  const endgameSubtitle = $("#bs-endgame-subtitle");
+  const endgameDismiss = $("#bs-endgame-dismiss");
+  const endgameMissileBtn = $("#bs-endgame-missile-btn");
+
+  const visitorState = {
+    maxShots: null,
+    shotsTaken: 0,
+    hits: 0,
+    finished: false,
+    layoutLoaded: false,
+    lastResultByCell: {},
+    pendingShots: {},
+    ships: []
+  };
+
+  const hostState = {
+    maxShots: 35,
+    layoutPublished: false,
+    finished: false,
+    shotsTaken: 0,
+    hits: 0,
+    sunkCount: 0,
+    ships: [],
+    shipCells: {},
+    cellHits: {},
+    cellMisses: {},
+    processedShots: {},
+    placementDir: "H",
+    lossSent: false
+  };
+
+  const publicCells = [];
+  const adminCells  = [];
+
+  function coordKey(r,c){ return r + "," + c; }
+
+  function createGrid(targetEl, isPublic) {
+    const cellsArr = [];
+    if (!targetEl) return cellsArr;
+    targetEl.innerHTML = "";
+    for (let r=0;r<10;r++) {
+      for (let c=0;c<10;c++) {
+        const cell = document.createElement("div");
+        cell.className = "bs-cell " + (isPublic ? "bs-cell-public bs-state-empty" : "bs-cell-admin");
+        cell.dataset.row = String(r);
+        cell.dataset.col = String(c);
+        const span = document.createElement("span");
+        span.textContent = "";
+        cell.appendChild(span);
+        targetEl.appendChild(cell);
+        cellsArr.push({el: cell, row: r, col: c});
+      }
+    }
+    return cellsArr;
+  }
+
+  const GRID_COL_LABELS = "ABCDEFGHIJ".split("");
+  function renderGridLabels(shell) {
+    if (!shell) return;
+    const top = shell.querySelector('[data-grid-labels="top"]');
+    const left = shell.querySelector('[data-grid-labels="left"]');
+    if (top) {
+      top.innerHTML = "";
+      GRID_COL_LABELS.forEach((label) => {
+        const span = document.createElement("span");
+        span.textContent = label;
+        top.appendChild(span);
+      });
+    }
+    if (left) {
+      left.innerHTML = "";
+      for (let i=1;i<=10;i++) {
+        const span = document.createElement("span");
+        span.textContent = String(i);
+        left.appendChild(span);
+      }
+    }
+  }
+  Array.from(root.querySelectorAll(".bs-grid-shell")).forEach(renderGridLabels);
+
+  publicCells.push(...createGrid(publicGridEl, true));
+  adminCells.push(...createGrid(adminGridEl, false));
+
+  function updateVisitorCounters() {
+    const shotsStr = visitorState.maxShots != null
+      ? (visitorState.shotsTaken + " / " + visitorState.maxShots)
+      : (visitorState.shotsTaken + " / ?");
+    publicShotsEl.textContent = shotsStr;
+    publicHitsEl.textContent  = visitorState.hits;
+  }
+
+  function setConnStatus(ok, text, cls) {
+    if (!connIndicator) return;
+    connIndicator.textContent = "";
+    const dot = document.createElement("span");
+    dot.textContent = "●";
+    connIndicator.appendChild(dot);
+    connIndicator.appendChild(document.createTextNode(" " + text));
+    connIndicator.classList.remove("ok","warn","err");
+    connIndicator.classList.add(cls || (ok ? "ok" : "warn"));
+  }
+
+  function setPublicMain(text) {
+    if (publicMainStatus) publicMainStatus.innerHTML = "<strong>"+text+"</strong>";
+  }
+  function setPublicSub(text) {
+    if (publicSubStatus) publicSubStatus.textContent = text;
+  }
+  function setPublicLastShot(text) {
+    if (publicLastShot) publicLastShot.textContent = text;
+  }
+
+  function triggerHitAnimation(onImpact) {
+    if (!hitOverlay) {
+      if (onImpact) onImpact();
+      return;
+    }
+    hitOverlay.classList.remove("bs-hit-play");
+    void hitOverlay.offsetWidth;
+    hitOverlay.classList.add("bs-hit-play");
+
+    if (onImpact) {
+      setTimeout(onImpact, HIT_IMPACT_MS);
+    }
+    setTimeout(() => {
+      hitOverlay.classList.remove("bs-hit-play");
+    }, HIT_ANIM_TOTAL + 100);
+  }
+
+  function applyVisitorCellState(r,c,state) {
+    const cell = publicCells.find(ci => ci.row === r && ci.col === c);
+    if (!cell) return;
+    const el = cell.el;
+    const span = el.querySelector("span");
+    el.classList.remove("bs-state-empty","bs-state-miss","bs-state-hit","bs-state-sunk");
+    el.classList.add("bs-cell-public");
+    if (span) span.textContent = "";
+
+    switch(state){
+      case "MISS":
+        el.classList.add("bs-state-miss");
+        if (span) span.textContent = "🌊";
+        break;
+      case "HIT":
+      case "SUNK":
+        el.classList.add(state === "SUNK" ? "bs-state-sunk" : "bs-state-hit");
+        if (span) span.textContent = "🍳";
+        break;
+      default:
+        el.classList.add("bs-state-empty");
+        break;
+    }
+  }
+
+  function disableVisitorGrid() {
+    publicCells.forEach(ci => ci.el.classList.add("bs-disabled"));
+  }
+  function enableVisitorGrid() {
+    publicCells.forEach(ci => ci.el.classList.remove("bs-disabled"));
+  }
+  function disableHostGrid() {
+    adminCells.forEach(ci => ci.el.classList.add("bs-disabled"));
+  }
+  function enableHostGrid() {
+    adminCells.forEach(ci => ci.el.classList.remove("bs-disabled"));
+  }
+
+  function visitorResetState() {
+    if (typeof hideEndgameMessage === "function") hideEndgameMessage();
+    visitorState.maxShots = null;
+    visitorState.shotsTaken = 0;
+    visitorState.hits = 0;
+    visitorState.finished = false;
+    visitorState.layoutLoaded = false;
+    visitorState.lastResultByCell = {};
+    visitorState.pendingShots = {};
+    visitorState.ships = [];
+    updateVisitorCounters();
+    renderPublicShipList();
+
+    publicCells.forEach(ci => {
+      ci.el.classList.remove("bs-state-miss","bs-state-hit","bs-state-sunk","bs-disabled");
+      ci.el.classList.add("bs-state-empty");
+      const span = ci.el.querySelector("span");
+      if (span) span.textContent = "";
+    });
+
+    disableVisitorGrid();
+    setPublicMain("Navios de carregamento de ovos estão a caminho do porto, e você deve impedir.");
+    setPublicSub("Assim que o host publicar o tabuleiro, você poderá jogar.");
+    setPublicLastShot("Nenhum tiro ainda.");
+  }
+
+  function visitorHandleCellClick(ev) {
+    const el = ev.currentTarget;
+    const r = parseInt(el.dataset.row,10);
+    const c = parseInt(el.dataset.col,10);
+    const key = coordKey(r,c);
+
+    if (!visitorState.layoutLoaded) {
+      setPublicLastShot("Ainda não há tabuleiro publicado pelo host.");
+      return;
+    }
+    if (visitorState.finished) {
+      setPublicLastShot("Partida finalizada. Aguarde um novo layout do host.");
+      return;
+    }
+    if (visitorState.maxShots != null && visitorState.shotsTaken >= visitorState.maxShots) {
+      setPublicLastShot("Você já usou todos os tiros disponíveis.");
+      disableVisitorGrid();
+      return;
+    }
+    if (visitorState.lastResultByCell[key] || visitorState.pendingShots[key]) {
+      setPublicLastShot("Você já tentou essa célula.");
+      return;
+    }
+
+    visitorState.shotsTaken++;
+    visitorState.pendingShots[key] = true;
+    updateVisitorCounters();
+    setPublicLastShot("Tiro enviado para ["+(r+1)+","+(c+1)+"]…");
+
+    sendToChat(buildShotMessage(r, c));
+  }
+
+  publicCells.forEach(ci => {
+    ci.el.addEventListener("click", visitorHandleCellClick);
+  });
+
+  const maxShotsInp = $("#bs-max-shots");
+  const shipSelectorEl = $("#bs-ship-selector"); // New: reference to the button container
+  hostState.selectedShipType = "A"; // New: default selected ship
+  const orientationBtn = $("#bs-orientation-toggle");
+
+  // New: Ship Type Selection Buttons Logic
+  const shipButtons = shipSelectorEl ? Array.from(shipSelectorEl.querySelectorAll('.bs-ship-btn')) : [];
+
+  function updateSelectedShipUI() {
+    shipButtons.forEach(btn => {
+      if (btn.dataset.shipType === hostState.selectedShipType) {
+        btn.classList.add('bs-active');
+      } else {
+        btn.classList.remove('bs-active');
+      }
+    });
+  }
+
+  shipButtons.forEach(btn => {
+    btn.addEventListener('click', function() {
+      if (!detectAdminVisible()) return;
+      hostState.selectedShipType = this.dataset.shipType;
+      updateSelectedShipUI();
+      // Potentially update the preview if dragging/hovering
+      // The mouseenter event on cells will re-trigger showPlacementPreview with the new selectedShipType
+    });
+  });
+  // End New: Ship Type Selection Buttons Logic
+
+  const autoBtn    = $("#bs-auto-btn");
+  const publishBtn = $("#bs-publish-layout-btn");
+  const resetBtn   = $("#bs-reset-btn");
+
+  const hostShotsEl = $("#bs-host-shots");
+  const hostHitsEl  = $("#bs-host-hits");
+  const hostSunkEl  = $("#bs-host-sunk");
+  const hostMainStatus = $("#bs-host-main-status");
+  const hostSubStatus  = $("#bs-host-sub-status");
+  const shipListEl     = $("#bs-ship-list");
+
+  function setHostMain(text) {
+    if (hostMainStatus) hostMainStatus.innerHTML = "<strong>"+text+"</strong>";
+  }
+  function setHostSub(text) {
+    if (hostSubStatus) hostSubStatus.textContent = text;
+  }
+
+  function updateHostConfigFromInputs() {
+    if (maxShotsInp) {
+      const val = parseInt(maxShotsInp.value,10);
+      if (!isNaN(val) && val > 0 && val <= 999) hostState.maxShots = val;
+    }
+  }
+
+  function updateHostCounters() {
+    const totalShipTypes = Object.keys(SHIP_DEFS).length; // Dynamically get total ship types
+    if (hostShotsEl) hostShotsEl.textContent = hostState.shotsTaken + " / " + hostState.maxShots;
+    if (hostHitsEl)  hostHitsEl.textContent  = hostState.hits;
+    if (hostSunkEl)  hostSunkEl.textContent  = hostState.sunkCount + " / " + totalShipTypes; // Use dynamic total
+  }
+
+  function resetHostStateForNewLayout() {
+    if (typeof hideEndgameMessage === "function") hideEndgameMessage();
+    hostState.layoutPublished = false;
+    hostState.finished = false;
+    hostState.shotsTaken = 0;
+    hostState.hits = 0;
+    hostState.sunkCount = 0;
+    hostState.ships = [];
+    hostState.shipCells = {};
+    hostState.cellHits = {};
+    hostState.cellMisses = {};
+    hostState.processedShots = {};
+    hostState.lossSent = false;
+    updateHostCounters();
+    updateSelectedShipUI(); // New: update UI for selected ship
+    if (shipListEl) shipListEl.innerHTML = "";
+    adminCells.forEach(ci => {
+      const span = ci.el.querySelector("span");
+      if (span) span.textContent = "";
+      ci.el.classList.remove("bs-has-ship","bs-hit","bs-miss","bs-sunk","bs-preview-valid","bs-preview-invalid","bs-disabled");
+    });
+    enableHostGrid();
+    setHostMain("Aguardando você montar o tabuleiro…");
+    setHostSub("Posicione navios manualmente ou use o sorteio automático, depois publique o layout.");
+  }
+
+  function renderShipList() {
+    if (!shipListEl) return;
+    shipListEl.innerHTML = "";
+    const shipsById = {};
+    hostState.ships.forEach(ship => {
+      if (!ship || !ship.id) return;
+      if (!shipsById[ship.id]) shipsById[ship.id] = [];
+      shipsById[ship.id].push(ship);
+    });
+
+    Object.keys(SHIP_DEFS).forEach(id => {
+      const ships = shipsById[id] || [];
+      if (!ships.length) return;
+      const def = SHIP_DEFS[id];
+      if (!def) return;
+      const sunkCount = ships.reduce((acc, ship) => acc + (isHostShipSunk(ship) ? 1 : 0), 0);
+      const div = document.createElement("div");
+      div.style.justifyContent = 'flex-start';
+      div.style.gap = '0.75rem';
+      div.style.alignItems = 'center';
+      if (sunkCount > 0 && sunkCount === ships.length) {
+        div.classList.add("bs-ship-sunk");
+      }
+
+      const countSpan = document.createElement("span");
+      countSpan.textContent = "x" + ships.length.toString();
+      countSpan.style.fontWeight = 'bold';
+      countSpan.style.minWidth = '1.75em';
+
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = def.name;
+      
+      const vizSpan = document.createElement('span');
+      vizSpan.className = "bs-ship-viz";
+      ships.forEach(ship => {
+        const seg = document.createElement("span");
+        seg.className = "bs-ship-seg";
+        seg.textContent = SHIP_BLOCK.repeat(def.len);
+        if (isHostShipSunk(ship)) seg.classList.add("bs-ship-sunk");
+        vizSpan.appendChild(seg);
+      });
+
+      div.appendChild(countSpan);
+      div.appendChild(nameSpan);
+      div.appendChild(vizSpan);
+      shipListEl.appendChild(div);
+    });
+  }
+
+  function renderPublicShipList() {
+    if (!publicShipListEl) return;
+    publicShipListEl.innerHTML = "";
+
+    if (!visitorState.layoutLoaded || !visitorState.ships || visitorState.ships.length === 0) {
+      const title = document.createElement("div");
+      title.className = "bs-muted";
+      title.textContent = "Aguardando layout do host...";
+      publicShipListEl.appendChild(title);
+      return;
+    }
+
+    const title = document.createElement("div");
+    title.className = "bs-muted";
+    title.textContent = "Navios para afundar:";
+    title.style.marginBottom = "4px";
+    publicShipListEl.appendChild(title);
+
+    const shipsById = {};
+    visitorState.ships.forEach(ship => {
+      if (!ship || !ship.id) return;
+      if (!shipsById[ship.id]) shipsById[ship.id] = [];
+      shipsById[ship.id].push(ship);
+    });
+
+    Object.keys(SHIP_DEFS).forEach(id => {
+      const ships = shipsById[id] || [];
+      if (!ships.length) return;
+      const def = SHIP_DEFS[id];
+      if (!def) return;
+      const sunkCount = ships.reduce((acc, ship) => acc + (isShipFullyHit(ship) ? 1 : 0), 0);
+      const div = document.createElement("div");
+      div.style.justifyContent = 'flex-start';
+      div.style.gap = '0.75rem';
+      div.style.alignItems = 'center';
+      if (sunkCount > 0 && sunkCount === ships.length) {
+        div.classList.add("bs-ship-sunk");
+      }
+
+      const countSpan = document.createElement("span");
+      countSpan.textContent = "x" + ships.length;
+      countSpan.style.fontWeight = 'bold';
+      countSpan.style.minWidth = '1.75em';
+      
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = def.name;
+
+      const vizSpan = document.createElement('span');
+      vizSpan.className = "bs-ship-viz";
+      ships.forEach(ship => {
+        const seg = document.createElement("span");
+        seg.className = "bs-ship-seg";
+        seg.textContent = SHIP_BLOCK.repeat(def.len);
+        if (isShipFullyHit(ship)) seg.classList.add("bs-ship-sunk");
+        vizSpan.appendChild(seg);
+      });
+
+      div.appendChild(countSpan);
+      div.appendChild(nameSpan);
+      div.appendChild(vizSpan);
+      publicShipListEl.appendChild(div);
+    });
+  }
+
+  function markVisitorShipSunk(shipId, row, col) {
+    const hasShips = Array.isArray(visitorState.ships) && visitorState.ships.length > 0;
+    if (!hasShips) return false;
+    let ship = null;
+    if (shipId) {
+      ship = visitorState.ships.find(s => s.id === shipId && shipContainsCell(s, row, col));
+      if (!ship) ship = visitorState.ships.find(s => s.id === shipId);
+    }
+    if (!ship) ship = findShipByCell(visitorState.ships, row, col);
+    if (!ship) return false;
+    getShipCells(ship).forEach(cell => {
+      const key = coordKey(cell.row, cell.col);
+      delete visitorState.pendingShots[key];
+      visitorState.lastResultByCell[key] = "SUNK";
+      applyVisitorCellState(cell.row, cell.col, "SUNK");
+    });
+    return true;
+  }
+
+  function shipContainsCell(ship, row, col) {
+    if (!ship || ship.row == null || ship.col == null) return false;
+    const len = ship.len || getShipLengthById(ship.id);
+    if (!len) return false;
+    if (ship.dir === "H") {
+      return row === ship.row && col >= ship.col && col < ship.col + len;
+    }
+    return col === ship.col && row >= ship.row && row < ship.row + len;
+  }
+
+  function findShipByCell(ships, row, col) {
+    if (!Array.isArray(ships)) return null;
+    return ships.find(ship => shipContainsCell(ship, row, col)) || null;
+  }
+
+  function isShipFullyHit(ship) {
+    const cells = getShipCells(ship);
+    if (!cells.length) return false;
+    for (let i=0;i<cells.length;i++) {
+      const key = coordKey(cells[i].row, cells[i].col);
+      const state = visitorState.lastResultByCell[key];
+      if (state !== "HIT" && state !== "SUNK") return false;
+    }
+    return true;
+  }
+
+  function isHostShipSunk(ship) {
+    if (!ship) return false;
+    const len = ship.len || getShipLengthById(ship.id);
+    if (!len) return false;
+    return (ship.hits || 0) >= len;
+  }
+
+  function markAdminCellShip(r,c) {
+    const cell = adminCells.find(ci => ci.row === r && ci.col === c);
+    if (!cell) return;
+    cell.el.classList.add("bs-has-ship");
+    const span = cell.el.querySelector("span");
+    if (span) span.textContent = "🥚";
+  }
+  function clearAdminCellShip(r,c) {
+    const cell = adminCells.find(ci => ci.row === r && ci.col === c);
+    if (!cell) return;
+    cell.el.classList.remove("bs-has-ship","bs-hit","bs-miss","bs-sunk","bs-preview-valid","bs-preview-invalid");
+    const span = cell.el.querySelector("span");
+    if (span) span.textContent = "";
+  }
+  function markAdminCellHit(r,c, sunk) {
+    const cell = adminCells.find(ci => ci.row === r && ci.col === c);
+    if (!cell) return;
+    cell.el.classList.remove("bs-miss");
+    cell.el.classList.add("bs-hit");
+    if (sunk) cell.el.classList.add("bs-sunk");
+    const span = cell.el.querySelector("span");
+    if (span) span.textContent = "🍳";
+  }
+  function markAdminCellMiss(r,c) {
+    const cell = adminCells.find(ci => ci.row === r && ci.col === c);
+    if (!cell) return;
+    cell.el.classList.add("bs-miss");
+    const span = cell.el.querySelector("span");
+    if (span) span.textContent = "🌊";
+  }
+
+  function getShipLengthById(id) {
+    const def = SHIP_DEFS[id];
+    return def ? def.len : 0;
+  }
+
+  function getShipCells(ship) {
+    if (!ship) return [];
+    const len = ship.len || getShipLengthById(ship.id);
+    if (!len) return [];
+    const cells = [];
+    for (let i=0;i<len;i++) {
+      const r = ship.row + (ship.dir === "V" ? i : 0);
+      const c = ship.col + (ship.dir === "H" ? i : 0);
+      cells.push({ row: r, col: c });
+    }
+    return cells;
+  }
+
+  function markAdminShipSunk(ship) {
+    const cells = getShipCells(ship);
+    cells.forEach(cell => markAdminCellHit(cell.row, cell.col, true));
+  }
+
+  function canPlaceShip(id,row,col,dir,ignoreShipId) {
+    const len = getShipLengthById(id);
+    if (!len) return false;
+    if (dir === "H") {
+      if (col + len > 10) return false;
+    } else {
+      if (row + len > 10) return false;
+    }
+    for (let i=0;i<len;i++) {
+      const r = row + (dir === "V" ? i : 0);
+      const c = col + (dir === "H" ? i : 0);
+      const key = coordKey(r,c);
+      const existing = hostState.shipCells[key];
+      if (existing && existing !== ignoreShipId) return false;
+    }
+    return true;
+  }
+
+  function placeShip(id,row,col,dir) {
+    const len = getShipLengthById(id);
+    if (!len) return false;
+    if (!canPlaceShip(id,row,col,dir,null)) return false;
+
+    const ship = { id, len, row, col, dir, hits: 0 };
+    hostState.ships.push(ship);
+    for (let i=0;i<len;i++) {
+      const r = row + (dir === "V" ? i : 0);
+      const c = col + (dir === "H" ? i : 0);
+      hostState.shipCells[coordKey(r,c)] = id;
+      markAdminCellShip(r,c);
+    }
+    renderShipList();
+    return true;
+  }
+
+  function findShipById(shipId) {
+    return hostState.ships.find(s => s.id === shipId && s.row != null);
+  }
+
+  function removeShip(shipId) {
+    const ship = findShipById(shipId);
+    if (!ship) return;
+    for (let i=0;i<ship.len;i++) {
+      const r = ship.row + (ship.dir === "V" ? i : 0);
+      const c = ship.col + (ship.dir === "H" ? i : 0);
+      const key = coordKey(r,c);
+      delete hostState.shipCells[key];
+      clearAdminCellShip(r,c);
+    }
+    const idx = hostState.ships.indexOf(ship);
+    if (idx >= 0) hostState.ships.splice(idx,1);
+    renderShipList();
+    logHost("Navio "+shipId+" removido.");
+  }
+
+  function moveShip(shipId, newRow, newCol, dir) {
+    const ship = findShipById(shipId);
+    if (!ship) return false;
+    const len = ship.len;
+    if (!canPlaceShip(shipId,newRow,newCol,dir,shipId)) return false;
+
+    for (let i=0;i<len;i++) {
+      const r = ship.row + (ship.dir === "V" ? i : 0);
+      const c = ship.col + (ship.dir === "H" ? i : 0);
+      const key = coordKey(r,c);
+      delete hostState.shipCells[key];
+      clearAdminCellShip(r,c);
+    }
+    for (let i=0;i<len;i++) {
+      const r = newRow + (dir === "V" ? i : 0);
+      const c = newCol + (dir === "H" ? i : 0);
+      const key = coordKey(r,c);
+      hostState.shipCells[key] = shipId;
+      markAdminCellShip(r,c);
+    }
+    ship.row = newRow;
+    ship.col = newCol;
+    ship.dir = dir;
+    renderShipList();
+    logHost("Navio "+shipId+" movido para ("+(newRow+1)+","+(newCol+1)+") "+(dir==="H"?"horizontal":"vertical")+".");
+    return true;
+  }
+
+  const previewState = { cells: [], valid: false };
+
+  function clearPreview() {
+    previewState.cells.forEach(ci => {
+      ci.el.classList.remove("bs-preview-valid","bs-preview-invalid");
+    });
+    previewState.cells = [];
+    previewState.valid = false;
+  }
+
+  function showPlacementPreview(row,col,shipId,dir,ignoreShipId) {
+    logHost("DEBUG: showPlacementPreview called for (" + (row+1) + "," + (col+1) + ")");
+    clearPreview();
+    // Use hostState.selectedShipType if shipId is not provided (for new placements)
+    const currentShipId = shipId || hostState.selectedShipType;
+    const len = getShipLengthById(currentShipId);
+    logHost("DEBUG: currentShipId: " + currentShipId + ", len: " + len);
+    if (!len) {
+      logHost("DEBUG: !len, exiting showPlacementPreview.");
+      return;
+    }
+
+    const newCells = [];
+    let inBounds = true;
+    for (let i=0;i<len;i++) {
+      const r = row + (dir === "V" ? i : 0);
+      const c = col + (dir === "H" ? i : 0);
+      if (r<0 || r>9 || c<0 || c>9) {
+        inBounds = false;
+        logHost("DEBUG: Out of bounds: (" + (r+1) + "," + (c+1) + ")");
+      }
+      const cell = adminCells.find(ci => ci.row === r && ci.col === c);
+      if (cell) newCells.push(cell);
+    }
+
+    let collision = false;
+    if (inBounds) {
+      for (const ci of newCells) {
+        const key = coordKey(ci.row,ci.col);
+        const existing = hostState.shipCells[key];
+        if (existing && existing !== ignoreShipId) {
+          collision = true;
+          logHost("DEBUG: Collision detected at (" + (ci.row+1) + "," + (ci.col+1) + ")");
+          break;
+        }
+      }
+    }
+    previewState.cells = newCells;
+    previewState.valid = inBounds && !collision;
+    logHost("DEBUG: Preview valid: " + previewState.valid + ", newCells count: " + newCells.length);
+
+    newCells.forEach(ci => {
+      ci.el.classList.add(previewState.valid ? "bs-preview-valid" : "bs-preview-invalid");
+    });
+    logHost("DEBUG: Applied preview classes.");
+  }
+
+  const dragState = {
+    active: false,
+    shipId: null,
+    shipDir: null,
+    offsetIndex: 0,
+    currentOrigin: null
+  };
+
+  function startDragShip(shipId, row, col) {
+    const ship = findShipById(shipId);
+    if (!ship) return;
+    dragState.active = true;
+    dragState.shipId = shipId;
+    dragState.shipDir = ship.dir;
+    let offset = 0;
+    if (ship.dir === "H") offset = col - ship.col;
+    else offset = row - ship.row;
+    dragState.offsetIndex = offset;
+    dragState.currentOrigin = null;
+    logHost("Arrastando navio "+shipId+"…");
+  }
+
+  function commitDrag() {
+    if (!dragState.active) return;
+    const shipId = dragState.shipId;
+    const dir = dragState.shipDir;
+    const origin = dragState.currentOrigin;
+    clearPreview();
+    dragState.active = false;
+    if (!origin) {
+      logHost("Arrasto cancelado.");
+      return;
+    }
+    const ok = moveShip(shipId, origin.row, origin.col, dir);
+    if (!ok) {
+      logHost("Não foi possível mover o navio (posição inválida).");
+    }
+  }
+
+  function handleAdminCellMouseDown(ev) {
+    if (!detectAdminVisible()) return;
+    if (hostState.layoutPublished) {
+      logHost("Layout já publicado – grid travado.");
+      return;
+    }
+    const el = ev.currentTarget;
+    const r = parseInt(el.dataset.row,10);
+    const c = parseInt(el.dataset.col,10);
+    const key = coordKey(r,c);
+    const shipId = hostState.shipCells[key] || null;
+
+    if (ev.button === 2) {
+      ev.preventDefault();
+      if (shipId) removeShip(shipId);
+      return;
+    }
+    if (ev.button !== 0) return;
+
+    updateHostConfigFromInputs();
+
+    const id = hostState.selectedShipType;
+    const dir = hostState.placementDir || "H";
+    if (!placeShip(id,r,c,dir)) {
+      logHost("Não é possível posicionar "+id+" aqui (fora do tabuleiro ou sobreposição).");
+      return;
+    }
+    const def = SHIP_DEFS[id];
+    const name = def ? def.name : id;
+    logHost("Navio "+name+" posicionado em ("+(r+1)+","+(c+1)+") "+(dir==="H"?"horizontal":"vertical")+".");
+    setHostMain("Continue posicionando navios. Depois publique o layout.");
+  }
+
+  function handleAdminCellMouseEnter(ev) {
+    logHost("DEBUG: handleAdminCellMouseEnter called.");
+    if (!detectAdminVisible()) {
+      logHost("DEBUG: Admin not visible, exiting mouseenter.");
+      return;
+    }
+    if (hostState.layoutPublished) {
+      logHost("DEBUG: Layout published, exiting mouseenter.");
+      return;
+    }
+
+    const el = ev.currentTarget;
+    const r = parseInt(el.dataset.row,10);
+    const c = parseInt(el.dataset.col,10);
+
+    logHost("DEBUG: mouseenter - r:" + r + ", c:" + c + ", dragState.active:" + dragState.active);
+
+    if (dragState.active) {
+      logHost("DEBUG: mouseenter - dragState active. Ship ID:" + dragState.shipId);
+      const ship = findShipById(dragState.shipId);
+      if (!ship) {
+        logHost("DEBUG: mouseenter - Drag active but ship not found. Exiting.");
+        return;
+      }
+      const offset = dragState.offsetIndex;
+      let originRow = r;
+      let originCol = c;
+      if (ship.dir === "H") originCol = c - offset;
+      else originRow = r - offset;
+      logHost("DEBUG: mouseenter - Drag calling showPlacementPreview for ship " + ship.id + " at origin (" + originRow + "," + originCol + ")");
+      showPlacementPreview(originRow, originCol, ship.id, ship.dir, ship.id);
+      dragState.currentOrigin = previewState.valid ? {row: originRow, col: originCol} : null;
+    } else { // Normal placement preview
+      const id = hostState.selectedShipType || "A";
+      const dir = hostState.placementDir || "H";
+      logHost("DEBUG: Calling showPlacementPreview for ID: " + id + ", Dir: " + dir);
+      showPlacementPreview(r,c,id,dir,null);
+    }
+  }
+
+  function handleAdminCellMouseUp(ev) {
+    if (!detectAdminVisible()) return;
+    if (hostState.layoutPublished) return;
+    if (ev.button !== 0) return;
+    if (dragState.active) {
+      ev.preventDefault();
+      commitDrag();
+    }
+  }
+
+  function handleAdminGridMouseLeave() {
+    if (!detectAdminVisible()) return;
+    if (!dragState.active) clearPreview();
+  }
+
+  adminCells.forEach(ci => {
+    ci.el.addEventListener("mousedown", handleAdminCellMouseDown);
+    ci.el.addEventListener("mouseenter", handleAdminCellMouseEnter);
+    ci.el.addEventListener("mouseup", handleAdminCellMouseUp);
+    ci.el.addEventListener("contextmenu", function(e){ e.preventDefault(); });
+  });
+  if (adminGridEl) {
+    adminGridEl.addEventListener("mouseleave", handleAdminGridMouseLeave);
+  }
+  document.addEventListener("mouseup", function(){
+    if (dragState.active) {
+      commitDrag();
+    }
+  });
+
+  function updateOrientationUI() {
+    if (!orientationBtn) return;
+    const icon = orientationBtn.querySelector('[data-role="icon"]');
+    const label = orientationBtn.querySelector('[data-role="label"]');
+    const dir = hostState.placementDir || "H";
+    if (icon) icon.textContent = dir === "H" ? "H" : "V";
+    if (label) label.textContent = dir === "H" ? "Horizontal" : "Vertical";
+  }
+
+  if (orientationBtn) {
+    orientationBtn.addEventListener("click", function(){
+      if (!detectAdminVisible()) return;
+      hostState.placementDir = hostState.placementDir === "H" ? "V" : "H";
+      updateOrientationUI();
+    });
+  }
+  updateOrientationUI();
+
+  /* Sorteio automático de layout (1 navio de cada tipo) */
+  function autoPlaceShips() {
+    if (!detectAdminVisible()) return;
+    resetHostStateForNewLayout();
+    const shipIdsInOrder = ["A","B","C","S","D"];
+    let attempts = 0;
+    for (const id of shipIdsInOrder) {
+      let placed = false;
+      const len = getShipLengthById(id);
+      if (!len) continue;
+      while (!placed && attempts < 1000) {
+        attempts++;
+        const dir = Math.random() < 0.5 ? "H" : "V";
+        const maxRow = dir === "V" ? 10 - len : 9;
+        const maxCol = dir === "H" ? 10 - len : 9;
+        const row = Math.floor(Math.random() * (maxRow + 1));
+        const col = Math.floor(Math.random() * (maxCol + 1));
+        if (placeShip(id,row,col,dir)) {
+          placed = true;
+        }
+      }
+    }
+    renderShipList();
+    setHostMain("Layout sorteado automaticamente.");
+    setHostSub('Revise se quiser, depois clique em "Publicar layout".');
+    logHost("Layout automático gerado (1 navio de cada tipo).");
+  }
+
+  if (autoBtn) {
+    autoBtn.addEventListener("click", function(){
+      if (!detectAdminVisible()) return;
+      autoPlaceShips();
+    });
+  }
+
+  function encodeLayout(maxShots, ships) {
+    const partsShips = ships.map(s => [s.id,s.dir,s.row,s.col,s.len].join(","));
+    return "v1:shots="+(maxShots || 35)+";ships="+partsShips.join("|");
+  }
+
+  function parseLayoutBody(body) {
+    const out = { version: null, shots: 35, ships: [] };
+    if (!body) return out;
+    const [ver, rest] = body.split(":",2);
+    out.version = ver || "v1";
+    const parts = (rest || "").split(";");
+    parts.forEach(p => {
+      const [k,v] = p.split("=",2);
+      if (!k) return;
+      if (k === "shots") {
+        const n = parseInt(v,10);
+        if (!isNaN(n) && n>0) out.shots = n;
+      } else if (k === "ships") {
+        const shipsRaw = (v || "").split("|").filter(Boolean);
+        shipsRaw.forEach(sr => {
+          const f = sr.split(",");
+          if (f.length < 5) return;
+          const id  = f[0];
+          const dir = f[1];
+          const row = parseInt(f[2],10);
+          const col = parseInt(f[3],10);
+          const len = parseInt(f[4],10);
+          if (!id || isNaN(row) || isNaN(col) || isNaN(len)) return;
+          out.ships.push({id,dir,row,col,len});
+        });
+      }
+    });
+    return out;
+  }
+
+  function buildLayoutMessage(maxShots,ships) {
+    return LAYOUT_PREFIX + encodeLayout(maxShots,ships);
+  }
+
+  function buildShotMessage(row,col) {
+    return SHOT_PREFIX + "v1:r="+row+";c="+col;
+  }
+
+  function buildResultMessage(res,row,col,shipId) {
+    let msg = RESULT_PREFIX + "v1:res="+res+";r="+row+";c="+col;
+    if (shipId) msg += ";ship="+shipId;
+    return msg;
+  }
+
+  function buildEndMessage(result) {
+    return END_PREFIX + "v1:result="+result;
+  }
+
+  function parseKeyValueBody(body) {
+    const out = {};
+    (body || "").split(";").forEach(p => {
+      const [k,v] = p.split("=",2);
+      if (!k) return;
+      out[k] = v;
+    });
+    return out;
+  }
+
+  async function sendToChat(text) {
+    const payload = String(text ?? "");
+    try {
+      const chat = window.__TRYSTERO_CHAT__;
+      if (chat && typeof chat.send === "function") {
+        await chat.send(payload, { via: "naval" });
+        return;
+      }
+      console.warn("[battleship] chat Trystero indisponivel. Mensagem nao enviada:", payload);
+    } catch(e) {
+      console.error("[battleship] erro ao enviar via Trystero:", e);
+    }
+  }
+
+  async function sendCollarCommand(line) {
+    const txt = String(line || "").trim();
+    if (!txt) return;
+    let sent = false;
+
+    try {
+      const tunnel = window.__COLLAR_TUNNEL__;
+      if (tunnel && typeof tunnel.send === "function") {
+        await tunnel.send(txt, { via: "naval", kind: "cmd" });
+        sent = true;
+      }
+    } catch (_){}
+
+    if (!sent) {
+      try {
+        if (typeof window.collarSend === "function") {
+          await window.collarSend(txt);
+          sent = true;
+        } else if (window.SerialBridge && typeof window.SerialBridge.send === "function") {
+          await window.SerialBridge.send(txt);
+          sent = true;
+        }
+      } catch (_){}
+    }
+
+    if (!sent) {
+      try {
+        window.dispatchEvent(new CustomEvent("collar:tx", { detail: { line: txt, source: "naval" } }));
+        sent = true;
+      } catch (_){}
+    }
+
+    if (!sent) {
+      const now = Date.now();
+      const id = `naval:${now}:${Math.random().toString(36).slice(2,8)}`;
+      try {
+        window.dispatchEvent(new CustomEvent("chat:message", {
+          detail: {
+            id,
+            key: id,
+            text: txt,
+            raw: { text: txt },
+            ts: now,
+            origin: "naval",
+            username: "naval",
+            peerId: "naval"
+          }
+        }));
+      } catch (_){}
+    }
+  }
+
+  function getInheritedControl() {
+    const modeRaw = typeof window.currentMode === "string" ? window.currentMode : "";
+    const mode = (modeRaw || "SHOCK").toUpperCase();
+    const channelRaw = window.channel;
+    const channel = channelRaw === 2 ? 2 : channelRaw === 1 ? 1 : 1;
+    return { mode, channel };
+  }
+
+  function getInheritedLevel(fallbackLevel) {
+    const raw = Number(window.level);
+    if (Number.isFinite(raw)) return Math.max(0, Math.min(100, Math.round(raw)));
+    return Math.max(0, Math.min(100, Math.round(fallbackLevel || 0)));
+  }
+
+  function buildInheritedCommand(level) {
+    const { mode, channel } = getInheritedControl();
+    const lvl = (mode === "SHOCK" || mode === "VIBRATION") ? level : 0;
+    return `${mode},${lvl},${channel}`;
+  }
+
+  // === CHOQUE via comando herdado (tunnel/serial/evento/chat) ===
+  async function sendShock(level) {
+    const lvl = Math.max(0, Math.min(100, Math.round(level || 0)));
+    const line = buildInheritedCommand(lvl);
+
+    try {
+      await sendCollarCommand(line);
+      logHost("Comando → " + line);
+    } catch (e) {
+      console.error("[battleship] erro ao enviar comando de choque:", e);
+      logHost("Erro ao enviar comando de choque.");
+    }
+  }
+
+  if (publishBtn) {
+    publishBtn.addEventListener("click", async function(){
+      if (!detectAdminVisible()) return;
+      updateHostConfigFromInputs();
+      if (hostState.ships.length === 0) {
+        alert("Você precisa posicionar pelo menos 1 navio antes de publicar o layout.");
+        return;
+      }
+      const msg = buildLayoutMessage(hostState.maxShots, hostState.ships);
+      try {
+        publishBtn.disabled = true;
+        await sendToChat(msg);
+        hostState.layoutPublished = true;
+        hostState.finished = false;
+        hostState.shotsTaken = 0;
+        hostState.hits = 0;
+        hostState.sunkCount = 0;
+        hostState.cellHits = {};
+        hostState.cellMisses = {};
+        hostState.processedShots = {};
+        updateHostCounters();
+        visitorApplyLayout({ shots: hostState.maxShots, ships: hostState.ships });
+        setHostMain("Layout publicado. Aguardando tiros do visitante…");
+        setHostSub("Quando o visitante acertar, choques serão enviados automaticamente.");
+        logHost("Layout publicado com maxShots="+hostState.maxShots+".");
+      } catch(e) {
+        console.error(e);
+        alert("Erro ao publicar layout. Ver console.");
+      } finally {
+        publishBtn.disabled = false;
+      }
+    });
+  }
+
+  if (resetBtn) {
+    resetBtn.addEventListener("click", async function(){
+      if (!detectAdminVisible()) return;
+      resetHostStateForNewLayout();
+      visitorResetState();
+      try {
+        await sendToChat(RESET_PREFIX + "v1");
+        logHost("Partida resetada e comando RESET enviado ao visitante.");
+      } catch(e) {
+        console.error(e);
+      }
+    });
+  }
+
+  function hostHandleShotMessage(bodyObj) {
+    if (!detectAdminVisible()) return;
+    if (!hostState.layoutPublished) {
+      logHost("Ignorando tiro: layout ainda não publicado.");
+      return;
+    }
+    if (hostState.finished) {
+      logHost("Tiro recebido, mas partida já finalizada.");
+      return;
+    }
+    const r = parseInt(bodyObj.r,10);
+    const c = parseInt(bodyObj.c,10);
+    if (isNaN(r) || isNaN(c) || r<0 || r>9 || c<0 || c>9) return;
+    const key = coordKey(r,c);
+    if (hostState.processedShots[key]) return;
+    hostState.processedShots[key] = true;
+
+    hostState.shotsTaken++;
+    updateHostCounters();
+
+    const shipId = hostState.shipCells[key];
+    let res = "MISS";
+    let sunk = false;
+    let ship = null;
+    if (shipId) {
+      res = "HIT";
+      hostState.cellHits[key] = true;
+      ship = findShipById(shipId);
+      if (ship) {
+        ship.hits = (ship.hits || 0) + 1;
+        if (ship.hits >= ship.len) {
+          sunk = true;
+          hostState.sunkCount++;
+        }
+      }
+    } else {
+      hostState.cellMisses[key] = true;
+    }
+
+    if (res === "MISS") {
+      markAdminCellMiss(r,c);
+      logHost("Tiro em ("+(r+1)+","+(c+1)+") → ÁGUA.");
+    } else {
+      hostState.hits++;
+      markAdminCellHit(r,c, sunk);
+      if (sunk && ship) {
+        markAdminShipSunk(ship);
+      }
+      const baseLevel = getInheritedLevel(SHOCK_HIT_LEVEL);
+      const lvl = sunk ? Math.max(baseLevel, SHOCK_SUNK_LEVEL) : baseLevel;
+
+      if (hostState.lossSent) { // If Marretada Final is active, call sendShock directly
+        sendShock(lvl).catch(e => console.error(e));
+      } else { // Otherwise, use the animation
+        triggerHitAnimation(() => {
+          sendShock(lvl).catch(e => console.error(e));
+        });
+      }
+      logHost("Tiro em ("+(r+1)+","+(c+1)+") → ACERTO" + (sunk ? " (navio afundado: "+shipId+")" : "") + ".");
+    }
+    updateHostCounters();
+    renderShipList();
+
+    (async () => {
+      const msg = buildResultMessage(sunk ? "SUNK" : res, r, c, sunk ? shipId : null);
+      await sendToChat(msg);
+    })();
+
+    let allShipsHits = hostState.ships.length > 0;
+    hostState.ships.forEach(s => {
+      if ((s.hits || 0) < s.len) allShipsHits = false;
+    });
+
+    let endResult = null;
+    if (allShipsHits) {
+      endResult = "WIN";
+    } else if (hostState.shotsTaken >= hostState.maxShots && !hostState.lossSent) {
+      endResult = "LOSE";
+    }
+
+    if (endResult) {
+      if (endResult === "WIN") {
+        hostState.finished = true;
+      } else { // endResult is "LOSE"
+        hostState.lossSent = true;
+      }
+      
+      (async () => {
+        await sendToChat(buildEndMessage(endResult));
+      })();
+      if (endResult === "WIN") { // Visitor won, host lost
+        showEndgameMessage("DERROTA", "O visitante afundou todos os seus navios.", false);
+        setHostMain("Visitante AFUNDOU todos os navios!");
+      } else { // Visitor lost, host won
+        showEndgameMessage("VITÓRIA!", "O visitante ficou sem tiros.", true);
+        setHostMain("Visitante ficou sem tiros.");
+        disableHostGrid();
+      }
+      setHostSub('Use "Resetar partida" ou publique um novo layout para outra rodada.');
+      logHost("Partida encerrada. Resultado para o visitante: "+endResult+".");
+    }
+  }
+
+  function visitorApplyLayout(layoutObj) {
+    visitorState.maxShots = layoutObj.shots || 35;
+    visitorState.ships = layoutObj.ships || [];
+    visitorState.shotsTaken = 0;
+    visitorState.hits = 0;
+    visitorState.finished = false;
+    visitorState.layoutLoaded = true;
+    visitorState.lastResultByCell = {};
+    visitorState.pendingShots = {};
+    updateVisitorCounters();
+    renderPublicShipList();
+
+    publicCells.forEach(ci => {
+      ci.el.classList.remove("bs-state-miss","bs-state-hit","bs-state-sunk","bs-disabled");
+      ci.el.classList.add("bs-state-empty");
+      const span = ci.el.querySelector("span");
+      if (span) span.textContent = "";
+    });
+
+    setPublicMain("Navios de carregamento de ovos estão a caminho do porto, e você deve impedir.");
+    setPublicSub("Você tem "+visitorState.maxShots+" tiros para tentar afundar todos os navios.");
+    setPublicLastShot("Nenhum tiro ainda.");
+    enableVisitorGrid();
+  }
+
+  function visitorHandleResult(bodyObj) {
+    const res = bodyObj.res || "MISS";
+    const r = parseInt(bodyObj.r,10);
+    const c = parseInt(bodyObj.c,10);
+    if (isNaN(r) || isNaN(c)) return;
+    const key = coordKey(r,c);
+    const shipId = bodyObj.ship || bodyObj.shipId || null;
+
+    delete visitorState.pendingShots[key];
+    visitorState.lastResultByCell[key] = res;
+
+    if (res === "HIT" || res === "SUNK") {
+      visitorState.hits++;
+      if (res === "SUNK") {
+        const marked = markVisitorShipSunk(shipId, r, c);
+        if (!marked) applyVisitorCellState(r,c,res);
+      } else {
+        applyVisitorCellState(r,c,res);
+        const hitShip = findShipByCell(visitorState.ships, r, c);
+        if (hitShip && isShipFullyHit(hitShip)) {
+          markVisitorShipSunk(hitShip.id, r, c);
+        }
+      }
+      triggerHitAnimation();
+      let suffix = "";
+      if (res === "SUNK") {
+        const def = shipId ? SHIP_DEFS[shipId] : null;
+        suffix = def ? " (navio afundado: " + def.name + ")" : " (navio afundado)";
+      }
+      setPublicLastShot("Tiro em ("+(r+1)+","+(c+1)+") -> ACERTO" + suffix + "!");
+    } else {
+      applyVisitorCellState(r,c,"MISS");
+      setPublicLastShot("Tiro em ("+(r+1)+","+(c+1)+") -> AGUA.");
+    }
+    updateVisitorCounters();
+    renderPublicShipList();
+  }
+
+  function visitorHandleEnd(bodyObj) {
+    const result = (bodyObj.result || "").toUpperCase();
+    visitorState.finished = true;
+    disableVisitorGrid();
+    if (result === "WIN") {
+      if (typeof showEndgameMessage === "function") showEndgameMessage("VITÓRIA!", "Você afundou todos os navios.", true);
+      setPublicMain("Você afundou todos os navios!");
+      setPublicSub("O host pode publicar um novo layout para outra partida.");
+    } else if (result === "LOSE") {
+      const subtitle = "Você ficou sem tiros, mas tem uma última marretada para quebrar todos os ovos.";
+      showEndgameMessage("DERROTA", subtitle, false, true);
+      setPublicMain("Você ficou sem tiros.");
+      setPublicSub("Use sua Marretada Final ou aguarde o host reiniciar.");
+    } else {
+      setPublicMain("Partida encerrada.");
+      setPublicSub("Aguarde um novo layout do host.");
+    }
+  }
+
+  function showEndgameMessage(title, subtitle, isWin, showMissileButton = false) {
+    if (!endgameOverlay || !endgameTitle || !endgameSubtitle) return;
+    endgameTitle.textContent = title;
+    endgameSubtitle.textContent = subtitle;
+    endgameTitle.classList.remove("win", "lose");
+    endgameTitle.classList.add(isWin ? "win" : "lose");
+
+    if (endgameMissileBtn) {
+      endgameMissileBtn.style.display = showMissileButton ? 'inline-flex' : 'none';
+    }
+
+    endgameOverlay.classList.add("visible");
+  }
+
+  function hideEndgameMessage() {
+    if (!endgameOverlay) return;
+    endgameOverlay.classList.remove("visible");
+    if (endgameMissileBtn) {
+      endgameMissileBtn.disabled = false;
+      endgameMissileBtn.style.display = 'none';
+    }
+  }
+
+  if (endgameDismiss) {
+    endgameDismiss.addEventListener("click", hideEndgameMessage);
+  }
+
+  function launchFinalSledgehammer() {
+    if (endgameMissileBtn) endgameMissileBtn.disabled = true;
+    hideEndgameMessage();
+    sendToChat(DISMISS_HOST_ENDGAME_PREFIX + "v1");
+
+    let delay = 0;
+    for (let r = 0; r < 10; r++) {
+      for (let c = 0; c < 10; c++) {
+        setTimeout(() => {
+          const key = coordKey(r,c);
+          if (visitorState.lastResultByCell[key]) return;
+          
+          sendToChat(buildShotMessage(r, c));
+          
+          const cell = publicCells.find(ci => ci.row === r && ci.col === c);
+          if (cell) cell.el.classList.add("bs-disabled");
+
+        }, delay);
+        delay += 150;
+      }
+    }
+  }
+
+  if (endgameMissileBtn) {
+    endgameMissileBtn.addEventListener("click", launchFinalSledgehammer);
+  }
+
+  function handleChatRawText(raw) {
+    if (!raw) return;
+    const text = String(raw).trim();
+    if (!text) return;
+
+    const idx = text.indexOf(BS_PREFIX);
+    if (idx === -1) return;
+    const msg = text.slice(idx).trim();
+    const isHost = detectAdminVisible();
+
+    if (msg.startsWith(LAYOUT_PREFIX)) {
+      const body = msg.slice(LAYOUT_PREFIX.length);
+      const layout = parseLayoutBody(body);
+      visitorApplyLayout(layout);
+      if (isHost) {
+        logHost("LAYOUT recebido no chat.");
+      }
+    } else if (msg.startsWith(SHOT_PREFIX)) {
+      const body = msg.slice(SHOT_PREFIX.length);
+      const parts = body.split(":",2);
+      const kv = parseKeyValueBody(parts.length === 2 ? parts[1] : body);
+      if (isHost) {
+        hostHandleShotMessage(kv);
+      }
+    } else if (msg.startsWith(RESULT_PREFIX)) {
+      const body = msg.slice(RESULT_PREFIX.length);
+      const parts = body.split(":",2);
+      const kv = parseKeyValueBody(parts.length === 2 ? parts[1] : body);
+      visitorHandleResult(kv);
+    } else if (msg.startsWith(END_PREFIX)) {
+      if (isHost) return;
+      const body = msg.slice(END_PREFIX.length);
+      const parts = body.split(":",2);
+      const kv = parseKeyValueBody(parts.length === 2 ? parts[1] : body);
+      visitorHandleEnd(kv);
+    } else if (msg.startsWith(RESET_PREFIX)) {
+      visitorResetState();
+    } else if (msg.startsWith(DISMISS_HOST_ENDGAME_PREFIX)) {
+      if (isHost) {
+        hideEndgameMessage();
+        logHost("Comando DISMISS_HOST_ENDGAME recebido, fechando overlay.");
+      }
+    }
+  }
+
+    function initTrysteroBridge() {
+    let attached = false;
+
+    function onChat(ev) {
+      try {
+        const det = ev?.detail || {};
+        handleChatRawText(det.text || (det.raw && det.raw.text));
+        if (det.origin === "trystero-in" || det.origin === "trystero-out") {
+          setConnStatus(true, "conectado (Trystero)", "ok");
+        }
+      } catch(_){}
+    }
+
+    function ensureReady() {
+      const chat = window.__TRYSTERO_CHAT__;
+      if (!(chat && typeof chat.send === "function")) {
+        setConnStatus(false, "aguardando Trystero…", "warn");
+        setTimeout(ensureReady, 800);
+        return;
+      }
+      const ready = typeof chat.isReady === "function" ? !!chat.isReady() : true;
+      setConnStatus(ready, ready ? "conectado (Trystero)" : "aguardando peers…", ready ? "ok" : "warn");
+      if (!attached) {
+        window.addEventListener("chat:message", onChat);
+        attached = true;
+      }
+      if (!ready) setTimeout(ensureReady, 1200);
+    }
+
+    ensureReady();
+  }
+
+  resetHostStateForNewLayout();
+  updateHostConfigFromInputs();
+  updateHostCounters();
+  visitorResetState();
+  updateSelectedShipUI(); // New: initial call to set active button
+
+  setConnStatus(false, "aguardando Trystero", "warn");
+  setTimeout(initTrysteroBridge, 500);
+})();
+</script>
+
+
+
+
+
+

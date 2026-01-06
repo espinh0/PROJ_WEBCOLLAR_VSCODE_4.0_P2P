@@ -1,0 +1,1964 @@
+﻿<!-- Flowgate v1.0.0: migrate connection backend to PeerJS public while keeping trystero-compatible API -->
+<div id="trystero-widget" class="border rounded p-3" style="background:#111;border:1px solid #333;border-radius:.75rem;color:#e5e7eb;">
+  <div class="d-flex align-items-center justify-content-between gap-2">
+    <div class="fw-bold">Flowgate</div>
+    <div class="d-flex align-items-center gap-2">
+      <small id="tr-status" class="text-muted">desconectado</small>
+      <button id="tr-toggle-ui" type="button" class="btn btn-sm btn-outline-secondary" aria-label="Mostrar painel" title="Mostrar painel">
+        <i class="fa-solid fa-gear"></i>
+      </button>
+    </div>
+  </div>
+
+  <div id="tr-body" class="collapse mt-3">
+    <div class="row g-2 align-items-end">
+      <div class="col-12 col-md-4">
+        <label class="form-label small text-muted mb-1">Sala</label>
+        <input id="tr-room" class="form-control form-control-sm" value="PET998DR" autocomplete="off" />
+      </div>
+
+      <div class="col-12 col-md-4">
+        <label class="form-label small text-muted mb-1">Password (opcional)</label>
+        <input id="tr-pass" class="form-control form-control-sm" type="password" name="password"
+               autocomplete="current-password" placeholder="(mesma para todos)" />
+      </div>
+
+      <div class="col-12 col-md-4">
+        <label class="form-label small text-muted mb-1">Username (opcional)</label>
+        <input id="tr-username" class="form-control form-control-sm" type="text" name="username"
+               autocomplete="nickname" placeholder="ex.: Alex" />
+      </div>
+
+      <div class="col-12 col-md-8 d-flex flex-wrap gap-3 mt-1">
+        <button id="tr-local-host-btn" type="button" class="btn btn-sm btn-outline-warning d-flex align-items-center gap-2">
+          <i class="fa-solid fa-tower-broadcast"></i>
+          <span>Host</span>
+        </button>
+        <div class="d-flex flex-column">
+          <label class="form-label small text-muted mb-1">Servidor TURN</label>
+          <select id="tr-turn-select" class="form-select form-select-sm" style="min-width: 220px;"></select>
+        </div>
+      </div>
+
+      <div class="col-12 col-md-4 d-flex gap-2 justify-content-md-end">
+        <button id="tr-join" type="button" class="btn btn-sm btn-outline-primary w-100 w-md-auto">Conectar</button>
+        <button id="tr-leave" type="button" class="btn btn-sm btn-outline-secondary w-100 w-md-auto">Sair</button>
+      </div>
+    </div>
+
+    <div class="mt-3">
+      <div class="row g-2 small">
+        <div class="col-12 col-md-4"><span class="fw-semibold">Meu peerId:</span> <span id="tr-self">-</span></div>
+        <div class="col-12 col-md-8">
+          <span class="fw-semibold">Relays ativos:</span> <span id="tr-relays">-</span>
+          <span class="ms-2 fw-semibold">TURN:</span> <span id="tr-turn-state">-</span>
+        </div>
+      </div>
+
+      <div class="mt-2 row">
+        <div class="col-4">
+          <div class="fw-semibold small">Hosts</div>
+          <div id="tr-host-list" class="d-flex flex-column gap-1 mt-1"></div>
+          <div id="tr-host-empty" class="small text-muted mt-1">nenhum host</div>
+        </div>
+        <div class="col-4">
+          <div class="fw-semibold small">Peers</div>
+          <div id="tr-peer-list" class="d-flex flex-column gap-1 mt-1"></div>
+          <div id="tr-peer-empty" class="small text-muted mt-1">nenhum peer</div>
+        </div>
+        <div class="col-4">
+          <div class="fw-semibold small">Bots</div>
+          <div id="tr-bot-list" class="d-flex flex-column gap-1 mt-1"></div>
+          <div id="tr-bot-empty" class="small text-muted mt-1">nenhum bot</div>
+        </div>
+      </div>
+    </div>
+
+    <hr class="my-3" />
+
+    <div class="fw-bold mb-2">Link rapido (convite)</div>
+
+    <div class="row g-3 align-items-center">
+      <div class="col-12 col-md-auto d-flex align-items-center gap-2 order-md-1 order-2">
+        <canvas id="tr-qr-canvas" class="border rounded p-2" style="max-width: 140px;"></canvas>
+      </div>
+      <div class="col-12 col-md order-md-2 order-1">
+        <div class="form-check">
+          <input id="tr-link-include-pass" class="form-check-input" type="checkbox" checked />
+          <label class="form-check-label small text-muted" for="tr-link-include-pass">Incluir password no link</label>
+        </div>
+        <div class="form-check mt-1">
+          <input id="tr-link-include-name" class="form-check-input" type="checkbox" />
+          <label class="form-check-label small text-muted" for="tr-link-include-name">Incluir username</label>
+        </div>
+        <div id="tr-invite-link" class="form-control form-control-sm" role="button" tabindex="0" title="Clique para copiar" style="cursor:pointer; user-select:all; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width: 380px;">-</div>
+        <div id="tr-invite-hint" class="small text-muted mt-1">Clique no link acima para copiar.</div>
+      </div>
+    </div>
+
+    <hr class="my-3" />
+
+    <div class="fw-bold mb-2">Chat</div>
+    <div id="chat-messages" class="border rounded p-2" style="height:220px; overflow-y:auto; font-size:13px;"></div>
+
+    <div class="row g-2 mt-2">
+      <div class="col-12 col-md">
+        <input id="chat-input" class="form-control form-control-sm" type="text"
+               placeholder="Digite e pressione Enter" autocomplete="off" />
+      </div>
+      <div class="col-12 col-md-auto d-grid">
+        <button id="chat-send" type="button" class="btn btn-sm btn-outline-primary">Enviar</button>
+      </div>
+    </div>
+
+    <div id="admin-log-wrap" class="mt-3">
+      <hr class="my-3" />
+      <div class="fw-bold mb-2">Log</div>
+      <div id="tr-log" class="border rounded p-2"
+           style="height:140px; overflow:auto; font-size:12px; white-space:pre-wrap;"></div>
+    </div>
+
+  </div>
+</div>
+
+<script type="module">
+  if (window.__TRYSTERO_WIDGET_READY__) {
+    console.warn('Trystero widget ja inicializado. Remova duplicatas.');
+  } else {
+    window.__TRYSTERO_WIDGET_READY__ = true;
+    const $ = (id) => document.getElementById(id);
+
+    const statusEl = $('tr-status');
+    const selfEl   = $('tr-self');
+    const relaysEl = $('tr-relays');
+    const turnStateEl = $('tr-turn-state');
+    const turnSelectEl = $('tr-turn-select');
+
+    const uiBody   = $('tr-body');
+    const btnToggleUi = $('tr-toggle-ui');
+
+    const roomInput  = $('tr-room');
+    const passInput  = $('tr-pass');
+    const userInput  = $('tr-username');
+    const autoJoinCb = null; // removido: autojoin sempre ativo
+    const hostBtn = $('tr-local-host-btn');
+    const btnJoin    = $('tr-join');
+    const btnLeave   = $('tr-leave');
+
+    const hostListEl = $('tr-host-list');
+    const hostEmptyEl = $('tr-host-empty');
+    const peerListEl  = $('tr-peer-list');
+    const peerEmptyEl = $('tr-peer-empty');
+    const botListEl = $('tr-bot-list');
+    const botEmptyEl = $('tr-bot-empty');
+
+    const msgBox  = $('chat-messages');
+    const msgIn   = $('chat-input');
+    const msgSend = $('chat-send');
+
+    const cbIncPass   = $('tr-link-include-pass');
+    const cbIncName   = $('tr-link-include-name');
+    const inviteEl    = $('tr-invite-link');
+    const inviteHint  = $('tr-invite-hint');
+    const qrCanvas    = $('tr-qr-canvas');
+
+    const adminLogWrap = $('admin-log-wrap');
+    const logEl = $('tr-log');
+
+    const STORAGE_KEY = 'trystero_widget_state_v5';
+    const DEFAULT_ROOM = 'PET998DR';
+    const DEFAULT_PASS = 'trystero-pass-2f1b6d0f9c21419a92f2c0d4';
+    const STABLE_ID_STORAGE = 'trystero_nostr_priv_hex'; // reuse legacy key for stable id
+    const PEERJS_SERVER_HOST = '0.peerjs.com';
+    const PEERJS_SERVER_PORT = 443;
+    const PEERJS_SERVER_PATH = '/';
+    const PEERJS_SERVER_KEY = 'peerjs';
+
+    function setToggleVisual(open){
+      if (!btnToggleUi) return;
+      let icon = btnToggleUi.querySelector('i');
+      if (!icon) {
+        icon = document.createElement('i');
+        icon.className = 'fa-solid fa-gear';
+        btnToggleUi.textContent = '';
+        btnToggleUi.appendChild(icon);
+      } else {
+        icon.className = 'fa-solid fa-gear';
+      }
+      btnToggleUi.setAttribute('aria-label', open ? 'Ocultar painel' : 'Mostrar painel');
+      btnToggleUi.setAttribute('title', open ? 'Ocultar painel' : 'Mostrar painel');
+      btnToggleUi.classList.toggle('btn-success', open);
+      btnToggleUi.classList.toggle('btn-outline-secondary', !open);
+    }
+
+    // Persiste ID estavel usado para presenca e lista de peers
+    const PERSISTED_STABLE_ID = ensureStableId();
+    const STABLE_SELF_ID = `sid-${PERSISTED_STABLE_ID.slice(0, 12)}`;
+    try { window.__TRYSTERO_STABLE_ID = STABLE_SELF_ID; } catch {}
+
+    function log(line) {
+      if (!logEl) return;
+      const ts = new Date().toLocaleTimeString();
+      logEl.textContent += `[${ts}] ${line}\n`;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+    let statusBase = 'desconectado';
+    function setStatus(text) {
+      statusBase = text;
+      statusEl.textContent = text;
+    }
+
+    function saveState(partial = {}) {
+      const current = loadState();
+      const next = { ...current, ...partial };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    }
+    function loadState() {
+      try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') || {}; }
+      catch { return {}; }
+    }
+    function readUrlParams() {
+      const url = new URL(window.location.href);
+      const p = url.searchParams;
+      return { room: p.get('room') || '', pass: p.get('pass') || '', name: p.get('name') || '', autojoin: true };
+    }
+    function resolveSignalingMode() {
+      const url = new URL(window.location.href);
+      const signal = (url.searchParams.get('signal') || '').trim().toLowerCase();
+      if (signal && signal !== 'peerjs') {
+        log(`Sinalizador ignorado: ${signal}`);
+      }
+      return 'peerjs';
+    }
+
+    function setUiExpanded(expanded) {
+      if (expanded) { uiBody.classList.add('show'); saveState({ uiExpanded: true }); }
+      else { uiBody.classList.remove('show'); saveState({ uiExpanded: false }); }
+      setToggleVisual(expanded);
+    }
+    btnToggleUi.addEventListener('click', () => setUiExpanded(!uiBody.classList.contains('show')));
+
+    const TURN_PRIMARY = [
+      {
+        username: 'esp1n',
+        credential: '159753456852',
+        urls: [
+          'turn:34.95.255.8:3478',
+          'turn:34.95.255.8:3478?transport=tcp',
+          'turns:34.95.255.8:3478?transport=tcp'
+        ]
+      }
+    ];
+    const TURN_DEFAULTS = [
+      {
+        username: 'c30cf48123b0ca5f06ed610c',
+        credential: 's9mJQSaRMVSTa9zy',
+        urls: [
+          'stun:stun.relay.metered.ca:80',
+          'turn:global.relay.metered.ca:80',
+          'turn:global.relay.metered.ca:80?transport=tcp',
+          'turn:global.relay.metered.ca:443',
+          'turns:global.relay.metered.ca:443?transport=tcp'
+        ]
+      }
+    ];
+    const TURN_PRESETS = [
+      { id: 'turn-primary-34-95-255-8', label: 'Principal - Google Cloud', config: TURN_PRIMARY },
+      { id: 'turn-current-metered', label: 'metered.ca', config: TURN_DEFAULTS }
+    ];
+    const TURN_DEFAULT_ID = 'turn-primary-34-95-255-8';
+    let activeTurnIndex = 0;
+    let TURN_CONFIG = TURN_PRESETS[0].config;
+    let lastTurnProbeTs = 0;
+    let turnProbeInFlight = false;
+    const TURN_PROBE_COOLDOWN_MS = 15000;
+
+    const buildIceConfigs = (turnConfig) => {
+      const toArray = (val) => Array.isArray(val) ? val : [];
+      const stripTurn = (cfg) => ({
+        ...cfg,
+        urls: toArray(cfg.urls).filter((url) => /^stuns?:/i.test(String(url || '').trim()))
+      });
+      const stunCfg = turnConfig.map(stripTurn).filter((cfg) => (cfg.urls || []).length);
+      return { stun: stunCfg.length ? stunCfg : turnConfig, turn: turnConfig };
+    };
+
+    let ICE_CONFIGS = buildIceConfigs(TURN_CONFIG);
+
+    async function runTurnProbe(reason) {
+      if (turnProbeInFlight) return;
+      if (typeof RTCPeerConnection === 'undefined') {
+        log('TURN probe: RTCPeerConnection indisponivel.');
+        return;
+      }
+      const now = Date.now();
+      if ((now - lastTurnProbeTs) < TURN_PROBE_COOLDOWN_MS) return;
+      lastTurnProbeTs = now;
+      turnProbeInFlight = true;
+      const label = TURN_PRESETS[activeTurnIndex]?.label || 'TURN';
+      log(`TURN probe start: ${label} (${reason || 'auto'})`);
+      let pc = null;
+      let relayFound = false;
+      let candCount = 0;
+      try {
+        pc = new RTCPeerConnection({ iceServers: TURN_CONFIG, iceTransportPolicy: 'relay' });
+        pc.createDataChannel('probe');
+        pc.addEventListener('icecandidate', (ev) => {
+          const cand = ev?.candidate?.candidate || '';
+          if (!cand) return;
+          candCount += 1;
+          if (/ typ relay /i.test(cand)) relayFound = true;
+        });
+        const offer = await pc.createOffer({ offerToReceiveAudio: false, offerToReceiveVideo: false });
+        await pc.setLocalDescription(offer);
+        const done = await new Promise((resolve) => {
+          let settled = false;
+          const finish = (why) => {
+            if (settled) return;
+            settled = true;
+            resolve(why);
+          };
+          const timer = setTimeout(() => finish('timeout'), 4000);
+          pc.addEventListener('icegatheringstatechange', () => {
+            if (pc.iceGatheringState === 'complete') {
+              clearTimeout(timer);
+              finish('complete');
+            }
+          });
+        });
+        if (relayFound) {
+          log(`TURN probe ok: relay candidate found (${label}, ${done}, cands=${candCount})`);
+        } else {
+          log(`TURN probe fail: no relay candidates (${label}, ${done}, cands=${candCount})`);
+        }
+      } catch (e) {
+        log(`TURN probe erro: ${e?.message || e}`);
+      } finally {
+        try { if (pc) pc.close(); } catch {}
+        turnProbeInFlight = false;
+      }
+    }
+
+    function renderTurnOptions() {
+      if (!turnSelectEl) return;
+      turnSelectEl.innerHTML = '';
+      for (const preset of TURN_PRESETS) {
+        const opt = document.createElement('option');
+        opt.value = preset.id;
+        opt.textContent = preset.label;
+        turnSelectEl.appendChild(opt);
+      }
+    }
+
+    function getTurnPresetIndexById(id) {
+      const idx = TURN_PRESETS.findIndex((preset) => preset.id === id);
+      return idx >= 0 ? idx : 0;
+    }
+
+    function applyTurnPreset(id, opts = {}) {
+      const nextIndex = getTurnPresetIndexById(id);
+      const preset = TURN_PRESETS[nextIndex];
+      const changed = activeTurnIndex !== nextIndex;
+      activeTurnIndex = nextIndex;
+      TURN_CONFIG = preset.config;
+      ICE_CONFIGS = buildIceConfigs(TURN_CONFIG);
+      if (turnSelectEl) turnSelectEl.value = preset.id;
+      if (changed && !opts.silent) log(`TURN selecionado: ${preset.label}`);
+      if (changed && opts.reconnect && room) {
+        disconnect();
+        setTimeout(() => connect(`turn-select:${preset.id}`), 250);
+      }
+    }
+
+    function requestTurnFailover(reason) {
+      if (turnFailoverPending) return false;
+      if (TURN_PRESETS.length < 2) return false;
+      if (connectInProgress) return false;
+      const nextIndex = (activeTurnIndex + 1) % TURN_PRESETS.length;
+      if (nextIndex === activeTurnIndex) return false;
+      const from = TURN_PRESETS[activeTurnIndex];
+      const to = TURN_PRESETS[nextIndex];
+      turnFailoverPending = true;
+      activeTurnIndex = nextIndex;
+      TURN_CONFIG = to.config;
+      ICE_CONFIGS = buildIceConfigs(TURN_CONFIG);
+      if (turnSelectEl) turnSelectEl.value = to.id;
+      log(`TURN failover: ${from.label} -> ${to.label} (${reason || 'falha'})`);
+      if (room) {
+        disconnect();
+        setTimeout(() => connect(`turn-failover:${reason || 'falha'}`), 250);
+      } else {
+        setTimeout(() => connect(`turn-failover:${reason || 'falha'}`), 250);
+      }
+      return true;
+    }
+
+    let PeerCtor = null;
+    let peer = null;
+    let peerId = '';
+    let peerReady = false;
+    let selfIdFn = () => (peer && peer.id) ? String(peer.id) : STABLE_SELF_ID;
+    try {
+      const mod = await import('https://esm.run/peerjs');
+      PeerCtor = mod.Peer || mod.default || mod;
+      if (typeof PeerCtor !== 'function') throw new Error('PeerJS import invalido');
+    } catch (e) {
+      setStatus('erro: import');
+      throw e;
+    }
+
+    let QR = null;
+    async function ensureQrLib() {
+      if (QR) return QR;
+      try { QR = await import('https://esm.run/qrcode'); return QR; } catch { return null; }
+    }
+
+    function generateId(bytes = 16) {
+      const arr = new Uint8Array(bytes);
+      crypto.getRandomValues(arr);
+      return Array.from(arr).map((b) => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    function ensureStableId() {
+      try {
+        const stored = localStorage.getItem(STABLE_ID_STORAGE);
+        if (stored && /^[0-9a-f]{16,128}$/i.test(stored)) return stored.toLowerCase();
+      } catch {}
+      const key = generateId(16);
+      try { localStorage.setItem(STABLE_ID_STORAGE, key); } catch {}
+      return key;
+    }
+
+    function sanitizeId(raw) {
+      return String(raw || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '') || 'room';
+    }
+
+    function hashString(input) {
+      const str = String(input || '');
+      let hash = 2166136261;
+      for (let i = 0; i < str.length; i++) {
+        hash ^= str.charCodeAt(i);
+        hash = (hash * 16777619) >>> 0;
+      }
+      return hash.toString(16);
+    }
+
+    function buildRoomHostId(roomId, password) {
+      const base = sanitizeId(roomId);
+      const passHash = password ? hashString(password) : 'nopass';
+      let hostId = `room-${base}-${passHash}`;
+      if (hostId.length > 50) hostId = hostId.slice(0, 50);
+      return hostId;
+    }
+    function buildRoomPeerPrefix(roomId, password) {
+      const base = sanitizeId(roomId);
+      const passHash = password ? hashString(password) : 'nopass';
+      const roomHash = hashString(`${base}|${passHash}`).slice(0, 10);
+      const baseShort = (base || 'room').slice(0, 8);
+      return `roomm-${baseShort}-${roomHash}`;
+    }
+    function buildMeshPeerId(roomId, password) {
+      const prefix = buildRoomPeerPrefix(roomId, password);
+      const stableShort = String(STABLE_SELF_ID || '').replace(/^sid-/, '').slice(0, 12) || generateId(6);
+      const raw = `${prefix}-${stableShort}-${generateId(3)}`;
+      return raw.length > 50 ? raw.slice(0, 50) : raw;
+    }
+    let signalingMode = resolveSignalingMode();
+
+    // ======= Tags locais (host/serial/etc.) =======
+    function normalizeTag(t) { return String(t || '').trim().toLowerCase().replace(/\s+/g, '-'); }
+    function sanitizeTags(list) {
+      const cleaned = new Set();
+      try {
+        for (const raw of (list || [])) {
+          const nt = normalizeTag(raw);
+          if (nt) cleaned.add(nt);
+        }
+      } catch {}
+      if (cleaned.has('host-hub')) cleaned.add('host');
+      if (!cleaned.has('host')) cleaned.delete('host-hub');
+      if (cleaned.has('host')) cleaned.delete('visitante');
+      if (!cleaned.size) cleaned.add('visitante');
+      return cleaned;
+    }
+
+    let localTags = sanitizeTags(['visitante']);
+    function applyLocalTags(next) {
+      localTags = sanitizeTags(next ?? localTags);
+      hostBtn?.classList.toggle('active', localTags.has('host'));
+      try { window.dispatchEvent(new CustomEvent('trystero:localTags', { detail: { tags: Array.from(localTags) } })); } catch {}
+    }
+
+    function setHubTag(isHub) {
+      const next = new Set(localTags);
+      if (isHub) next.add('host-hub');
+      else next.delete('host-hub');
+      applyLocalTags(next);
+    }
+
+    window.__TRYSTERO_PEER__ = window.__TRYSTERO_PEER__ || {
+      setLocalTags: (arr) => {
+        applyLocalTags(Array.isArray(arr) ? arr : []);
+      },
+      addLocalTag: (t) => {
+        const nt = normalizeTag(t); if (!nt) return;
+        const next = new Set(localTags);
+        next.add(nt);
+        applyLocalTags(next);
+      },
+      removeLocalTag: (t) => {
+        const nt = normalizeTag(t); if (!nt) return;
+        const next = new Set(localTags);
+        next.delete(nt);
+        applyLocalTags(next);
+      },
+      getLocalTags: () => Array.from(localTags)
+    };
+
+    hostBtn.addEventListener('click', () => {
+      const isOn = hostBtn.classList.toggle('active');
+      if (isOn) window.__TRYSTERO_PEER__.addLocalTag('host');
+      else window.__TRYSTERO_PEER__.removeLocalTag('host');
+      saveState({ localHost: isOn });
+      if (!room) return;
+      if (!isOn) {
+        if (hubTakeoverTimer) { clearTimeout(hubTakeoverTimer); hubTakeoverTimer = null; }
+        resetHubClaimRetry();
+      }
+      if (isHostMode) {
+        log('Host alterado, reconectando...');
+        disconnect();
+        setTimeout(() => connect('host-toggle'), 200);
+        return;
+      }
+      if (isOn) {
+        log('Host candidato ativo.');
+        connectToHost();
+        maybeScheduleHubClaim('host-toggle');
+        return;
+      }
+      log('Host candidato desativado.');
+    });
+
+    // Eventos da serial (usa hifen no widget de serial, mas mantemos colon por compatibilidade)
+    const addSerialTag = () => window.__TRYSTERO_PEER__.addLocalTag('serial');
+    const removeSerialTag = () => window.__TRYSTERO_PEER__.removeLocalTag('serial');
+    window.addEventListener('serial-connected', addSerialTag);
+    window.addEventListener('serial-disconnected', removeSerialTag);
+    window.addEventListener('serial:connected', addSerialTag);
+    window.addEventListener('serial:disconnected', removeSerialTag);
+
+    // ======= Invite link + QR + copiar =======
+    function generateInviteLink() {
+      const base = new URL(window.location.href);
+      const roomId = (roomInput.value || DEFAULT_ROOM).trim() || DEFAULT_ROOM;
+      const password = (passInput.value || '').trim();
+      const name = (userInput.value || '').trim();
+
+      base.searchParams.set('room', roomId);
+      base.searchParams.set('autojoin', '1');
+      base.searchParams.delete('signal');
+
+      if (cbIncName.checked && name) base.searchParams.set('name', name);
+      else base.searchParams.delete('name');
+
+      if (cbIncPass.checked && password) base.searchParams.set('pass', password);
+      else base.searchParams.delete('pass');
+
+      const link = base.toString();
+      inviteEl.textContent = link;
+      renderQr(link);
+    }
+
+    async function renderQr(link) {
+      const lib = await ensureQrLib();
+      if (!lib) return;
+      try { await lib.toCanvas(qrCanvas, link, { width: 140, margin: 1 }); } catch {}
+    }
+
+    async function copyText(text) {
+      try { await navigator.clipboard.writeText(text); return true; }
+      catch {
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.style.position='fixed'; ta.style.left='-9999px';
+        document.body.appendChild(ta); ta.focus(); ta.select();
+        try { const ok = document.execCommand('copy'); document.body.removeChild(ta); return ok; }
+        catch { document.body.removeChild(ta); return false; }
+      }
+    }
+
+    async function copyInviteLinkFromUi() {
+      const link = (inviteEl.textContent || '').trim();
+      if (!link || link === '-') return;
+      const ok = await copyText(link);
+      inviteHint.textContent = ok ? 'Copiado para a area de transferencia.' : 'Falha ao copiar. Copie manualmente.';
+      if (ok) setTimeout(() => (inviteHint.textContent = 'Clique no link acima para copiar.'), 1500);
+    }
+
+    inviteEl.addEventListener('click', copyInviteLinkFromUi);
+    inviteEl.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') copyInviteLinkFromUi(); });
+
+    roomInput.addEventListener('input', () => { saveState({ room: roomInput.value.trim() }); generateInviteLink(); });
+    passInput.addEventListener('input', () => { saveState({ pass: passInput.value }); generateInviteLink(); });
+    userInput.addEventListener('input', () => { saveState({ name: userInput.value.trim() }); generateInviteLink(); syncSelfPeer(); });
+    // autoJoinCb removido: autojoin sempre ativo
+    cbIncPass.addEventListener('change', () => { generateInviteLink(); saveState({ includePass: !!cbIncPass.checked }); });
+    cbIncName.addEventListener('change', () => { generateInviteLink(); saveState({ includeName: !!cbIncName.checked }); });
+    if (turnSelectEl) {
+      turnSelectEl.addEventListener('change', () => {
+        applyTurnPreset(turnSelectEl.value, { reconnect: true });
+      });
+    }
+
+    // ======= Chat bubbles =======
+    function addChatBubble({ text, side, from }) {
+      const row = document.createElement('div');
+      row.className = `d-flex mb-2 ${side === 'right' ? 'justify-content-end' : 'justify-content-start'}`;
+
+      const bubble = document.createElement('div');
+      bubble.className = side === 'right' ? 'rounded px-2 py-1 bg-primary text-white' : 'border rounded px-2 py-1';
+      bubble.style.maxWidth = '85%';
+      bubble.style.whiteSpace = 'pre-wrap';
+      bubble.style.wordBreak = 'break-word';
+
+      const header = document.createElement('div');
+      header.className = side === 'right' ? 'small opacity-75' : 'small text-muted';
+      header.innerHTML = `<i class="fa-solid fa-user me-1"></i>[${from}]`;
+
+      const body = document.createElement('div');
+      body.textContent = text;
+
+      bubble.appendChild(header);
+      bubble.appendChild(body);
+      row.appendChild(bubble);
+      msgBox.appendChild(row);
+      msgBox.scrollTop = msgBox.scrollHeight;
+    }
+
+    // IMPORTANTE: ignora loopback silencioso (usado apenas para executar comandos localmente)
+    window.addEventListener('chat:message', (ev) => {
+      const d = ev?.detail;
+      if (!d || typeof d.text !== 'string') return;
+
+      if (d.origin === 'trystero-in' && d.loopback === true && d.silent === true) return;
+
+      if (d.origin === 'trystero-in') addChatBubble({ text: d.text, side: 'left', from: d.username || 'peer' });
+      else if (d.origin === 'trystero-out') addChatBubble({ text: d.text, side: 'right', from: 'eu' });
+    });
+
+    // ======= Chat singleton (widgets sempre enviam por ele) =======
+    (function initTrysteroChatSingleton() {
+      if (window.__TRYSTERO_CHAT__) return;
+
+      const state = { room: null, sendChat: null, queue: [], maxQueue: 50, gen: 0 };
+
+      function safeUsername() { return (userInput.value || '').trim() || 'eu'; }
+      function buildPayload(textOrPayload) {
+        if (typeof textOrPayload === 'string') {
+          return { text: textOrPayload, name: safeUsername(), timestamp: Date.now(), id: `singleton:${Date.now()}:${Math.random().toString(36).slice(2)}` };
+        }
+        const p = (textOrPayload && typeof textOrPayload === 'object') ? { ...textOrPayload } : {};
+        if (!p.id) p.id = `singleton:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+        if (!p.timestamp) p.timestamp = Date.now();
+        if (!p.name) p.name = safeUsername();
+        if (typeof p.text !== 'string') p.text = String(p.text ?? '');
+        return p;
+      }
+      function emit(detail) { try { window.dispatchEvent(new CustomEvent('chat:message', { detail })); } catch {} }
+
+      function bindToRoom(room) {
+        state.gen += 1;
+        const g = state.gen;
+        state.room = room;
+        state.sendChat = null;
+        if (!room) return;
+
+        const [sendChat, getChat] = room.makeAction('chat');
+        state.sendChat = sendChat;
+
+        getChat((data, peerId) => {
+          if (g !== state.gen) return;
+          const fromPeer = (peerId || 'peer');
+          const username = (data?.name && String(data.name).trim()) ? String(data.name).trim() : fromPeer.slice(0, 6);
+          const text = String(data?.text || '');
+          emit({
+            id: String(data?.id || `${fromPeer}:${data?.timestamp || Date.now()}:${text}`),
+            key: String(data?.id || ''),
+            text,
+            peerId: fromPeer,
+            username,
+            raw: data,
+            ts: Number(data?.timestamp || Date.now()),
+            origin: 'trystero-in'
+          });
+        });
+
+        while (state.queue.length) {
+          const item = state.queue.shift();
+          try { state.sendChat(item.payload); } catch {}
+        }
+      }
+
+      async function send(text, meta = {}) {
+        const payload = buildPayload(text);
+
+        // Sem sala: fazemos echo local para UX (nao ha wrappedSend rodando)
+        if (!(state.sendChat && state.room)) {
+          emit({
+            id: payload.id,
+            key: payload.id,
+            text: payload.text,
+            peerId: String(typeof selfIdFn === 'function' ? (selfIdFn() || '') : ''),
+            username: payload.name,
+            raw: payload,
+            ts: payload.timestamp,
+            origin: 'trystero-out',
+            meta
+          });
+          state.queue.push({ payload });
+          if (state.queue.length > state.maxQueue) state.queue.shift();
+          return payload.id;
+        }
+
+        // Com sala: o makeAction('chat') ja foi "wrapado" e emite out + loopback + envio real
+        try { state.sendChat(payload); } catch {}
+        return payload.id;
+      }
+
+      window.__TRYSTERO_CHAT__ = { send, isReady: () => !!(state.room && state.sendChat), _bindToRoom: bindToRoom };
+
+      window.addEventListener('trystero:room', (ev) => bindToRoom(ev?.detail?.room || null));
+    })();
+
+    function uiSend() {
+      const text = msgIn.value.trim();
+      if (!text) return;
+      window.__TRYSTERO_CHAT__?.send(text, { via: 'ui' });
+      msgIn.value = '';
+    }
+    msgSend.addEventListener('click', uiSend);
+    msgIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') uiSend(); });
+
+    // ======= Peers por PRESENCA (corrige lista definitivamente) =======
+    // Usamos uma chave estavel (sid) para evitar duplicar peers entre reloads
+    let peers = new Map(); // key (sid||peerId) => { name?:string, tags:Set<string>, lastSeen:number, online:boolean, peerId?:string, sid?:string }
+    let lastPeerRenderSig = '';
+    let presenceTimer = null;
+    let presenceSweepTimer = null;
+    let presenceBurstTimer = null;
+    let localTagsListener = null;
+    let connectInProgress = false;
+    let lastPresenceChangeAt = Date.now();
+    let hubStabilityTimer = null;
+    const HUB_STABILITY_WINDOW_MS = 3000;
+
+    function emitPeerEvent(type, peerId, meta = {}) {
+      try {
+        window.dispatchEvent(new CustomEvent(`trystero:${type}`, {
+          detail: {
+            peerId,
+            name: meta?.name || '',
+            tags: meta?.tags ? Array.from(meta.tags) : [],
+            online: meta?.online !== false
+          }
+        }));
+      } catch {}
+    }
+
+    function tagsEqual(a, b) {
+      if (a === b) return true;
+      if (!a || !b) return false;
+      if (a.size !== b.size) return false;
+      for (const t of a) {
+        if (!b.has(t)) return false;
+      }
+      return true;
+    }
+
+    function notePresenceActivity() {
+      lastPresenceChangeAt = Date.now();
+      if (hubStabilityTimer) {
+        clearTimeout(hubStabilityTimer);
+        hubStabilityTimer = null;
+      }
+    }
+
+    function scheduleHubClaimAfterStability(reason) {
+      if (!room || isHostMode) return false;
+      if (hostConn && hostConn.open) { resetHubClaimRetry(); return false; }
+      if (!isHostCandidate()) return false;
+      const elapsed = Date.now() - lastPresenceChangeAt;
+      if (elapsed >= HUB_STABILITY_WINDOW_MS) {
+        scheduleHubClaimRetry(reason || 'estavel', { reuseAttempt: true });
+        return true;
+      }
+      if (hubStabilityTimer) return false;
+      const wait = Math.max(250, HUB_STABILITY_WINDOW_MS - elapsed);
+      log(`Aguardando estabilidade (${Math.round(wait)}ms) para eleger host-hub`);
+      hubStabilityTimer = setTimeout(() => {
+        hubStabilityTimer = null;
+        scheduleHubClaimAfterStability(reason || 'estavel');
+      }, wait);
+      return false;
+    }
+
+    function upsertPeer(peerId, meta = {}) {
+      if (!peerId && !meta.sid) return;
+      const now = Date.now();
+      const key = meta.sid || peerId;
+      let cur = peers.get(key);
+      if (!cur && meta.sid && peerId && peers.has(peerId)) {
+        cur = peers.get(peerId);
+        peers.delete(peerId);
+      }
+      const prev = cur;
+      const prevName = prev?.name || '';
+      const prevTags = prev?.tags || new Set(['visitante']);
+      const prevOnline = prev?.online !== false;
+      const nextName = (typeof meta.name === 'string' && meta.name.trim()) ? meta.name.trim() : prevName;
+      const nextTags = Array.isArray(meta.tags) ? sanitizeTags(meta.tags) : sanitizeTags(prevTags);
+      const nextOnline = meta.online === false ? false : true;
+      const changed = !prev
+        || prevOnline !== nextOnline
+        || nextName !== prevName
+        || !tagsEqual(prevTags, nextTags);
+
+      if (!cur) cur = { tags: new Set(['visitante']), lastSeen: now, online: false };
+      if (nextName) cur.name = nextName;
+      cur.tags = nextTags;
+
+      if (cur.name && cur.name.toLowerCase().startsWith('bot-')) {
+        cur.tags.add('bot');
+      }
+      cur.lastSeen = now;
+      cur.online = nextOnline;
+      cur.peerId = peerId;
+      cur.sid = meta.sid || cur.sid;
+      const wasOnline = prev ? prevOnline : false;
+      peers.set(key, cur);
+      if (changed) notePresenceActivity();
+      if (!wasOnline && cur.online !== false && key !== STABLE_SELF_ID) emitPeerEvent('peer-join', key, cur);
+      updateStatusDetails();
+    }
+
+    function shortPeer(id) {
+      const s = String(id || '');
+      return s.length > 12 ? `${s.slice(0, 6)}...${s.slice(-3)}` : (s || '-');
+    }
+
+    function tagClass(tag) {
+      switch (tag) {
+        case 'host': return 'text-bg-warning';
+        case 'host-hub': return 'text-bg-info';
+        case 'serial': return 'text-bg-success';
+        case 'admin': return 'text-bg-primary';
+        case 'visitante': return 'text-bg-dark';
+        case 'flashscore': return 'text-bg-danger';
+        case 'bot': return 'text-bg-secondary';
+        default: return 'text-bg-dark';
+      }
+    }
+    function countOnlinePeers() {
+      let count = 0;
+      for (const [key, meta] of peers.entries()) {
+        if (key === STABLE_SELF_ID) continue;
+        if (meta?.online === false) continue;
+        count += 1;
+      }
+      return count;
+    }
+    let lastRelayOpenCount = 0;
+    function updateStatusDetails() {
+      if (!statusEl) return;
+      if (!room) { statusEl.textContent = statusBase; return; }
+      const peerCount = countOnlinePeers();
+      const parts = [statusBase];
+      if (statusBase === 'conectado') {
+        if (!isHostMode && (!hostConn || hostConn.open !== true)) parts.push('aguardando host');
+        if (lastRelayOpenCount === 0) parts.push('sem conexoes');
+        if (peerCount === 0) parts.push('aguardando peers');
+        else parts.push(`peers:${peerCount}`);
+      }
+      statusEl.textContent = parts.join(' | ');
+    }
+
+    function selfPeerId() {
+      try { return String(typeof selfIdFn === 'function' ? (selfIdFn() || '') : ''); }
+      catch { return ''; }
+    }
+
+    function buildLocalPresencePayload() {
+      const nm = (userInput.value || '').trim() || '';
+      const tagsArr = Array.from(localTags).map(normalizeTag).filter(Boolean);
+      return { name: nm, tags: tagsArr.length ? tagsArr : ['visitante'], t: Date.now(), sid: STABLE_SELF_ID };
+    }
+
+    function syncSelfPeer() {
+      const sid = STABLE_SELF_ID;
+      const peerId = selfPeerId();
+      upsertPeer(peerId || sid, { name: (userInput.value || '').trim(), tags: Array.from(localTags), online: true, sid });
+      renderPeerList();
+      updateStatusDetails();
+    }
+
+    function buildPeersRenderSignature() {
+      const entries = Array.from(peers.entries()).map(([key, meta]) => {
+        const name = String(meta?.name || '');
+        const online = meta?.online === false ? '0' : '1';
+        const tags = meta?.tags ? Array.from(meta.tags).sort().join(',') : '';
+        return `${key}|${online}|${name}|${tags}`;
+      });
+      entries.sort();
+      return entries.join('||');
+    }
+
+    function renderPeerList() {
+      const sig = buildPeersRenderSignature();
+      if (sig === lastPeerRenderSig) return;
+      lastPeerRenderSig = sig;
+
+      const createPeerRow = (key, meta) => {
+        const row = document.createElement('div');
+        row.className = 'd-flex align-items-center flex-wrap py-1';
+        row.style.fontSize = 'clamp(14px, 3vw, 16px)';
+        row.style.gap = '0.65rem';
+
+        const tagGroup = document.createElement('div');
+        tagGroup.className = 'd-flex';
+        row.appendChild(tagGroup);
+
+        const main = document.createElement('span');
+        main.className = 'badge text-bg-dark';
+        main.style.padding = '0.4rem 0.65rem';
+
+        let label;
+        if (meta?.name) {
+          label = meta.name;
+        } else {
+          label = shortPeer(meta?.sid || meta?.peerId || key);
+        }
+        const dotColor = meta?.online === false ? 'bg-danger' : 'bg-success';
+        const dot = `<span class="d-inline-block rounded-circle ${dotColor} me-2" style="width:12px;height:12px;"></span>`;
+        const isBot = (meta?.name && meta.name.toLowerCase().startsWith('bot-'));
+        const icon = isBot ? 'fa-robot' : 'fa-user';
+        main.innerHTML = `${dot}<i class="fa-solid ${icon} fa-lg me-1"></i>${label}`;
+        main.title = meta?.peerId || key;
+
+        const tags = meta?.tags ? Array.from(meta.tags).sort() : [];
+
+        if (tags.length === 0) {
+          main.classList.add('rounded-pill');
+        } else {
+          main.style.borderTopLeftRadius = '1rem';
+          main.style.borderBottomLeftRadius = '1rem';
+          main.style.borderTopRightRadius = '0';
+          main.style.borderBottomRightRadius = '0';
+        }
+        tagGroup.appendChild(main);
+
+        tags.forEach((t, index) => {
+          const b = document.createElement('span');
+          b.className = `badge ${tagClass(t)}`;
+          b.style.padding = '0.4rem 0.6rem';
+          b.style.borderRadius = '0';
+          if (index === tags.length - 1) {
+              b.style.borderTopRightRadius = '1rem';
+              b.style.borderBottomRightRadius = '1rem';
+          }
+          b.textContent = t;
+          tagGroup.appendChild(b);
+        });
+        return row;
+      };
+
+      const hosts = [];
+      const bots = [];
+      const regularPeers = [];
+
+      const entries = Array.from(peers.entries()).sort((a, b) => {
+        const nameA = (a[1].name || '').toLowerCase();
+        const nameB = (b[1].name || '').toLowerCase();
+        if (nameA && nameB && nameA !== nameB) return nameA.localeCompare(nameB);
+        return String(a[0]).localeCompare(String(b[0]));
+      });
+
+      for (const [key, meta] of entries) {
+        if (meta.tags.has('host')) {
+          hosts.push([key, meta]);
+        } else if (meta.name && meta.name.toLowerCase().startsWith('bot-')) {
+          bots.push([key, meta]);
+        } else {
+          regularPeers.push([key, meta]);
+        }
+      }
+
+      hostListEl.innerHTML = '';
+      if (hosts.length > 0) {
+        hosts.forEach(([key, meta]) => hostListEl.appendChild(createPeerRow(key, meta)));
+        hostEmptyEl.classList.add('d-none');
+      } else {
+        hostEmptyEl.classList.remove('d-none');
+      }
+
+      peerListEl.innerHTML = '';
+      if (regularPeers.length > 0) {
+        regularPeers.forEach(([key, meta]) => peerListEl.appendChild(createPeerRow(key, meta)));
+        peerEmptyEl.classList.add('d-none');
+      } else {
+        peerEmptyEl.classList.remove('d-none');
+      }
+      
+      botListEl.innerHTML = '';
+      if (bots.length > 0) {
+        bots.forEach(([key, meta]) => botListEl.appendChild(createPeerRow(key, meta)));
+        botEmptyEl.classList.add('d-none');
+      } else {
+        botEmptyEl.classList.remove('d-none');
+      }
+    }
+
+    function sweepPeers(timeoutMs = 9000) {
+      const now = Date.now();
+      let changed = false;
+      for (const [key, meta] of peers.entries()) {
+        if (!meta?.lastSeen) continue;
+        const isStale = (now - meta.lastSeen) > timeoutMs;
+        if (isStale && meta.online !== false) {
+          meta.online = false;
+          if (key !== STABLE_SELF_ID) emitPeerEvent('peer-leave', key, meta);
+          changed = true;
+        }
+      }
+      if (changed) notePresenceActivity();
+      if (changed) renderPeerList();
+      if (changed) updateStatusDetails();
+      if (!isConnectionAlive()) maybeScheduleHubClaim('sweep');
+    }
+
+    // ======= PeerJS room adapter =======
+    const FLOWGATE_PROTO = 'flowgate-peerjs-v1';
+    const SYS_PEER_JOIN = '__sys:peer-join';
+    const SYS_PEER_LEAVE = '__sys:peer-leave';
+    const OUTBOUND_QUEUE_MAX = 120;
+
+    let room = null;
+    let syncTimer = null;
+    let roomHostId = '';
+    let activeRoomId = '';
+    let isHostMode = false;
+    let hubTakeoverTimer = null;
+    const HUB_TAKEOVER_MIN_DELAY = 400;
+    const HUB_TAKEOVER_MAX_DELAY = 1200;
+    let hubClaimTimer = null;
+    let hubClaimAttempt = 0;
+    const HUB_CLAIM_BASE_DELAY = 1200;
+    const HUB_CLAIM_MAX_DELAY = 12000;
+    const HOST_ELECTION_FRESH_MS = 3500;
+    let peerConnections = new Map();
+    let hostConn = null;
+    let actionHandlers = new Map();
+    let peerJoinHandlers = new Set();
+    let peerLeaveHandlers = new Set();
+    let knownPeers = new Set();
+    let outboundQueue = [];
+    let hostReconnectTimer = null;
+    let hostReconnectDelay = 1500;
+    let turnStateByPeer = new Map();
+    let iceMode = 'turn';
+    let pendingTurnFallback = false;
+    let turnFailoverPending = false;
+    let hostConnectTimer = null;
+    let hostConnectStartedAt = 0;
+    const HOST_CONNECT_TIMEOUT_MS = 8000;
+    const HOST_CONNECT_GRACE_MS = 2200;
+
+    function markPeerOnline(peerId) {
+      if (!peerId) return false;
+      if (knownPeers.has(peerId)) return false;
+      knownPeers.add(peerId);
+      return true;
+    }
+
+    function isConnectionAlive() {
+      if (!room) return false;
+      if (isHostMode) return !!(peer && peer.open);
+      return !!(hostConn && hostConn.open);
+    }
+
+    function markPeerOffline(peerId) {
+      if (!peerId) return false;
+      if (!knownPeers.has(peerId)) return false;
+      knownPeers.delete(peerId);
+      return true;
+    }
+
+    function notifyPeerJoin(peerId, broadcast = false) {
+      if (!markPeerOnline(peerId)) return;
+      for (const cb of peerJoinHandlers) {
+        try { cb(peerId); } catch {}
+      }
+      if (broadcast && isHostMode) sendSystem(SYS_PEER_JOIN, { peerId }, peerId);
+    }
+
+    function notifyPeerLeave(peerId, broadcast = false) {
+      if (!markPeerOffline(peerId)) return;
+      for (const cb of peerLeaveHandlers) {
+        try { cb(peerId); } catch {}
+      }
+      if (broadcast && isHostMode) sendSystem(SYS_PEER_LEAVE, { peerId }, peerId);
+    }
+
+    function buildEnvelope(action, payload, targetPeerId) {
+      return {
+        __flowgate: FLOWGATE_PROTO,
+        action,
+        payload,
+        target: targetPeerId || null,
+        from: selfIdFn(),
+        sid: STABLE_SELF_ID,
+        ts: Date.now()
+      };
+    }
+
+    function sendEnvelope(conn, envelope) {
+      if (!conn || !conn.open) return false;
+      try { conn.send(envelope); return true; } catch { return false; }
+    }
+
+    function logNegotiationFailure(conn, err, label) {
+      const pc = conn?.peerConnection;
+      const stats = conn?.__ICE_CAND_STATS__ || {};
+      const total = stats.total || 0;
+      const relay = stats.relay || 0;
+      const host = stats.host || 0;
+      const srflx = stats.srflx || 0;
+      const prflx = stats.prflx || 0;
+      const tcp = stats.tcp || 0;
+      const udp = stats.udp || 0;
+      const iceState = pc?.iceConnectionState || '?';
+      const connState = pc?.connectionState || '?';
+      const sigState = pc?.signalingState || '?';
+      const tag = label || conn?.__PC_LABEL__ || 'peer';
+      const errText = err?.type || err?.message || err || 'negotiation-failed';
+      log(`negotiation-failed (${tag}): err=${errText} ice=${iceState} conn=${connState} signaling=${sigState} relay=${relay > 0 ? 'yes' : 'no'} cands=${total} (host=${host}, srflx=${srflx}, prflx=${prflx}, relay=${relay}, udp=${udp}, tcp=${tcp})`);
+    }
+
+    function broadcastEnvelope(envelope, excludePeerId) {
+      for (const conn of peerConnections.values()) {
+        if (!conn || !conn.open) continue;
+        if (excludePeerId && conn.peer === excludePeerId) continue;
+        sendEnvelope(conn, envelope);
+      }
+    }
+
+    function sendSystem(action, payload, excludePeerId) {
+      if (!isHostMode) return;
+      const envelope = buildEnvelope(action, payload, null);
+      broadcastEnvelope(envelope, excludePeerId);
+    }
+
+    function dispatchAction(action, payload, fromPeerId) {
+      const handlers = actionHandlers.get(action);
+      if (!handlers) return;
+      for (const cb of handlers) {
+        try { cb(payload, fromPeerId); } catch {}
+      }
+    }
+
+    function sendAction(action, payload, targetPeerId) {
+      const envelope = buildEnvelope(action, payload, targetPeerId);
+      if (isHostMode) {
+        if (targetPeerId) {
+          sendEnvelope(peerConnections.get(targetPeerId), envelope);
+        } else {
+          broadcastEnvelope(envelope, null);
+        }
+        return;
+      }
+      if (hostConn && hostConn.open) {
+        sendEnvelope(hostConn, envelope);
+      } else {
+        outboundQueue.push(envelope);
+        if (outboundQueue.length > OUTBOUND_QUEUE_MAX) outboundQueue.shift();
+      }
+    }
+
+    function makeAction(action) {
+      let handlers = actionHandlers.get(action);
+      if (!handlers) {
+        handlers = new Set();
+        actionHandlers.set(action, handlers);
+      }
+      const send = (payload, targetPeerId) => sendAction(action, payload, targetPeerId);
+      const get = (cb) => { if (typeof cb === 'function') handlers.add(cb); };
+      return [send, get];
+    }
+
+    function flushOutbound() {
+      if (!hostConn || !hostConn.open) return;
+      while (outboundQueue.length) {
+        const env = outboundQueue.shift();
+        sendEnvelope(hostConn, env);
+      }
+    }
+
+    function handleEnvelope(data, conn) {
+      if (!data || data.__flowgate !== FLOWGATE_PROTO) return;
+      const action = data.action;
+      if (!action) return;
+
+      if (action === SYS_PEER_JOIN) {
+        notifyPeerJoin(data?.payload?.peerId, false);
+        return;
+      }
+      if (action === SYS_PEER_LEAVE) {
+        notifyPeerLeave(data?.payload?.peerId, false);
+        return;
+      }
+
+      if (isHostMode) {
+        const target = data.target;
+        if (target) {
+          if (target !== selfIdFn()) sendEnvelope(peerConnections.get(target), data);
+        } else {
+          broadcastEnvelope(data, conn?.peer);
+        }
+      }
+
+      dispatchAction(action, data.payload, data.from || conn?.peer);
+    }
+
+    function registerConnection(conn, opts = {}) {
+      if (!conn) return;
+      const isHostConn = opts.isHost === true;
+      attachPeerConnectionDebug(conn, isHostConn ? 'host-conn' : 'peer-conn');
+      conn.on('open', () => {
+        peerConnections.set(conn.peer, conn);
+        turnStateByPeer.set(conn.peer, null);
+        clearHostConnectTimeout();
+        if (isHostConn) {
+          hostConn = conn;
+          hostReconnectDelay = 1500;
+          if (hostReconnectTimer) { clearTimeout(hostReconnectTimer); hostReconnectTimer = null; }
+          if (hubTakeoverTimer) { clearTimeout(hubTakeoverTimer); hubTakeoverTimer = null; }
+          resetHubClaimRetry();
+        }
+        refreshRelayUi();
+        log(`${isHostConn ? 'Host' : 'Peer'} conectado: ${shortPeer(conn.peer)}`);
+        scheduleIceLog(conn, isHostConn ? 'host' : 'peer');
+        if (isHostMode && !isHostConn) notifyPeerJoin(conn.peer, true);
+        if (!isHostMode && isHostConn) notifyPeerJoin(conn.peer, false);
+        flushOutbound();
+      });
+      conn.on('data', (data) => handleEnvelope(data, conn));
+      conn.on('close', () => {
+        peerConnections.delete(conn.peer);
+        turnStateByPeer.delete(conn.peer);
+        refreshRelayUi();
+        log(`${isHostConn ? 'Host' : 'Peer'} desconectou: ${shortPeer(conn.peer)}`);
+        if (isHostMode && !isHostConn) notifyPeerLeave(conn.peer, true);
+        if (!isHostMode && isHostConn) {
+          notifyPeerLeave(conn.peer, false);
+          handleHostDisconnect('host-close');
+        }
+      });
+      conn.on('error', (err) => {
+        log(`erro conexao peerjs: ${err?.type || err?.message || err}`);
+        if (/negotiation-failed/i.test(String(err?.type || err?.message || ''))) {
+          logNegotiationFailure(conn, err);
+        }
+        if (!isHostMode && isHostConn) handleHostDisconnect('host-error');
+      });
+    }
+
+    function connectToHost() {
+      if (isHostMode || !peer || !peer.open || !roomHostId) return;
+      if (hostConn && hostConn.open) return;
+      try {
+        log(`Conectando ao host: ${shortPeer(roomHostId)}`);
+        const conn = peer.connect(roomHostId, {
+          reliable: true,
+          serialization: 'json',
+          metadata: { room: activeRoomId, sid: STABLE_SELF_ID }
+        });
+        attachPeerConnectionDebug(conn, 'client->host');
+        registerConnection(conn, { isHost: true });
+        hostConnectStartedAt = Date.now();
+        scheduleHostConnectTimeout();
+      } catch {
+        log('Falha ao iniciar conexao com host, agendando retry.');
+        scheduleHostReconnect();
+      }
+    }
+
+    function attachPeerConnectionDebug(conn, label) {
+      if (!conn || conn.__PC_DEBUG_ATTACHED__) return;
+      const pc = conn.peerConnection;
+      if (!pc) return;
+      conn.__PC_DEBUG_ATTACHED__ = true;
+      conn.__PC_LABEL__ = label;
+      conn.__ICE_CAND_STATS__ = { total: 0, host: 0, srflx: 0, prflx: 0, relay: 0, other: 0, udp: 0, tcp: 0 };
+      const prefix = `PC ${label}`;
+      let candCount = 0;
+      const maxCand = 8;
+      pc.addEventListener('iceconnectionstatechange', () => {
+        log(`${prefix} iceState=${pc.iceConnectionState}`);
+        if (pc.iceConnectionState === 'failed') requestTurnFallback('ice-failed');
+      });
+      pc.addEventListener('connectionstatechange', () => {
+        log(`${prefix} connState=${pc.connectionState}`);
+      });
+      pc.addEventListener('signalingstatechange', () => {
+        log(`${prefix} signaling=${pc.signalingState}`);
+      });
+      pc.addEventListener('icecandidate', (ev) => {
+        const cand = ev?.candidate?.candidate || '';
+        if (!cand) {
+          log(`${prefix} icecandidate=end`);
+          return;
+        }
+        if (candCount >= maxCand) return;
+        candCount += 1;
+        const typMatch = cand.match(/ typ ([a-z0-9]+)/i);
+        const typ = typMatch ? typMatch[1] : '?';
+        const protoMatch = cand.match(/ udp| tcp/i);
+        const proto = protoMatch ? protoMatch[0].trim() : '';
+        const stats = conn.__ICE_CAND_STATS__;
+        if (stats) {
+          stats.total += 1;
+          if (typ === 'host') stats.host += 1;
+          else if (typ === 'srflx') stats.srflx += 1;
+          else if (typ === 'prflx') stats.prflx += 1;
+          else if (typ === 'relay') stats.relay += 1;
+          else stats.other += 1;
+          if (proto === 'udp') stats.udp += 1;
+          else if (proto === 'tcp') stats.tcp += 1;
+        }
+        log(`${prefix} icecandidate ${candCount}/${maxCand}: ${typ}${proto ? '/' + proto : ''}`);
+      });
+    }
+
+    function scheduleIceLog(conn, label) {
+      if (!conn || conn.__ICE_LOG_SCHEDULED__) return;
+      conn.__ICE_LOG_SCHEDULED__ = true;
+      setTimeout(() => logIceStats(conn, label), 1200);
+      setTimeout(() => logIceStats(conn, label), 4000);
+    }
+
+    async function logIceStats(conn, label) {
+      try {
+        const pc = conn?.peerConnection;
+        if (!pc || typeof pc.getStats !== 'function') {
+          log(`ICE stats indisponivel (${label}).`);
+          return;
+        }
+        const stats = await pc.getStats();
+        let selectedPair = null;
+        const candidates = new Map();
+        for (const s of stats.values()) {
+          if (s.type === 'candidate-pair' && (s.selected || s.nominated)) selectedPair = s;
+          if (s.type === 'local-candidate' || s.type === 'remote-candidate') candidates.set(s.id, s);
+        }
+        if (!selectedPair) {
+          log(`ICE ${label}: par selecionado nao encontrado.`);
+          return;
+        }
+        const local = candidates.get(selectedPair.localCandidateId);
+        const remote = candidates.get(selectedPair.remoteCandidateId);
+        const lType = local?.candidateType || '?';
+        const rType = remote?.candidateType || '?';
+        const lProto = local?.protocol || '';
+        const rProto = remote?.protocol || '';
+        const lRelay = local?.relayProtocol ? `/${local.relayProtocol}` : '';
+        const rRelay = remote?.relayProtocol ? `/${remote.relayProtocol}` : '';
+        log(`ICE ${label}: local=${lType}${lProto ? '/' + lProto : ''}${lRelay} remote=${rType}${rProto ? '/' + rProto : ''}${rRelay}`);
+        const usesRelay = (lType === 'relay' || rType === 'relay');
+        if (conn?.peer) {
+          turnStateByPeer.set(conn.peer, usesRelay);
+          refreshRelayUi();
+        }
+      } catch (e) {
+        log(`ICE ${label} erro: ${e?.message || e}`);
+      }
+    }
+
+    function scheduleHostReconnect() {
+      if (isHostMode) return;
+      if (hubTakeoverTimer) return;
+      if (hostReconnectTimer) return;
+      log(`Agendando reconexao ao host em ${Math.round(hostReconnectDelay)}ms`);
+      hostReconnectTimer = setTimeout(() => {
+        hostReconnectTimer = null;
+        connectToHost();
+        hostReconnectDelay = Math.min(hostReconnectDelay * 1.6, 8000);
+      }, hostReconnectDelay);
+    }
+
+    function isHostCandidate() {
+      return localTags.has('host');
+    }
+
+    function getHostCandidates() {
+      const now = Date.now();
+      const out = new Map();
+      if (isHostCandidate()) {
+        out.set(STABLE_SELF_ID, { sid: STABLE_SELF_ID, online: true });
+      }
+      for (const [key, meta] of peers.entries()) {
+        if (!meta?.tags || !meta.tags.has('host')) continue;
+        const sid = meta.sid || key;
+        if (!sid) continue;
+        const fresh = meta?.lastSeen ? ((now - meta.lastSeen) <= HOST_ELECTION_FRESH_MS) : false;
+        const online = meta.online !== false && fresh;
+        out.set(String(sid), { sid: String(sid), online });
+      }
+      return Array.from(out.values());
+    }
+
+    function getPreferredHubSid() {
+      const candidates = getHostCandidates();
+      if (!candidates.length) return null;
+      const online = candidates.filter((c) => c.online);
+      const pool = online.length ? online : candidates;
+      pool.sort((a, b) => String(a.sid).localeCompare(String(b.sid)));
+      return pool[0]?.sid || null;
+    }
+
+    function isPreferredHubSelf() {
+      const preferred = getPreferredHubSid();
+      if (!preferred) return isHostCandidate();
+      return String(preferred) === String(STABLE_SELF_ID);
+    }
+
+    function maybeScheduleHubClaim(reason) {
+      if (!room || isHostMode) return false;
+      if (hostConn && hostConn.open) { resetHubClaimRetry(); return false; }
+      if (!isHostCandidate()) return false;
+      return scheduleHubClaimAfterStability(reason || 'hub-missing');
+    }
+
+    function resetHubClaimRetry() {
+      if (hubClaimTimer) { clearTimeout(hubClaimTimer); hubClaimTimer = null; }
+      if (hubStabilityTimer) { clearTimeout(hubStabilityTimer); hubStabilityTimer = null; }
+      hubClaimAttempt = 0;
+    }
+
+    function scheduleHubClaimRetry(reason, opts = {}) {
+      if (!isHostCandidate()) return;
+      if (isHostMode) return;
+      if (hostConn && hostConn.open) { resetHubClaimRetry(); return; }
+      if (hubClaimTimer) return;
+      if (!opts.reuseAttempt) {
+        hubClaimAttempt = Math.min(hubClaimAttempt + 1, 8);
+      } else if (hubClaimAttempt === 0) {
+        hubClaimAttempt = 1;
+      }
+      const base = Math.min(HUB_CLAIM_BASE_DELAY * Math.pow(1.6, hubClaimAttempt - 1), HUB_CLAIM_MAX_DELAY);
+      const jitter = 0.7 + Math.random() * 0.6;
+      const delay = Math.round(base * jitter);
+      log(`Agendando tentativa de host hub em ${delay}ms (${reason || 'retry'})`);
+      hubClaimTimer = setTimeout(() => {
+        hubClaimTimer = null;
+        if (!isHostCandidate() || isHostMode) { resetHubClaimRetry(); return; }
+        if (!isPreferredHubSelf()) { scheduleHubClaimRetry('aguardando-preferencia', { reuseAttempt: true }); return; }
+        if (hostConn && hostConn.open) { resetHubClaimRetry(); return; }
+        if (connectInProgress) { scheduleHubClaimRetry('busy', { reuseAttempt: true }); return; }
+        if (hostConnectTimer && hostConnectStartedAt) {
+          const elapsed = Date.now() - hostConnectStartedAt;
+          if (elapsed < HOST_CONNECT_GRACE_MS) {
+            const wait = Math.max(250, HOST_CONNECT_GRACE_MS - elapsed + 150);
+            log(`Aguardando janela de conexao ao host (${Math.round(wait)}ms)`);
+            hubClaimTimer = setTimeout(() => {
+              hubClaimTimer = null;
+              scheduleHubClaimRetry('janela-host', { reuseAttempt: true });
+            }, wait);
+            return;
+          }
+        }
+        disconnect();
+        setTimeout(() => connect(`hub-claim:${reason || 'retry'}`), 150);
+      }, delay);
+    }
+
+    function scheduleHubTakeover(reason) {
+      if (isHostMode) return;
+      if (!isHostCandidate()) return;
+      if (!isPreferredHubSelf()) return;
+      if (connectInProgress) return;
+      if (hubTakeoverTimer) return;
+      const elapsed = Date.now() - lastPresenceChangeAt;
+      if (elapsed < HUB_STABILITY_WINDOW_MS) {
+        scheduleHubClaimAfterStability(reason || 'host-offline');
+        return;
+      }
+      const delay = Math.round(HUB_TAKEOVER_MIN_DELAY + Math.random() * (HUB_TAKEOVER_MAX_DELAY - HUB_TAKEOVER_MIN_DELAY));
+      log(`Agendando takeover de host em ${delay}ms (${reason || 'host-offline'})`);
+      hubTakeoverTimer = setTimeout(() => {
+        hubTakeoverTimer = null;
+        if (isHostMode || !isHostCandidate()) return;
+        disconnect();
+        setTimeout(() => connect(`hub-takeover:${reason || 'host-offline'}`), 150);
+      }, delay);
+    }
+
+    function handleHostDisconnect(reason) {
+      if (isHostMode) return;
+      notePresenceActivity();
+      if (isHostCandidate()) {
+        if (isPreferredHubSelf()) scheduleHubTakeover(reason);
+        else scheduleHostReconnect();
+        return;
+      }
+      scheduleHostReconnect();
+    }
+
+    function clearHostConnectTimeout() {
+      if (!hostConnectTimer) return;
+      clearTimeout(hostConnectTimer);
+      hostConnectTimer = null;
+      hostConnectStartedAt = 0;
+    }
+
+    function scheduleHostConnectTimeout() {
+      clearHostConnectTimeout();
+      hostConnectTimer = setTimeout(() => {
+        hostConnectTimer = null;
+        if (isHostMode) return;
+        if (hostConn && hostConn.open) return;
+        handleHostDisconnect('host-timeout');
+      }, HOST_CONNECT_TIMEOUT_MS);
+    }
+
+    function requestTurnFallback(reason) {
+      if (iceMode === 'turn') {
+        requestTurnFailover(reason || 'ice-failed');
+        return;
+      }
+      if (pendingTurnFallback) return;
+      pendingTurnFallback = true;
+      log(`Fallback TURN: ${reason || 'host'}`);
+      reconnectWithTurn(reason);
+    }
+
+    function reconnectWithTurn(reason) {
+      iceMode = 'turn';
+      disconnect();
+      setTimeout(() => connect(`turn-fallback:${reason || 'host'}`), 250);
+    }
+
+    function teardownPeer() {
+      if (hostReconnectTimer) { clearTimeout(hostReconnectTimer); hostReconnectTimer = null; }
+      if (hubTakeoverTimer) { clearTimeout(hubTakeoverTimer); hubTakeoverTimer = null; }
+      resetHubClaimRetry();
+      clearHostConnectTimeout();
+      hostReconnectDelay = 1500;
+      try {
+        for (const conn of peerConnections.values()) {
+          try { conn.close(); } catch {}
+        }
+      } catch {}
+      peerConnections = new Map();
+      turnStateByPeer = new Map();
+      hostConn = null;
+      knownPeers = new Set();
+      outboundQueue = [];
+      try { if (peer) peer.destroy(); } catch {}
+      peer = null;
+      peerId = '';
+      peerReady = false;
+      actionHandlers = new Map();
+      peerJoinHandlers = new Set();
+      peerLeaveHandlers = new Set();
+    }
+
+    function createRoomApi() {
+      return {
+        makeAction,
+        onPeerJoin: (cb) => { if (typeof cb === 'function') peerJoinHandlers.add(cb); },
+        onPeerLeave: (cb) => { if (typeof cb === 'function') peerLeaveHandlers.add(cb); },
+        leave: () => teardownPeer()
+      };
+    }
+
+    function refreshRelayUi() {
+      const sid = (typeof selfIdFn === 'function') ? selfIdFn() : '';
+      selfEl.textContent = sid || '-';
+      const open = Array.from(peerConnections.values()).filter((c) => c && c.open);
+      if (open.length) relaysEl.textContent = open.map((c) => shortPeer(c.peer)).join(', ');
+      else relaysEl.textContent = '(nenhum conectado)';
+      lastRelayOpenCount = open.length;
+      if (turnStateEl) {
+        const states = Array.from(turnStateByPeer.values()).filter((v) => v !== null && v !== undefined);
+        let stateText = '-';
+        if (states.length) stateText = states.some((v) => v === true) ? 'relay' : 'direto';
+        const turnLabel = TURN_PRESETS[activeTurnIndex]?.label || 'TURN';
+        turnStateEl.textContent = `${stateText} | ${turnLabel}`;
+      }
+      updateStatusDetails();
+    }
+
+    // ======= PATCH: loopback local para mensagens enviadas via makeAction('chat') =======
+    function patchChatActionLoopback(roomObj) {
+      if (!roomObj || roomObj.__CHAT_ACTION_PATCHED__) return;
+      roomObj.__CHAT_ACTION_PATCHED__ = true;
+
+      const originalMakeAction = roomObj.makeAction.bind(roomObj);
+
+      function emit(detail) { try { window.dispatchEvent(new CustomEvent('chat:message', { detail })); } catch {} }
+      function safeSelfId() {
+        try { return String(typeof selfIdFn === 'function' ? (selfIdFn() || '') : ''); } catch { return ''; }
+      }
+      function safeUsername() { return (userInput.value || '').trim() || 'eu'; }
+
+      function normalizeChatPayload(textOrPayload) {
+        if (typeof textOrPayload === 'string') {
+          const now = Date.now();
+          return { text: textOrPayload, name: safeUsername(), timestamp: now, id: `chat:${now}:${Math.random().toString(36).slice(2)}` };
+        }
+        const p = (textOrPayload && typeof textOrPayload === 'object') ? { ...textOrPayload } : {};
+        if (typeof p.text !== 'string') p.text = String(p.text ?? '');
+        if (!p.name) p.name = safeUsername();
+        if (!p.timestamp) p.timestamp = Date.now();
+        if (!p.id) p.id = `chat:${p.timestamp}:${Math.random().toString(36).slice(2)}`;
+        return p;
+      }
+
+      roomObj.makeAction = (name) => {
+        const pair = originalMakeAction(name);
+        if (!Array.isArray(pair) || pair.length < 2) return pair;
+
+        const [send, get] = pair;
+        if (name !== 'chat' || typeof send !== 'function') return pair;
+
+        const wrappedSend = (data, ...rest) => {
+          const payload = normalizeChatPayload(data);
+
+          // OUT: UI imediata
+          emit({
+            id: payload.id,
+            key: payload.id,
+            text: payload.text,
+            peerId: safeSelfId(),
+            username: payload.name,
+            raw: payload,
+            ts: payload.timestamp,
+            origin: 'trystero-out',
+            meta: { via: 'makeAction(chat)' }
+          });
+
+          // IN: loopback silencioso (para executores locais quando so tem 1 peer)
+          emit({
+            id: payload.id,
+            key: payload.id,
+            text: payload.text,
+            peerId: safeSelfId(),
+            username: payload.name,
+            raw: payload,
+            ts: payload.timestamp,
+            origin: 'trystero-in',
+            loopback: true,
+            silent: true,
+            meta: { via: 'loopback' }
+          });
+
+          // Envio real para a sala
+          return send(payload, ...rest);
+        };
+
+        return [wrappedSend, get];
+      };
+
+      log('Patch aplicado: loopback local para makeAction("chat").');
+    }
+
+    async function initPeer(wantHost, useRoomId) {
+      if (!PeerCtor) throw new Error('PeerJS indisponivel');
+      log(`Init PeerJS: modo=${wantHost ? 'host' : 'cliente'} signal=${signalingMode}`);
+      const iceServers = (ICE_CONFIGS[iceMode] || TURN_CONFIG);
+      log(`ICE mode: ${iceMode} (${iceServers.length} cfg)`);
+      const options = {
+        host: PEERJS_SERVER_HOST,
+        port: PEERJS_SERVER_PORT,
+        path: PEERJS_SERVER_PATH,
+        key: PEERJS_SERVER_KEY,
+        secure: true,
+        debug: 2,
+        config: { iceServers }
+      };
+      const desiredId = (wantHost && useRoomId) ? roomHostId : undefined;
+      const p = desiredId ? new PeerCtor(desiredId, options) : new PeerCtor(options);
+      peer = p;
+      peerReady = false;
+      peerId = '';
+
+      return await new Promise((resolve, reject) => {
+        let settled = false;
+        p.on('open', (id) => {
+          peerReady = true;
+          peerId = id || '';
+          log(`PeerJS aberto: ${shortPeer(peerId) || 'sem id'}`);
+          settled = true;
+          resolve(id);
+        });
+        p.on('connection', (conn) => {
+          const isHostConn = conn && conn.peer === roomHostId;
+          registerConnection(conn, { isHost: isHostConn });
+        });
+        p.on('disconnected', () => {
+          log('PeerJS desconectado (transport).');
+          try { if (peerReady) p.reconnect(); } catch {}
+        });
+        p.on('close', () => {
+          log('PeerJS fechado.');
+          peerReady = false;
+        });
+        p.on('error', (err) => {
+          log(`erro peerjs: ${err?.type || err?.message || err}`);
+          if (!settled) {
+            settled = true;
+            reject(err);
+            return;
+          }
+          setStatus('erro: peerjs');
+        });
+      });
+    }
+
+    async function connect(trigger = 'manual') {
+      if (connectInProgress) return;
+      connectInProgress = true;
+      try {
+        log(`Conectar acionado (${trigger}).`);
+        if (room) {
+          log('Conexao ativa, trocando de sala...');
+          disconnect();
+        }
+
+        const roomId = (roomInput.value || DEFAULT_ROOM).trim() || DEFAULT_ROOM;
+        const password = (passInput.value || '').trim();
+        const name = (userInput.value || '').trim();
+        const autojoin = true;
+
+        saveState({ room: roomId, pass: password, name, autojoin });
+        generateInviteLink();
+
+        activeRoomId = roomId;
+        roomHostId = buildRoomHostId(roomId, password);
+        const wantsHub = localTags.has('host');
+        const forceHub = wantsHub && String(trigger || '').startsWith('hub-');
+        isHostMode = false;
+        iceMode = 'turn';
+        pendingTurnFallback = false;
+        turnFailoverPending = false;
+        log(`Sala=${roomId} host=${wantsHub ? 'sim' : 'nao'} signal=${signalingMode} ice=${iceMode}`);
+
+        setStatus(forceHub ? 'conectando host...' : 'conectando peerjs...');
+        runTurnProbe(trigger);
+        teardownPeer();
+
+        try {
+          const useRoomId = true;
+          await initPeer(forceHub, useRoomId);
+          isHostMode = forceHub;
+          setHubTag(isHostMode);
+          if (isHostMode) resetHubClaimRetry();
+        } catch (e) {
+          const errType = e?.type || '';
+          if (forceHub && errType === 'unavailable-id') {
+            log('Host ocupado, entrando como visitante.');
+            setHubTag(false);
+            isHostMode = false;
+            teardownPeer();
+            try { await initPeer(false, useRoomId); }
+            catch { setStatus('erro ao conectar'); return; }
+            scheduleHubClaimRetry('id-ocupado');
+          } else {
+            setStatus('erro ao conectar');
+            return;
+          }
+        }
+
+        room = createRoomApi();
+
+      // APLICA PATCH ANTES de expor a sala
+      patchChatActionLoopback(room);
+
+      window.__TRYSTERO_ROOM__ = room;
+      window.dispatchEvent(new CustomEvent('trystero:room', { detail: { room } }));
+      window.__TRYSTERO_CHAT__?._bindToRoom?.(room);
+
+      // reset peers
+      peers = new Map();
+      syncSelfPeer();
+      renderPeerList();
+
+      // presence
+      const [sendPresence, onPresence] = room.makeAction('presence');
+
+      function currentLocalPresence() {
+        const nm = (userInput.value || '').trim() || '';
+        const tagsArr = Array.from(localTags).map(normalizeTag).filter(Boolean);
+        return { name: nm, tags: tagsArr.length ? tagsArr : ['visitante'], t: Date.now(), sid: STABLE_SELF_ID };
+      }
+
+      function announcePresence(targetPeerId) {
+        try { sendPresence(currentLocalPresence(), targetPeerId); } catch {}
+        syncSelfPeer();
+      }
+
+      onPresence((data, peerId) => {
+        const pid = String(peerId || '');
+        const sid = data?.sid || pid;
+        upsertPeer(pid || sid, { name: data?.name, tags: data?.tags, online: true, sid });
+        renderPeerList();
+      });
+
+      announcePresence();
+
+      if (presenceTimer) clearInterval(presenceTimer);
+      if (presenceSweepTimer) clearInterval(presenceSweepTimer);
+      if (presenceBurstTimer) clearInterval(presenceBurstTimer);
+
+      let burstCount = 0;
+      // Burst inicial para evitar esperar o intervalo padrao no primeiro anuncio
+      presenceBurstTimer = setInterval(() => {
+        announcePresence();
+        burstCount += 1;
+        if (burstCount >= 4) {
+          clearInterval(presenceBurstTimer);
+          presenceBurstTimer = null;
+        }
+      }, 500);
+
+      presenceTimer = setInterval(() => announcePresence(), 1000);
+      presenceSweepTimer = setInterval(() => sweepPeers(9000), 1500);
+
+      // re-anuncia tags quando mudarem
+      if (localTagsListener) window.removeEventListener('trystero:localTags', localTagsListener);
+      localTagsListener = () => announcePresence();
+      window.addEventListener('trystero:localTags', localTagsListener);
+
+      if (!isHostMode) connectToHost();
+      if (wantsHub && !isHostMode) maybeScheduleHubClaim('initial');
+
+      // ping diagnostico (opcional)
+      const [sendPing, getPing] = room.makeAction('ping');
+      getPing((data, peerId) => log(`ping de ${(peerId || 'peer').slice(0,6)}: ${new Date(data?.t || Date.now()).toLocaleTimeString()}`));
+      room.onPeerJoin?.((peerId) => {
+        log(`peer join: ${shortPeer(peerId)}`);
+        announcePresence(peerId);
+        try { sendPing({ t: Date.now() }, peerId); } catch {}
+        updateStatusDetails();
+      });
+      room.onPeerLeave?.((peerId) => {
+        log(`peer leave: ${shortPeer(peerId)}`);
+        updateStatusDetails();
+      });
+
+      syncTimer = setInterval(refreshRelayUi, 1000);
+
+        setStatus('conectado');
+        refreshRelayUi();
+      } finally {
+        connectInProgress = false;
+      }
+    }
+
+    function disconnect() {
+      if (!room) return;
+      try { teardownPeer(); } catch {}
+      room = null;
+      activeRoomId = '';
+      roomHostId = '';
+      isHostMode = false;
+
+      if (syncTimer) { clearInterval(syncTimer); syncTimer = null; }
+      if (presenceTimer) { clearInterval(presenceTimer); presenceTimer = null; }
+      if (presenceBurstTimer) { clearInterval(presenceBurstTimer); presenceBurstTimer = null; }
+      if (presenceSweepTimer) { clearInterval(presenceSweepTimer); presenceSweepTimer = null; }
+      if (localTagsListener) {
+        window.removeEventListener('trystero:localTags', localTagsListener);
+        localTagsListener = null;
+      }
+      setHubTag(false);
+
+      window.__TRYSTERO_ROOM__ = null;
+      window.dispatchEvent(new CustomEvent('trystero:room', { detail: { room: null } }));
+      window.__TRYSTERO_CHAT__?._bindToRoom?.(null);
+
+      peers = new Map();
+      renderPeerList();
+
+      setStatus('desconectado');
+      refreshRelayUi();
+      updateStatusDetails();
+    }
+
+    btnJoin.addEventListener('click', () => connect('click'));
+    btnLeave.addEventListener('click', () => disconnect('click'));
+    // ======= Init =======
+    (function init() {
+      const stored = loadState();
+      const qp = readUrlParams();
+      const storedTurnId = TURN_DEFAULT_ID;
+
+      renderTurnOptions();
+      applyTurnPreset(storedTurnId, { silent: true });
+
+      const roomVal = (qp.room || stored.room || DEFAULT_ROOM).trim() || DEFAULT_ROOM;
+      const passVal = (qp.pass || stored.pass || DEFAULT_PASS).trim();
+      const nameVal = (qp.name || stored.name || '').trim();
+      const autojoin = true;
+
+      roomInput.value = roomVal;
+      passInput.value = passVal;
+      userInput.value = nameVal;
+      cbIncPass.checked = (typeof stored.includePass === 'boolean') ? stored.includePass : true;
+      cbIncName.checked = (typeof stored.includeName === 'boolean') ? stored.includeName : false;
+      const hostStored = !!stored.localHost;
+      hostBtn.classList.toggle('active', hostStored);
+      if (hostStored) window.__TRYSTERO_PEER__.addLocalTag('host');
+
+      saveState({
+        room: roomVal,
+        pass: passVal,
+        name: nameVal,
+        autojoin: true,
+        includePass: cbIncPass.checked,
+        includeName: cbIncName.checked,
+        localHost: hostStored
+      });
+
+      const uiExp = !!stored.uiExpanded;
+      setUiExpanded(uiExp);
+
+      generateInviteLink();
+
+      refreshRelayUi();
+      renderPeerList();
+
+      // emite tags atuais (inclui host persisted) para listeners externos
+      try { window.dispatchEvent(new CustomEvent('trystero:localTags', { detail: { tags: Array.from(localTags) } })); } catch {}
+
+      if (autojoin) connect(qp.autojoin ? 'url-autojoin' : 'storage-autojoin');
+    })();
+
+    window.addEventListener('visibilitychange', () => {
+      if (document.hidden) return;
+      if (!room) {
+        connect('resume');
+        return;
+      }
+      if (!isConnectionAlive()) {
+        log('Retomando conexao apos voltar ao app...');
+        disconnect();
+        setTimeout(() => connect('resume'), 200);
+      }
+    });
+  }
+</script>

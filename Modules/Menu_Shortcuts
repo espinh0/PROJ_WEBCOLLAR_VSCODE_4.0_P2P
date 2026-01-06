@@ -1,0 +1,91 @@
+<div class="mb-3" style="position:sticky; top:10px; z-index:1100;">
+  <div class="card p-3" style="background:#111;border:1px solid #333;border-radius:.75rem;color:#e5e7eb;">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+      <div class="d-flex align-items-center gap-2">
+        <i class="fa-solid fa-layer-group"></i>
+        <span class="fw-semibold">Atalhos de Modulos</span>
+      </div>
+      <div class="d-flex flex-wrap gap-2">
+        <button id="mod-serial" class="btn btn-sm btn-outline-light">
+          <i class="fa-solid fa-plug me-1"></i>Serial
+        </button>
+        <button id="mod-trystero" class="btn btn-sm btn-outline-light">
+          <i class="fa-solid fa-gear me-1"></i>Trystero
+        </button>
+        <button id="mod-flashscore" class="btn btn-sm btn-outline-light">
+          <i class="fa-solid fa-futbol me-1"></i>Flashscore
+        </button>
+        <button id="mod-all-expand" class="btn btn-sm btn-outline-success">
+          <i class="fa-solid fa-up-right-and-down-left-from-center me-1"></i>Expandir todos
+        </button>
+        <button id="mod-all-collapse" class="btn btn-sm btn-outline-light">
+          <i class="fa-solid fa-down-left-and-up-right-to-center me-1"></i>Ocultar todos
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const serial = { body: "wsBody", toggle: "wsToggle" };
+  const trystero = { body: "tr-body", toggle: "tr-toggle-ui" };
+  const flashscore = { body: "flashscore-browser-body", toggle: "toggle-flashscore-browser", storageKey: "flashscore-browser-visibility" };
+
+  function setCollapse({ body, toggle }, open) {
+    const el = document.getElementById(body);
+    if (!el) return;
+    el.classList.toggle("show", open);
+    // atualiza controles relacionados
+    const controls = document.querySelectorAll(
+      `[data-bs-target="#${body}"], [href="#${body}"], [aria-controls="${body}"], #${toggle}`
+    );
+    controls.forEach((ctrl) => {
+      ctrl.setAttribute("aria-expanded", open ? "true" : "false");
+      if (ctrl.tagName === "BUTTON") {
+        ctrl.classList.toggle("collapsed", !open);
+      }
+    });
+  }
+
+  function setFlashscore(open) {
+    const body = document.getElementById(flashscore.body);
+    const btn = document.getElementById(flashscore.toggle);
+    const icon = btn ? btn.querySelector("i") : null;
+    if (body) body.style.display = open ? "block" : "none";
+    if (btn) {
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+      btn.setAttribute("title", open ? "Ocultar" : "Expandir");
+      btn.setAttribute("aria-label", open ? "Ocultar" : "Expandir");
+    }
+    if (icon) {
+      icon.classList.toggle("fa-chevron-up", open);
+      icon.classList.toggle("fa-chevron-down", !open);
+    }
+    try { localStorage.setItem(flashscore.storageKey, open ? "expanded" : "collapsed"); } catch(_){}
+  }
+
+  function isShown(id) {
+    const el = document.getElementById(id);
+    if (!el) return false;
+    if (el.classList.contains("collapse")) return el.classList.contains("show");
+    return el.style.display !== "none";
+  }
+
+  function toggleSerial() { setCollapse(serial, !isShown(serial.body)); }
+  function toggleTrystero() { setCollapse(trystero, !isShown(trystero.body)); }
+  function toggleFlashscore() { setFlashscore(!isShown(flashscore.body)); }
+
+  function setAll(open) {
+    setCollapse(serial, open);
+    setCollapse(trystero, open);
+    setFlashscore(open);
+  }
+
+  document.getElementById("mod-serial")?.addEventListener("click", toggleSerial);
+  document.getElementById("mod-trystero")?.addEventListener("click", toggleTrystero);
+  document.getElementById("mod-flashscore")?.addEventListener("click", toggleFlashscore);
+  document.getElementById("mod-all-expand")?.addEventListener("click", () => setAll(true));
+  document.getElementById("mod-all-collapse")?.addEventListener("click", () => setAll(false));
+})();
+</script>

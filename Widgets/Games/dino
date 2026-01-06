@@ -1,0 +1,655 @@
+<!-- DINO WIDGET – v3.8 – vidas, waves cacto/ave, raio com degradê, choques progressivos via CHAT -->
+<div id="dino-widget" class="card p-3" style="max-width:100%;margin:1rem auto;">
+  <div class="d-flex align-items-center justify-content-between mb-2">
+    <div class="d-flex align-items-center gap-2">
+      <i class="fa-solid fa-bolt"></i>
+      <div>
+        <strong>Jogo do Dinossauro</strong><br />
+        <small class="text-secondary">Espaço / ↑ / toque para pular</small>
+      </div>
+    </div>
+    <span id="dino-status" class="badge text-bg-secondary">Pronto</span>
+  </div>
+
+  <div id="dino-wrapper"
+       style="background:#0c0c0f;border-radius:.75rem;border:1px solid #2a2a2e;padding:.75rem;">
+    <canvas id="dino-canvas"
+            width="600"
+            height="200"
+            style="width:100%;display:block;background:#101018;border-radius:.5rem;"></canvas>
+
+    <div class="d-flex justify-content-between align-items-center mt-2 small text-secondary">
+      <div>
+        Pontos: <span id="dino-score">0</span>
+        <span class="ms-3">Recorde: </span><span id="dino-best">0</span>
+      </div>
+      <div>
+        Vidas: <span id="dino-lives"></span>
+      </div>
+    </div>
+
+    <div class="d-flex justify-content-end mt-2">
+      <button id="dino-btn"
+              class="btn btn-sm btn-outline-light">
+        <i class="fa-solid fa-play"></i> Iniciar / Reiniciar
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  if (window.__DINO_WIDGET_ACTIVE__) return;
+  window.__DINO_WIDGET_ACTIVE__ = true;
+
+  const root     = document.getElementById('dino-widget');
+  if (!root) return;
+
+  const canvas   = root.querySelector('#dino-canvas');
+  const btn      = root.querySelector('#dino-btn');
+  const scoreEl  = root.querySelector('#dino-score');
+  const bestEl   = root.querySelector('#dino-best');
+  const livesEl  = root.querySelector('#dino-lives');
+  const statusEl = root.querySelector('#dino-status');
+  const ctx      = canvas.getContext('2d');
+
+  // ============================
+  // CONFIG JOGO
+  // ============================
+  const W = canvas.width;
+  const H = canvas.height;
+
+  const groundY     = H - 28;
+  const gravity     = 0.75;
+  const jumpVel     = -13;
+  const baseSpeed   = 7;
+  const maxSpeed    = 13;
+  const accelPerSec = 0.10;
+
+  const MIN_GAP = 300;
+  const MAX_GAP = 700;
+
+  const LIGHTNING_DURATION = 600;   // ms
+  const HIT_COOLDOWN_MS    = 250;   // evita hits múltiplos instantâneos
+
+  const MAX_LIVES = 5;
+
+  // Emojis via codePoint (para evitar escaping do Blogger)
+  const HEART_FULL  = String.fromCodePoint(0x2764, 0xFE0F); // ❤️
+  const HEART_EMPTY = '🖤';
+
+  // A partir de que score começa a chance de wave de pássaro
+  const BIRD_MIN_SCORE = 150;
+
+  // Tipo de wave atual: 'cactus' ou 'bird'
+  let waveType = 'cactus';
+
+  const DINO = {
+    x: 60,
+    y: groundY - 40,
+    w: 28,
+    h: 40,
+    vy: 0,
+    state: 'RUN', // RUN | JUMP | DEAD
+    legPhase: 0
+  };
+
+  let speed            = baseSpeed;
+  let score            = 0;
+  let best             = 0;
+  let lives            = MAX_LIVES;
+  let obstacles        = []; // cactos 🌵
+  let clouds           = [];
+  let birds            = []; // 🦅
+  let lastTime         = 0;
+  let animId           = null;
+  let started          = false;
+  let isAlive          = false;
+  let lastHundreds     = 0;
+  let lastFiveHundreds = 0;
+  let lightningTimer   = 0;
+  let hitCooldown      = 0;
+
+  function setStatus(t){ statusEl.textContent = t; }
+
+  function updateLivesUI(){
+    const full  = HEART_FULL.repeat(lives);
+    const empty = HEART_EMPTY.repeat(MAX_LIVES - lives);
+    livesEl.textContent = full + empty;
+  }
+
+  // Record local
+  try {
+    const saved = localStorage.getItem('dino_widget_best');
+    if (saved) best = parseInt(saved,10) || 0;
+  } catch(e){}
+  bestEl.textContent = best;
+
+  // ============================
+  // FIREBASE CHAT
+  // ============================
+  function getChannel(){
+    try { return (window.channel|0) || 1; }
+    catch(e){ return 1; }
+  }
+
+  function getRoomRef(){
+    if (!window.firebase || !firebase.apps || !firebase.apps.length) {
+      throw new Error('Firebase não inicializado');
+    }
+    return firebase.database().ref('livechat_v1/messages');
+  }
+
+  const CID_KEY = 'lc_cid';
+  const cid = sessionStorage.getItem(CID_KEY) || ('c_' + Math.random().toString(36).slice(2));
+  sessionStorage.setItem(CID_KEY, cid);
+
+  async function pushToChat(text){
+    text = (text || '').trim();
+    if (!text) return;
+    try{
+      const roomRef = getRoomRef();
+      const msgRef  = roomRef.push();
+      try { msgRef.onDisconnect().remove(); } catch(_){}
+      await msgRef.set({
+        text: text.slice(0,400),
+        ts:   firebase.database.ServerValue.TIMESTAMP,
+        cid:  cid
+      });
+    } catch(e){
+      try { window.appLog && window.appLog('[Dino] erro chat: ' + (e.message||e), 'error'); } catch(_){}
+    }
+  }
+
+  // mode, level, channel[,durMs]
+  async function sendEvent(mode, level, durMs){
+    const ch   = getChannel();
+    let line   = `${mode},${level},${ch}`;
+    if (durMs && durMs > 0) {
+      line += ',' + Math.floor(durMs);
+    }
+    await pushToChat(line);
+  }
+
+  // Helper: qualquer choque vem ANTES com vibração 100
+  async function sendShockWithPreVibration(level, durMs){
+    await sendEvent('VIBRATION', 100, 0);      // pré-vibração
+    await sendEvent('SHOCK', level, durMs);    // choque
+  }
+
+  // Choque progressivo por hit (intensidade + duração)
+  function onHitEvent(currentLives){
+    const lost = MAX_LIVES - currentLives; // nº do hit (1..5)
+
+    let level;
+    let dur;
+
+    if (currentLives <= 0){
+      // game over: choque final
+      level = 100;
+      dur   = 5000; // 5s
+    } else {
+      // intensidade: 1º hit 20, 2º 40, 3º 60, 4º 80
+      level = lost * 20;
+      if (level < 20) level = 20;
+      if (level > 80) level = 80;
+
+      // duração: 1s, 2s, 3s, 4s
+      dur = lost * 1000;
+    }
+
+    sendShockWithPreVibration(level, dur);
+  }
+
+  // Cada +100 pontos = vibração 100
+  function onScore100(n){
+    sendEvent('VIBRATION', 100, 0);
+  }
+
+  // Cada +500 pontos = choque 50 por 2s (fixo)
+  function onScore500(n){
+    sendShockWithPreVibration(50, 2000);
+  }
+
+  // ============================
+  // JOGO
+  // ============================
+  function resetGame(){
+    DINO.y         = groundY - 40;
+    DINO.vy        = 0;
+    DINO.state     = 'RUN';
+    DINO.legPhase  = 0;
+
+    speed            = baseSpeed;
+    score            = 0;
+    obstacles        = [];
+    clouds           = [];
+    birds            = [];
+    lastTime         = 0;
+    lastHundreds     = 0;
+    lastFiveHundreds = 0;
+    lightningTimer   = 0;
+    hitCooldown      = 0;
+
+    lives            = MAX_LIVES;
+    updateLivesUI();
+
+    scoreEl.textContent = '0';
+    started = true;
+    isAlive = true;
+    waveType = 'cactus';
+    setStatus('Jogando');
+  }
+
+  // Cactos com variação de tamanho, emoji fixo 🌵
+  function spawnObstacle(){
+    const baseH = 22 + Math.random()*24;
+    const scale = 0.7 + Math.random()*0.9; // 0.7x a 1.6x
+    const h     = baseH * scale;
+    const w     = h * 0.7;
+
+    const x = W + 40;
+    obstacles.push({
+      x,
+      y: groundY - h,
+      w,
+      h,
+      scale,
+      nextGap: MIN_GAP + Math.random()*(MAX_GAP - MIN_GAP)
+    });
+  }
+
+  function spawnBird(){
+    const heights = [
+      groundY - 50,
+      groundY - 70,
+      groundY - 90
+    ];
+    const y = heights[Math.floor(Math.random()*heights.length)];
+    birds.push({
+      x: W + 40,
+      y,
+      w: 34,
+      h: 24,
+      flap: 0
+    });
+  }
+
+  // Alternância de wave: ou cactos ou pássaros
+  function ensureWave(){
+    if (obstacles.length === 0 && birds.length === 0){
+      if (score < BIRD_MIN_SCORE){
+        waveType = 'cactus';
+      } else {
+        // Depois de 150 pontos, grande chance de pássaro
+        const r = Math.random();
+        if (r < 0.7){
+          waveType = 'bird';
+        } else {
+          waveType = 'cactus';
+        }
+      }
+    }
+  }
+
+  function handleHit(){
+    if (!isAlive) return;
+    if (hitCooldown > 0) return;
+    hitCooldown = HIT_COOLDOWN_MS;
+
+    // timer do raio
+    lightningTimer = LIGHTNING_DURATION;
+
+    // perde 1 vida
+    lives = Math.max(0, lives - 1);
+    const currentLives = lives;
+    updateLivesUI();
+
+    // aplica choque progressivo
+    onHitEvent(currentLives);
+
+    if (currentLives <= 0){
+      // game over de fato
+      isAlive    = false;
+      DINO.state = 'DEAD';
+      setStatus('Game Over');
+    }
+  }
+
+  function update(dt){
+    const dtSec = dt/1000;
+
+    if (hitCooldown > 0){
+      hitCooldown -= dt;
+      if (hitCooldown < 0) hitCooldown = 0;
+    }
+
+    // Velocidade
+    speed += accelPerSec * dtSec;
+    if (speed > maxSpeed) speed = maxSpeed;
+
+    // Física do dino
+    DINO.vy += gravity;
+    DINO.y  += DINO.vy;
+
+    if (DINO.y >= groundY - DINO.h){
+      DINO.y = groundY - DINO.h;
+      DINO.vy = 0;
+      if (DINO.state === 'JUMP') DINO.state='RUN';
+    }
+
+    // Nuvens
+    if (clouds.length < 3 && Math.random() < 0.02){
+      clouds.push({
+        x: W + 50,
+        y: 20 + Math.random()*60,
+        speedFactor: 0.3 + Math.random()*0.3
+      });
+    }
+    clouds.forEach(c => c.x -= speed*c.speedFactor);
+    clouds = clouds.filter(c => c.x > -80);
+
+    // Wave system: ou cactos ou pássaros
+    ensureWave();
+
+    if (waveType === 'cactus'){
+      if (obstacles.length === 0){
+        spawnObstacle();
+      } else {
+        const last = obstacles[obstacles.length-1];
+        if ((W - last.x) > (last.nextGap || MIN_GAP)){
+          spawnObstacle();
+        }
+      }
+    } else if (waveType === 'bird'){
+      if (birds.length === 0){
+        spawnBird();
+      } else if (birds.length < 3){
+        const lastB = birds[birds.length-1];
+        const BIRD_MIN_GAP = 400; // GAP MAIOR ENTRE BIRDS
+        if ((W - lastB.x) > BIRD_MIN_GAP && Math.random() < 0.35){
+          spawnBird();
+        }
+      }
+    }
+
+    // mover cactos
+    obstacles.forEach(o => o.x -= speed);
+    obstacles = obstacles.filter(o => o.x + o.w > -40);
+
+    // mover pássaros
+    birds.forEach(b => {
+      b.x -= speed * 1.05;
+      b.flap += dtSec * 12;
+    });
+    birds = birds.filter(b => b.x + b.w > -40);
+
+    // Pontuação
+    score += speed * dtSec * 2;
+    const scoreInt = Math.floor(score);
+    scoreEl.textContent = scoreInt;
+
+    if (scoreInt > best){
+      best = scoreInt;
+      bestEl.textContent = best;
+      try { localStorage.setItem('dino_widget_best', best); } catch(_){}
+    }
+
+    // Eventos 100 em 100
+    const h100 = Math.floor(scoreInt/100);
+    if (h100 > lastHundreds){
+      lastHundreds = h100;
+      if (h100 > 0) onScore100(h100);
+    }
+
+    // Eventos 500 em 500
+    const h500 = Math.floor(scoreInt/500);
+    if (h500 > lastFiveHundreds){
+      lastFiveHundreds = h500;
+      if (h500 > 0) onScore500(h500);
+    }
+
+    // Colisão cactos
+    for (const o of obstacles){
+      if (!(DINO.x+DINO.w < o.x || DINO.x > o.x+o.w ||
+            DINO.y+DINO.h < o.y || DINO.y > o.y+o.h))
+      {
+        handleHit();
+        break;
+      }
+    }
+
+    // Colisão pássaros
+    for (const b of birds){
+      if (!(DINO.x+DINO.w < b.x || DINO.x > b.x+b.w ||
+            DINO.y+DINO.h < b.y || DINO.y > b.y+b.h))
+      {
+        handleHit();
+        break;
+      }
+    }
+
+    // “Passinhos”
+    if (DINO.state === 'RUN'){
+      DINO.legPhase += dtSec * 12;
+    }
+  }
+
+  // ============================
+  // DESENHO (emojis + raio com degradê)
+  // ============================
+  function draw(){
+    // Fundo
+    ctx.fillStyle = '#101018';
+    ctx.fillRect(0,0,W,H);
+
+    // Nuvens
+    ctx.fillStyle='#3b3b4f';
+    clouds.forEach(c=>{
+      ctx.beginPath(); ctx.ellipse(c.x,c.y,18,10,0,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(c.x+10,c.y+3,14,8,0,0,Math.PI*2); ctx.fill();
+    });
+
+    // Chão
+    ctx.strokeStyle='#2b2b31';
+    ctx.beginPath();
+    ctx.moveTo(0,groundY+0.5);
+    ctx.lineTo(W,groundY+0.5);
+    ctx.stroke();
+
+    // Rugosidade chão
+    ctx.strokeStyle='#181822';
+    for (let i=0;i<W;i+=14){
+      const o = (Date.now()/25)%14;
+      ctx.beginPath();
+      ctx.moveTo(i+o,groundY+4);
+      ctx.lineTo(i+8+o,groundY+4);
+      ctx.stroke();
+    }
+
+    // Cactos 🌵
+    ctx.textAlign   = 'center';
+    ctx.textBaseline= 'bottom';
+    obstacles.forEach(o=>{
+      const cx = o.x + o.w/2;
+      const cy = groundY;
+      const fontSize = 22 * (o.scale || 1);
+      ctx.font = fontSize + 'px system-ui, emoji';
+      ctx.fillText('🌵', cx, cy);
+    });
+
+    // Pássaros 🦅
+    drawBirds();
+
+    // Dino emoji espelhado pra direita
+    drawDinoEmoji();
+
+    // Raio no dino (se timer ativo)
+    if (lightningTimer > 0){
+      drawLightning();
+    }
+
+    // Mensagens quando parado (SEM SERIFA)
+    if (!isAlive || !started){
+      ctx.fillStyle='#cfd2ff';
+      ctx.font='14px system-ui, sans-serif';
+      ctx.textAlign='center';
+      ctx.fillText('Espaço / toque para pular',W/2,60);
+      ctx.fillText('Clique em "Iniciar / Reiniciar" para jogar',W/2,80);
+    }
+  }
+
+  function drawBirds(){
+    ctx.textAlign   = 'center';
+    ctx.textBaseline= 'middle';
+    birds.forEach(b=>{
+      const cx = b.x + b.w/2;
+      const cy = b.y + b.h/2;
+      ctx.font = '26px system-ui, emoji';
+      ctx.fillText('🦅', cx, cy);
+    });
+  }
+
+  // Dino emoji virando pra DIREITA com espelhamento no canvas
+  function drawDinoEmoji(){
+    const sway = Math.sin(DINO.legPhase)*2;
+    const cx   = DINO.x + DINO.w/2;
+    const cy   = DINO.y + DINO.h + sway;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(-1, 1);             // espelha horizontalmente
+    ctx.font = '32px system-ui, emoji';
+    ctx.textAlign   = 'center';
+    ctx.textBaseline= 'bottom';
+    ctx.fillText('🦖', 0, 0);
+    ctx.restore();
+  }
+
+  // Raio com brilho em degradê (radial + coluna vertical)
+  function drawLightning(){
+    const baseX = DINO.x + DINO.w/2;
+    const midY  = DINO.y + DINO.h/2;
+    const topY  = 0;
+    const endY  = DINO.y + DINO.h;
+
+    const progress = 1 - Math.max(0, lightningTimer) / LIGHTNING_DURATION; // 0 → 1
+
+    ctx.save();
+
+    // Flash geral da tela (bem suave)
+    ctx.globalAlpha = 0.08 * (1 - progress);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0,0,W,H);
+
+    // Coluna vertical de luz
+    const colWidth = 30;
+    const lg = ctx.createLinearGradient(baseX, topY, baseX, endY);
+    lg.addColorStop(0.0, 'rgba(255,255,255,0)');
+    lg.addColorStop(0.2, 'rgba(255,255,230,0.6)');
+    lg.addColorStop(0.5, 'rgba(255,255,210,0.4)');
+    lg.addColorStop(1.0, 'rgba(255,255,180,0)');
+    ctx.globalAlpha = 0.7;
+    ctx.fillStyle = lg;
+    ctx.fillRect(baseX - colWidth/2, topY, colWidth, endY-topY);
+
+    // Degradê radial em volta do dino
+    const radius = 70;
+    const grad = ctx.createRadialGradient(
+      baseX, midY, 0,
+      baseX, midY, radius
+    );
+    grad.addColorStop(0.0, 'rgba(255,255,230,0.9)');
+    grad.addColorStop(0.4, 'rgba(255,255,210,0.6)');
+    grad.addColorStop(0.8, 'rgba(255,255,170,0.25)');
+    grad.addColorStop(1.0, 'rgba(255,255,150,0)');
+    ctx.globalAlpha = 0.8;
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(baseX, midY, radius, 0, Math.PI*2);
+    ctx.fill();
+
+    // Raio em zigue-zague
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#f7f76a';
+    ctx.beginPath();
+    ctx.moveTo(baseX, topY);
+
+    const jitter = 10;
+    const y1 = topY + (midY-topY)*0.4;
+    const y2 = topY + (midY-topY)*0.8;
+    const y3 = midY + (endY-midY)*0.5;
+
+    ctx.lineTo(baseX + (Math.random()*jitter - jitter/2), y1);
+    ctx.lineTo(baseX + (Math.random()*jitter - jitter/2), y2);
+    ctx.lineTo(baseX + (Math.random()*jitter - jitter/2), y3);
+    ctx.lineTo(baseX, endY);
+
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // ============================
+  // LOOP
+  // ============================
+  function loop(ts){
+    if (!lastTime) lastTime=ts;
+    const dt=ts-lastTime;
+    lastTime=ts;
+
+    if (isAlive && started){
+      update(dt);
+    }
+
+    if (lightningTimer > 0){
+      lightningTimer -= dt;
+      if (lightningTimer < 0) lightningTimer = 0;
+    }
+
+    draw();
+    animId=requestAnimationFrame(loop);
+  }
+
+  function startLoop(){
+    if (animId) cancelAnimationFrame(animId);
+    animId=requestAnimationFrame(loop);
+  }
+
+  // ============================
+  // CONTROLES
+  // ============================
+  function doJump(){
+    if (!started){
+      resetGame();
+      return;
+    }
+    if (!isAlive){
+      resetGame();
+      return;
+    }
+    if (DINO.state !== 'JUMP'){
+      DINO.state='JUMP';
+      DINO.vy=jumpVel;
+    }
+  }
+
+  window.addEventListener('keydown',e=>{
+    if([' ','ArrowUp','w','W'].includes(e.key)){
+      e.preventDefault();
+      doJump();
+    }
+  });
+
+  canvas.addEventListener('pointerdown',e=>{
+    e.preventDefault();
+    doJump();
+  });
+
+  btn.addEventListener('click',()=>resetGame());
+
+  // Inicializa UI de vidas e loop
+  updateLivesUI();
+  startLoop();
+})();
+</script>

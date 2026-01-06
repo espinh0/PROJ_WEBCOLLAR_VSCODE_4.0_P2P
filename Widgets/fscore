@@ -1,0 +1,1518 @@
+<div class="card shadow-sm" id="fs-mirror-card" style="background:#111;border:1px solid #333;border-radius:.75rem;color:#e5e7eb;">
+  <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2" style="background:#0c0c0e;border-bottom:1px solid #333;color:#e5e7eb;border-top-left-radius:.65rem;border-top-right-radius:.65rem;">
+    <div class="d-flex align-items-center gap-2">
+      <div class="fw-semibold">Placar</div>
+      <div class="small text-secondary" id="fsm-status">desconectado</div>
+    </div>
+    <div class="btn-group btn-group-sm">
+      <button id="fsr-roulette-mode-btn" class="btn btn-outline-secondary" title="Modo Roleta">
+        <i class="fa-solid fa-dice"></i>
+      </button>
+      <button class="btn btn-sm btn-outline-secondary" id="fsr-toggle" type="button" aria-label="Mostrar painel" title="Mostrar painel">
+        <i class="fa-solid fa-gear"></i>
+      </button>
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="d-flex flex-wrap align-items-stretch gap-3">
+      <div id="fsm-home-card" class="flex-grow-1 p-3 rounded-3" style="background:#0c0c0e;border:1px solid #2a2a2a;">
+        <div class="text-uppercase text-secondary small mb-1">casa</div>
+        <div class="d-flex align-items-center justify-content-between">
+          <div class="fw-bold" style="font-size:1.2rem;" id="fsm-home-name">-</div>
+          <div class="display-1 text-info mb-0 score-num" id="fsm-home-score">-</div>
+        </div>
+      </div>
+      <div id="fsm-away-card" class="flex-grow-1 p-3 rounded-3" style="background:#0c0c0e;border:1px solid #2a2a2a;">
+        <div class="text-uppercase text-secondary small mb-1 text-end">visitante</div>
+        <div class="d-flex align-items-center justify-content-between">
+          <div class="display-1 text-warning mb-0 score-num" id="fsm-away-score">-</div>
+          <div class="fw-bold text-end" style="font-size:1.2rem;" id="fsm-away-name">-</div>
+        </div>
+      </div>
+    </div>
+    <div class="mt-3 d-flex align-items-center gap-2 flex-wrap justify-content-center">
+      <div class="btn-group btn-group-sm" role="group" aria-label="Selecionar time">
+        <button class="btn btn-outline-info" id="fsm-target-home">Casa</button>
+        <button class="btn btn-outline-info" id="fsm-target-any" aria-label="Ambos" title="Ambos">
+          <i class="fa-solid fa-left-right" aria-hidden="true"></i>
+        </button>
+        <button class="btn btn-outline-info" id="fsm-target-away">Fora</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .score-num {
+    font-family: 'Anton', sans-serif;
+    letter-spacing: .02em;
+    font-weight: 100;
+    line-height: 1;
+  }
+  .score-blink { animation: scoreBlink 0.9s ease; }
+  @keyframes scoreBlink {
+    0%   { text-shadow: 0 0 0 rgba(0,255,128,0); transform: scale(1); }
+    25%  { text-shadow: 0 0 10px rgba(0,255,128,0.65), 0 0 20px rgba(0,255,128,0.4); transform: scale(1.05); }
+    50%  { text-shadow: 0 0 14px rgba(0,255,128,0.9), 0 0 26px rgba(0,255,128,0.55); transform: scale(1.07); }
+    100% { text-shadow: 0 0 0 rgba(0,255,128,0); transform: scale(1); }
+  }
+  .fs-last-scorer {
+    background: #102717 !important;
+    border-color: #1f7a3d !important;
+    box-shadow: 0 0 0 1px #1f7a3d inset;
+  }
+  .fs-score-ended {
+    color: #ef4444 !important;
+    text-shadow: 0 0 10px rgba(239, 68, 68, 0.35);
+  }
+</style>
+
+<script>
+(() => {
+  // lightweight cross-document bus (BroadcastChannel + postMessage + storage fallback)
+  if (!window.__FS_BUS__) {
+    (function(){
+      const CHANNEL = 'fs-score-channel';
+      let bc = null;
+      try { bc = new BroadcastChannel(CHANNEL); } catch(e){ bc = null; }
+      const bcBlocked = !bc;
+      function _onMessage(msg){
+        try {
+          const data = (typeof msg === 'string') ? JSON.parse(msg) : msg;
+          window.dispatchEvent(new CustomEvent('fs-score:global', { detail: data }));
+        } catch(_){ }
+      }
+      if (bc) bc.onmessage = (ev)=> _onMessage(ev.data);
+      window.addEventListener('message', (ev)=>{
+        if (!ev.data) return; if (ev.data && ev.data.__fs_score_msg) _onMessage(ev.data.payload);
+      });
+      window.addEventListener('storage', (ev)=>{ if (ev.key === CHANNEL && ev.newValue) _onMessage(JSON.parse(ev.newValue)); });
+      window.__FS_BUS__ = {
+        send(payload){
+          const data = payload || {};
+          if (bc) try { bc.postMessage(data); } catch(_){}
+          try { if (window.parent && window.parent !== window) window.parent.postMessage({ __fs_score_msg: true, payload: data }, '*'); } catch(_){}
+          try { (document.querySelectorAll('iframe')||[]).forEach(f=>{ try{ f.contentWindow.postMessage({ __fs_score_msg: true, payload: data }, '*'); }catch(_){} }); } catch(_){}
+          try { localStorage.setItem(CHANNEL, JSON.stringify(data)); localStorage.removeItem(CHANNEL); } catch(_){}
+          try { _onMessage(data); } catch(_){}
+        },
+        on(cb){ if (typeof cb !== 'function') return; window.addEventListener('fs-score:global', (ev)=> cb(ev.detail)); }
+      };
+      if (bcBlocked) {
+        try { console.warn('BroadcastChannel indisponível; fallback postMessage/storage ativo (Firefox file://?)'); } catch(_){}
+      }
+    })();
+  }
+
+  if (window.__FS_SCORE_MIRROR_READY__) return;
+  window.__FS_SCORE_MIRROR_READY__ = true;
+
+  const $ = (id) => document.getElementById(id);
+  const statusEl = $('fsm-status');
+  const homeNameEl = $('fsm-home-name');
+  const awayNameEl = $('fsm-away-name');
+  const homeScoreEl = $('fsm-home-score');
+  const awayScoreEl = $('fsm-away-score');
+  const homeCardEl = $('fsm-home-card');
+  const awayCardEl = $('fsm-away-card');
+  const lastEl = $('fsm-last');
+  const sourceEl = $('fsm-source');
+  
+  const targetButtons = {
+    home: $('fsm-target-home'),
+    away: $('fsm-target-away'),
+    any: $('fsm-target-any')
+  };
+  let currentTargetKey = 'any';
+  let lastNames = { home:'', away:'' };
+  let lastScore = { home:null, away:null };
+  let lastScoreTs = 0;
+  const targetState = { team:'', anySide:true, side:'any' };
+  const targetFieldTs = { team:0, anySide:0, side:0 };
+  let sendTargetFn = null;
+  let getControlFn = null;
+  let boundRoom = null;
+
+  function setStatus(text){ if (statusEl) statusEl.textContent = text; }
+  function log(msg){ try { console.log('[fs-mirror]', msg); } catch(_){} }
+  const norm = (s)=> String(s||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+  function keyFromTeam(teamRaw){
+    const tn = norm(teamRaw);
+    if (!tn) return null;
+    if (lastNames.home && norm(lastNames.home).includes(tn)) return 'home';
+    if (lastNames.away && norm(lastNames.away).includes(tn)) return 'away';
+    return null;
+  }
+
+  function applyTargetState(key){
+    const explicit = key || targetState.side;
+    const nameMatch = (!explicit && !targetState.anySide) ? keyFromTeam(targetState.team) : null;
+    const fallback = targetState.anySide ? 'any' : currentTargetKey;
+    const nextKey = explicit || nameMatch || fallback;
+    setActiveTarget(nextKey);
+  }
+  function setActiveTarget(key){
+    currentTargetKey = key;
+    Object.entries(targetButtons).forEach(([k, btn])=>{
+      if (!btn) return;
+      btn.classList.toggle('active', k === key);
+    });
+  }
+  window.__FS_SCORE_MIRROR__ = window.__FS_SCORE_MIRROR__ || {};
+  window.__FS_SCORE_MIRROR__.setActiveTarget = setActiveTarget;
+  window.__FS_SCORE_MIRROR__.getCurrentTargetKey = () => currentTargetKey;
+
+  function flashScore(el){
+    if (!el) return;
+    el.classList.remove('score-blink');
+    // force reflow to restart animation
+    void el.offsetWidth; // eslint-disable-line no-unused-expressions
+    el.classList.add('score-blink');
+  }
+
+  let lastScoreSoundAt = 0;
+  let ionSoundReady = false;
+  function playScoreSound(){
+    const now = Date.now();
+    if (now - lastScoreSoundAt < 200) return;
+    lastScoreSoundAt = now;
+
+    if (window.Howler && window.Howler.ctx && typeof window.Howler.ctx.createOscillator === 'function') {
+      try {
+        const ctx = window.Howler.ctx;
+        if (ctx.state === 'suspended') ctx.resume().catch(()=>{});
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 880;
+        osc.connect(gain);
+        gain.connect(window.Howler.masterGain || ctx.destination);
+        const start = ctx.currentTime;
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(0.05, start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.12);
+        osc.start(start);
+        osc.stop(start + 0.14);
+        return;
+      } catch (_) {}
+    }
+
+    if (window.ion && typeof window.ion.sound === 'function') {
+      try {
+        if (!ionSoundReady) {
+          window.ion.sound({
+            sounds: [{ name: 'bell_ring' }],
+            path: 'https://cdn.jsdelivr.net/gh/IonDen/ion.sound@3.0.7/sounds/',
+            preload: true,
+            multiplay: true,
+            volume: 0.35
+          });
+          ionSoundReady = true;
+        }
+        window.ion.sound.play('bell_ring');
+      } catch (_) {}
+    }
+  }
+
+  function setLastScorer(side){
+    if (!homeCardEl || !awayCardEl) return;
+    homeCardEl.classList.toggle('fs-last-scorer', side === 'home');
+    awayCardEl.classList.toggle('fs-last-scorer', side === 'away');
+  }
+
+  function renderScore(payload, peerId){
+    if (!payload || typeof payload !== 'object') return;
+    const incomingTs = Number.isFinite(payload.ts) ? payload.ts : (payload.ts ? Number(payload.ts) : 0);
+    if (incomingTs && incomingTs <= lastScoreTs) return;
+    if (incomingTs) lastScoreTs = incomingTs;
+    const hName = (payload.homeName || '').trim() || 'Casa';
+    const aName = (payload.awayName || '').trim() || 'Fora';
+    const hScoreNum = Number.isFinite(payload.homeScore) ? payload.homeScore : null;
+    const aScoreNum = Number.isFinite(payload.awayScore) ? payload.awayScore : null;
+    const hScore = Number.isFinite(payload.homeScore) ? payload.homeScore : '-';
+    const aScore = Number.isFinite(payload.awayScore) ? payload.awayScore : '-';
+    const ended = payload.ended === true;
+
+    if (homeNameEl) homeNameEl.textContent = hName;
+    if (awayNameEl) awayNameEl.textContent = aName;
+    if (homeScoreEl) homeScoreEl.textContent = hScore;
+    if (awayScoreEl) awayScoreEl.textContent = aScore;
+    if (homeScoreEl) homeScoreEl.classList.toggle('fs-score-ended', ended);
+    if (awayScoreEl) awayScoreEl.classList.toggle('fs-score-ended', ended);
+    if (ended) setLastScorer(null);
+
+    const ts = payload.ts ? new Date(payload.ts).toLocaleTimeString() : '-';
+    if (lastEl) lastEl.textContent = ts;
+    const src = payload.origin || peerId || 'peer';
+    if (sourceEl) sourceEl.textContent = src;
+    log(`fs-score de ${src}: ${hName} ${hScore} x ${aScore} ${aName} (${payload.reason || 'sem-reason'})`);
+
+    const scoreChanged = (
+      (lastScore.home != null && hScoreNum != null && hScoreNum !== lastScore.home) ||
+      (lastScore.away != null && aScoreNum != null && aScoreNum !== lastScore.away)
+    );
+    const grewHome = lastScore.home != null && hScoreNum != null && hScoreNum > lastScore.home;
+    const grewAway = lastScore.away != null && aScoreNum != null && aScoreNum > lastScore.away;
+    lastScore = { home: hScoreNum, away: aScoreNum };
+    if (grewHome) {
+      flashScore(homeScoreEl);
+      setLastScorer('home');
+    }
+    if (grewAway) {
+      flashScore(awayScoreEl);
+      setLastScorer('away');
+    }
+    if (scoreChanged) playScoreSound();
+
+    bindTargetButtons({ homeName: hName, awayName: aName });
+    const namesChanged = (hName !== lastNames.home) || (aName !== lastNames.away);
+    lastNames = { home: hName, away: aName };
+    if (namesChanged) applyTargetState(keyFromTeam(targetState.team));
+  }
+
+  function emitTarget(targetKey, names){
+    currentTargetKey = targetKey;
+    const { homeName, awayName } = names || {};
+    const teamName = targetKey === 'home' ? (homeName || '') : targetKey === 'away' ? (awayName || '') : '';
+    targetState.anySide = targetKey === 'any';
+    targetState.team = teamName;
+    targetState.side = targetKey;
+    const ts = Date.now();
+    targetFieldTs.team = ts;
+    targetFieldTs.anySide = ts;
+    targetFieldTs.side = ts;
+    const payload = { team: targetKey === 'any' ? '' : teamName, anySide: targetKey === 'any', side: targetKey, reason: 'mirror-target', ts };
+    let dispatched = false;
+    if (sendTargetFn) {
+      try { sendTargetFn(payload); dispatched = true; } catch(_){ dispatched = false; }
+    }
+    if (!dispatched && boundRoom && typeof boundRoom.makeAction === 'function') {
+      try {
+        const pair = boundRoom.makeAction('fs-control');
+        if (Array.isArray(pair) && pair.length) {
+          sendTargetFn = pair[0];
+          getControlFn = pair[1];
+          if (sendTargetFn) { sendTargetFn(payload); dispatched = true; }
+          if (typeof getControlFn === 'function') {
+            try { getControlFn((patch)=> applyControl(patch)); } catch(_){}
+          }
+        }
+      } catch(_){ log('fs-control indisponivel ao enviar alvo'); }
+    }
+    try {
+      if (window.__FS_BUS__ && typeof window.__FS_BUS__.send === 'function') {
+        window.__FS_BUS__.send({ type:'fs-control', payload });
+        dispatched = true;
+      }
+    } catch(_){}
+    if (!dispatched) log('alvo nao enviado: sem fs-control/bus');
+  }
+
+  function bindTargetButtons(names){
+    const { homeName, awayName } = names || {};
+    const resolvedHome = (homeName || lastNames.home || targetButtons.home?.textContent || 'Casa').trim();
+    const resolvedAway = (awayName || lastNames.away || targetButtons.away?.textContent || 'Fora').trim();
+    if (targetButtons.home) targetButtons.home.textContent = resolvedHome;
+    if (targetButtons.away) targetButtons.away.textContent = resolvedAway;
+
+    Object.entries(targetButtons).forEach(([key, btn])=>{
+      if (!btn) return;
+      if (btn.__fsmHandler) btn.removeEventListener('click', btn.__fsmHandler);
+      const handler = ()=>{
+        setActiveTarget(key);
+        targetState.anySide = key === 'any';
+        targetState.team = key === 'home' ? resolvedHome : key === 'away' ? resolvedAway : '';
+        targetState.side = key;
+        const ts = Date.now();
+        targetFieldTs.anySide = ts;
+        targetFieldTs.team = ts;
+        targetFieldTs.side = ts;
+        emitTarget(key, { homeName, awayName });
+      };
+      btn.__fsmHandler = handler;
+      btn.addEventListener('click', handler);
+    });
+    setActiveTarget(currentTargetKey);
+  }
+
+  function bindRoom(room){
+    boundRoom = room;
+    if (!room || typeof room.makeAction !== 'function') {
+      setStatus('desconectado');
+      log('sem sala ou makeAction ausente');
+      return;
+    }
+
+    setStatus('conectado (fs-score leitura)');
+    log('sala ligada, assinando fs-score...');
+
+    try {
+      const pair = room.makeAction('fs-score');
+      if (Array.isArray(pair) && pair.length >= 2) {
+        const [, getScore] = pair;
+        if (typeof getScore === 'function') {
+          getScore((data, peerId) => {
+            setStatus('placar recebido');
+            renderScore(data, peerId);
+          });
+          log('assinatura fs-score ativa');
+        } else {
+          setStatus('fs-score indisponivel');
+          log('fs-score indisponivel (getScore nao eh funcao)');
+        }
+      } else {
+        setStatus('fs-score indisponivel');
+        log('fs-score indisponivel (pair invalido)');
+      }
+    } catch (e) {
+      setStatus('erro fs-score');
+      log('erro fs-score: ' + (e?.message||e));
+    }
+
+    try {
+      const pair = room.makeAction('fs-control');
+      if (Array.isArray(pair) && pair.length) {
+        sendTargetFn = pair[0];
+        getControlFn = pair[1];
+        if (typeof getControlFn === 'function') {
+          try { getControlFn((patch)=> applyControl(patch)); } catch(_){}
+        }
+        log('fs-control pronto para alvo');
+      } else {
+        log('fs-control indisponivel (pair invalido)');
+      }
+    } catch (e) {
+      log('fs-control indisponivel: ' + (e?.message||e));
+    }
+  }
+
+  window.addEventListener('trystero:room', (ev) => bindRoom(ev?.detail?.room || null));
+  if (window.__TRYSTERO_ROOM__) bindRoom(window.__TRYSTERO_ROOM__);
+
+  // Bus: receive global fs-score messages
+  if (window.__FS_BUS__) {
+    window.__FS_BUS__.on((m)=>{
+      if (!m) return;
+      if (m.type === 'fs-score') {
+        try { renderScore(m.payload, m.peerId || 'bus'); log('fs-score via bus recebido'); } catch(_){}
+      } else if (m.type === 'fs-control' && m.payload) {
+        applyControl(m.payload);
+      }
+    });
+  }
+
+  // Fallback: consome evento local disparado pelo painel fs_remote
+  window.addEventListener('fs-score:local', (ev)=>{
+    const data = ev?.detail?.payload;
+    if (data) {
+      log('fs-score:local recebido');
+      renderScore(data, ev?.detail?.peerId || 'local');
+    }
+  });
+  
+  // when mirror binds to a room, ask for a replay via bus so remote can resend last snapshot
+  const _oldBindRoom = bindRoom;
+  bindRoom = function(room){
+    _oldBindRoom(room);
+    try { if (room && window.__FS_BUS__ && typeof window.__FS_BUS__.send === 'function') window.__FS_BUS__.send({ type:'request-replay', from:'fs-score-mirror' }); } catch(_){}
+  };
+
+  function applyControl(patch){
+    if (!patch || typeof patch !== 'object') return;
+    const ts = Number.isFinite(patch.ts) ? patch.ts : (patch.ts ? Number(patch.ts) : Date.now());
+    const sideRaw = typeof patch.side === 'string' ? patch.side.toLowerCase() : null;
+    const side = sideRaw && ['home','away','any'].includes(sideRaw) ? sideRaw : null;
+    const hasAny = Object.prototype.hasOwnProperty.call(patch, 'anySide');
+    const hasTeam = Object.prototype.hasOwnProperty.call(patch, 'team');
+    const hasSide = !!side;
+
+    if (hasAny) { targetState.anySide = !!patch.anySide; targetFieldTs.anySide = ts; }
+    if (hasTeam) { targetState.team = (patch.team || '').trim(); targetFieldTs.team = ts; }
+    if (hasSide) { targetState.side = side; targetFieldTs.side = ts; }
+    if (hasSide && !hasAny) targetState.anySide = side === 'any';
+
+    // decide visual target from freshest info: side > anySide flag > name match > previous
+    let nextKey = targetState.side;
+    if (hasSide && side) {
+      nextKey = side;
+    } else if (hasAny && patch.anySide) {
+      nextKey = 'any';
+    } else if (!targetState.anySide) {
+      const guess = keyFromTeam(targetState.team);
+      if (guess) nextKey = guess;
+    }
+    if (targetState.anySide) nextKey = 'any';
+    targetState.side = nextKey;
+    applyTargetState(nextKey);
+  }
+})();
+</script>
+
+<!-- Conteudo movido de Modules/fs_config -->
+<div class="card shadow-sm" id="fs-remote-card" style="background:#0e1014; border:1px solid #1f232c;">
+  <div class="card-body d-none" id="fsr-body">
+    <div class="d-flex align-items-center gap-2 mb-2 small text-secondary">
+      <span>Status:</span>
+      <span id="fsr-status" class="badge text-bg-dark">desconectado</span>
+    </div>
+    <div class="p-2 rounded-3 mb-3" style="background:#0b0d12; border:1px solid #1f232c;">
+      <div class="d-flex flex-wrap gap-3 align-items-center small text-secondary" id="fsr-preview">
+        <div>Alvo: <span class="badge text-bg-info" id="fsr-prev-target">Ambos</span></div>
+        <div>Estado: <span class="badge text-bg-dark" id="fsr-prev-armed">desarmado</span></div>
+        <div>Modo: <span class="badge text-bg-secondary" id="fsr-prev-mode">-</span></div>
+        <div>Nivel: <span class="badge text-bg-secondary" id="fsr-prev-level">-</span></div>
+        <div>Canal: <span class="badge text-bg-secondary" id="fsr-prev-chan">-</span></div>
+        <div>Intervalo: <span class="badge text-bg-secondary" id="fsr-prev-gap">-</span></div>
+        <div>Duracao base: <span class="badge text-bg-secondary" id="fsr-prev-base">-</span></div>
+        <div>Delay inicial: <span class="badge text-bg-secondary" id="fsr-prev-predelay">-</span></div>
+        <div>Ultima atualizacao: <span class="badge text-bg-secondary" id="fsm-last">-</span></div>
+        <div>Fonte: <span class="badge text-bg-dark" id="fsm-source">-</span></div>
+      </div>
+    </div>
+
+    <p class="small text-secondary mb-2">
+      Este painel recebe o placar via fs-score e aplica comandos de coleira conforme as regras abaixo. Espelho pode usar esta instancia para ver status/alvo.
+    </p>
+    <div class="row g-3">
+      <div class="col-12 col-md-4">
+        <label class="form-label small text-secondary">Armado</label>
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" role="switch" id="fsr-armed" />
+          <label class="form-check-label" for="fsr-armed">armar/desarmar</label>
+        </div>
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label small text-secondary">Teste de Pontos</label>
+        <div class="btn-group btn-group-sm">
+            <button id="fsr-test-home-point-btn" class="btn btn-secondary">Casa +1</button>
+            <button id="fsr-test-away-point-btn" class="btn btn-secondary">Visitante +1</button>
+        </div>
+      </div>
+    </div>
+
+    <hr class="my-3" />
+
+    <div class="row g-3">
+      <div class="col-12 col-md-6">
+        <div class="fw-semibold mb-2">Perfis 1/2/3 pts</div>
+        <div class="row g-2 align-items-end">
+          <div class="col-12">
+            <div class="d-flex text-secondary small">
+              <div style="width:64px;"></div>
+              <div class="flex-grow-0" style="width:90px;">Pulsos</div>
+              <div class="flex-grow-1 ps-2">Nivel x</div>
+              <div class="flex-grow-1 ps-2">Duracao x</div>
+              <div style="width:80px;" class="text-end">Teste</div>
+            </div>
+          </div>
+          <div class="col-12" data-p="1"></div>
+          <div class="col-12" data-p="2"></div>
+      <div class="col-12" data-p="3"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="host-only mt-3 mb-3">
+      <label for="fsr-search-team" class="form-label small text-secondary mb-1">Pesquisar time</label>
+      <div class="input-group input-group-sm">
+        <input id="fsr-search-team" type="text" class="form-control" placeholder="Digite o time e Enter" aria-label="Pesquisar time" />
+        <button id="fsr-search-btn" class="btn btn-outline-secondary" type="button"><i class="fa-solid fa-magnifying-glass"></i></button>
+        <span id="fsr-search-status" class="input-group-text text-muted" style="min-width: 120px;">Aguardando</span>
+      </div>
+    </div>
+
+    <hr class="my-4 host-only" />
+    <div class="host-only mt-4 mb-3">
+      <div class="card" style="overflow: hidden; background:#111;border:1px solid #333;border-radius:.75rem;color:#e5e7eb;">
+        <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2" style="background:#0c0c0e; border-bottom:1px solid #333; color:#e5e7eb; border-top-left-radius:.65rem;border-top-right-radius:.65rem;">
+          <div class="fw-semibold">Browser</div>
+          <div class="input-group input-group-sm flex-grow-1 mx-3" style="max-width: 450px;">
+            <input type="url" id="flashscore-url-input" class="form-control" placeholder="Cole uma URL do Fs e pressione Enter..." />
+            <button id="flashscore-go-btn" class="btn btn-outline-secondary" type="button" title="Carregar URL"><i class="fa-solid fa-arrow-right"></i></button>
+          </div>
+          <div class="btn-group btn-group-sm">
+            <button id="home-flashscore-browser" class="btn btn-outline-secondary" title="Retornar à página inicial">
+              <i class="fa-solid fa-house"></i>
+            </button>
+            <button id="toggle-flashscore-browser" class="btn btn-outline-secondary" title="Expandir/Ocultar">
+              <i class="fa-solid fa-chevron-up"></i>
+            </button>
+          </div>
+        </div>
+        <div id="flashscore-browser-body" class="card-body p-0">
+          <iframe id="flashscore-browser-iframe" loading="lazy" tabindex="-1" style="width: 100%; height: 70vh; border: 0;" src="https://www.flashscore.com.br/basquete/"></iframe>
+        </div>
+      </div>
+    </div>
+
+    <div class="small text-secondary host-only">
+      <hr class="my-3" />
+      <div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-2">
+        <div>Log fs-score</div>
+        <button class="btn btn-sm btn-outline-secondary" id="fsr-log-clear" type="button">Limpar</button>
+      </div>
+      <div id="fsr-log" style="max-height:140px; overflow:auto; border:1px solid #1f232c; border-radius:8px; padding:6px; background:#0b0d12;">
+        <div class="text-muted fsr-log-placeholder">Aguardando eventos fs-score...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  function setToggleVisual(btn, open){
+    if (!btn) return;
+    let icon = btn.querySelector('i');
+    if (!icon) {
+      icon = document.createElement('i');
+      icon.className = 'fa-solid fa-gear';
+      btn.textContent = '';
+      btn.appendChild(icon);
+    } else {
+      icon.className = 'fa-solid fa-gear';
+    }
+    btn.setAttribute('aria-label', open ? 'Ocultar painel' : 'Mostrar painel');
+    btn.setAttribute('title', open ? 'Ocultar painel' : 'Mostrar painel');
+    btn.classList.toggle('btn-success', open);
+    btn.classList.toggle('btn-outline-secondary', !open);
+  }
+  // attach expand toggle early and defensively (won't depend on other initialization)
+  try {
+    const _TOGGLE_KEY = 'fs_remote_ui_state_v3';
+    const _toggleBtn = document.getElementById('fsr-toggle');
+    const _body = document.getElementById('fsr-body');
+    if (_toggleBtn && _body) {
+      let _saved = null;
+      try { _saved = localStorage.getItem(_TOGGLE_KEY); } catch(_) { _saved = null; }
+      const _wantOpen = _saved === 'open';
+      try { _body.classList.toggle('d-none', !_wantOpen); } catch(_){}
+      try { setToggleVisual(_toggleBtn, _wantOpen); } catch(_){}
+      if (!_toggleBtn.__fs_toggle_attached) {
+        _toggleBtn.addEventListener('click', ()=>{
+          try {
+            const hidden = _body.classList.toggle('d-none');
+            setToggleVisual(_toggleBtn, !hidden);
+            try { localStorage.setItem(_TOGGLE_KEY, hidden ? 'closed' : 'open'); } catch(_){}
+          } catch(_){}
+        });
+        _toggleBtn.__fs_toggle_attached = true;
+      }
+    }
+    // Delegated click handler as last-resort: works even if elements are re-rendered
+    try {
+      document.addEventListener('click', function _fsrDelegateClick(ev){
+        try {
+          const btn = ev.target && ev.target.closest ? ev.target.closest('#fsr-toggle') : null;
+          if (!btn) return;
+          const bodyEl = document.getElementById('fsr-body');
+          if (!bodyEl) return;
+          const hidden = bodyEl.classList.toggle('d-none');
+          const tb = document.getElementById('fsr-toggle'); if (tb) setToggleVisual(tb, !hidden);
+          try { localStorage.setItem(_TOGGLE_KEY, hidden ? 'closed' : 'open'); } catch(_){}
+        } catch(_){}
+      }, { capture: true });
+    } catch(_){}
+  } catch(_){}
+  try {
+  // lightweight cross-document bus (BroadcastChannel + postMessage + storage fallback)
+  if (!window.__FS_BUS__) {
+    (function(){
+      const CHANNEL = 'fs-score-channel';
+      let bc = null;
+      try { bc = new BroadcastChannel(CHANNEL); } catch(e){ bc = null; }
+      const bcBlocked = !bc;
+      function _onMessage(msg){
+        try { const data = (typeof msg === 'string') ? JSON.parse(msg) : msg; window.dispatchEvent(new CustomEvent('fs-score:global', { detail: data })); } catch(_){ }
+      }
+      if (bc) bc.onmessage = (ev)=> _onMessage(ev.data);
+      window.addEventListener('message', (ev)=>{ if (!ev.data) return; if (ev.data && ev.data.__fs_score_msg) _onMessage(ev.data.payload); });
+      window.addEventListener('storage', (ev)=>{ if (ev.key === CHANNEL && ev.newValue) _onMessage(JSON.parse(ev.newValue)); });
+      window.__FS_BUS__ = {
+        send(payload){
+          const data = payload || {};
+          if (bc) try { bc.postMessage(data); } catch(_){};
+          try { if (window.parent && window.parent !== window) window.parent.postMessage({ __fs_score_msg: true, payload: data }, '*'); } catch(_){};
+          try { (document.querySelectorAll('iframe')||[]).forEach(f=>{ try{ f.contentWindow.postMessage({ __fs_score_msg: true, payload: data }, '*'); }catch(_){} }); } catch(_){};
+          try { localStorage.setItem(CHANNEL, JSON.stringify(data)); localStorage.removeItem(CHANNEL); } catch(_){};
+          try { _onMessage(data); } catch(_){}
+        },
+        on(cb){ if (typeof cb !== 'function') return; window.addEventListener('fs-score:global', (ev)=> cb(ev.detail)); }
+      };
+      if (bcBlocked) {
+        try { console.warn('BroadcastChannel indisponível; fallback postMessage/storage ativo (Firefox file://?)'); } catch(_){}
+      }
+    })();
+  }
+
+  if (window.__FS_REMOTE_READY__) return;
+  window.__FS_REMOTE_READY__ = true;
+
+  const STORAGE_KEY_UI = 'fs_remote_ui_state_v3';
+  const STORAGE_KEY_STATE = 'fs_remote_state_v1';
+  const DEFAULTS = {
+    team: '',
+    anySide: true,
+    side: 'any',
+    armed: true,
+    rouletteMode: false,
+    mode: 'SHOCK',
+    level: 40,
+    channel: 1,
+    gapMs: 200,
+    baseMs: 300,
+    preDelayMs: 0,
+    profiles: {
+      1:{pulses:1,lvlMul:1.00,durMul:1.00},
+      2:{pulses:2,lvlMul:1.00,durMul:1.15},
+      3:{pulses:3,lvlMul:1.10,durMul:1.30}
+    }
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const statusEl = $('fsr-status');
+  const logEl = $('fsr-log');
+  const logClearBtn = $('fsr-log-clear');
+  const preview = {
+    target: $('fsr-prev-target'),
+    armed: $('fsr-prev-armed'),
+    mode: $('fsr-prev-mode'),
+    level: $('fsr-prev-level'),
+    chan: $('fsr-prev-chan'),
+    gap: $('fsr-prev-gap'),
+    base: $('fsr-prev-base'),
+    preDelay: $('fsr-prev-predelay')
+  };
+  const inputs = {
+    armed: $('fsr-armed'),
+    rouletteMode: $('fsr-roulette-mode-btn'),
+    p1: {},
+    p2: {},
+    p3: {}
+  };
+  const searchBox = {
+    input: $('fsr-search-team'),
+    btn: $('fsr-search-btn'),
+    status: $('fsr-search-status'),
+    lastTerm: ''
+  };
+  const flashIframe = document.getElementById('flashscore-browser-iframe');
+
+  function setStatus(text){ if (statusEl) statusEl.textContent = text; }
+  function appendLog(text, source){
+    if (!logEl) return;
+    const placeholder = logEl.querySelector('.fsr-log-placeholder');
+    if (placeholder) placeholder.remove();
+    const row = document.createElement('div');
+    const tag = source ? ` ${source}` : '';
+    row.textContent = `[${new Date().toLocaleTimeString()}${tag}] ${text}`;
+    logEl.appendChild(row);
+    while (logEl.childElementCount > 80) {
+      const first = logEl.firstElementChild;
+      if (first) first.remove(); else break;
+    }
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  if (logClearBtn && logEl) {
+    logClearBtn.addEventListener('click', ()=>{
+      logEl.innerHTML = '<div class="text-muted fsr-log-placeholder">Aguardando eventos fs-score...</div>';
+    });
+  }
+
+  function setSearchStatus(text, variant='muted'){
+    if (!searchBox.status) return;
+    searchBox.status.textContent = text;
+    searchBox.status.classList.remove('text-muted','text-info','text-success','text-danger','text-warning');
+    searchBox.status.classList.add(`text-${variant}`);
+  }
+
+  function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+  const norm = (s)=> String(s||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+  const SELF_ID = `fs-config-${Math.random().toString(36).slice(2)}`;
+  const fieldTs = {
+    armed: 0, rouletteMode: 0, mode: 0, level: 0, channel: 0, gapMs: 0, baseMs: 0, preDelayMs: 0,
+    team: 0, anySide: 0, side: 0,
+    profiles: {
+      1: { pulses: 0, lvlMul: 0, durMul: 0 },
+      2: { pulses: 0, lvlMul: 0, durMul: 0 },
+      3: { pulses: 0, lvlMul: 0, durMul: 0 }
+    }
+  };
+  function markTsFromPayload(payload, ts){
+    const stamp = Number.isFinite(ts) ? ts : Date.now();
+    if (payload.armed != null) fieldTs.armed = stamp;
+    if (payload.rouletteMode != null) fieldTs.rouletteMode = stamp;
+    if (payload.mode != null) fieldTs.mode = stamp;
+    if (payload.level != null) fieldTs.level = stamp;
+    if (payload.channel != null) fieldTs.channel = stamp;
+    if (payload.gapMs != null) fieldTs.gapMs = stamp;
+    if (payload.baseMs != null) fieldTs.baseMs = stamp;
+    if (payload.preDelayMs != null) fieldTs.preDelayMs = stamp;
+    if (payload.team != null) fieldTs.team = stamp;
+    if (payload.anySide != null) fieldTs.anySide = stamp;
+    if (payload.side != null) fieldTs.side = stamp;
+    if (payload.profiles && typeof payload.profiles === 'object'){
+      for (const k of [1,2,3]){
+        const pf = payload.profiles[k];
+        if (!pf) continue;
+        if (pf.pulses != null) fieldTs.profiles[k].pulses = stamp;
+        if (pf.lvlMul != null) fieldTs.profiles[k].lvlMul = stamp;
+        if (pf.durMul != null) fieldTs.profiles[k].durMul = stamp;
+      }
+    }
+  }
+  const relaySeen = new Set();
+  const relayKey = (p)=> (p && p.origin && p.ts) ? `${p.origin}:${p.ts}` : null;
+  function shouldRelayPayload(p){
+    const k = relayKey(p);
+    if (!k) return false;
+    if (relaySeen.has(k)) return false;
+    relaySeen.add(k);
+    return true;
+  }
+  function decompose(d){
+    const a=[];
+    while(d>0){
+      if(d>=3){a.push(3);d-=3;}
+      else if(d===2){a.push(2);d-=2;}
+      else {a.push(1);d--;}
+    }
+    return a;
+  }
+
+  
+  function loadState(){
+    try{
+      const raw = JSON.parse(localStorage.getItem(STORAGE_KEY_STATE) || '{}') || {};
+      const merged = Object.assign({}, DEFAULTS, raw);
+      merged.profiles = Object.assign({}, DEFAULTS.profiles, raw.profiles || {});
+      if (!merged.team) merged.anySide = true;
+      if (!merged.side) merged.side = merged.anySide ? 'any' : 'home';
+      if (merged.anySide && merged.side !== 'any') merged.side = 'any';
+      return merged;
+    }catch(_){
+      return structuredClone(DEFAULTS);
+    }
+  }
+
+  function saveState(){
+    try { localStorage.setItem(STORAGE_KEY_STATE, JSON.stringify(S)); } catch(_){}
+  }
+
+  let S = loadState();
+  let room = null;
+  let sendChat = null;
+  let sendConfig = null;
+  let sendScore = null;
+  let lastSnap = null;
+  let lastScoreHash = '';
+  let lastScoreTs = 0;
+  const seenScore = new Set();
+  let processing = false;
+  const queue = [];
+
+  function enqueue(task){ queue.push(task); if(!processing) runNext(); }
+  async function runNext(){
+    if (processing) return;
+    const task = queue.shift(); if (!task) return;
+    processing = true;
+    try { await task(); } catch(e){ console.warn('task erro', e); }
+    processing = false;
+    if (queue.length) runNext();
+  }
+
+  function buildPayload(text){
+    const username = 'fs-remote';
+    return {
+      text,
+      name: username,
+      timestamp: Date.now(),
+      id: `fsr:${Date.now()}:${Math.random().toString(36).slice(2)}`
+    };
+  }
+
+  async function sendCommand(line){
+    const txt = String(line||'').trim();
+    if (!txt) return;
+    if (!isHost()) { console.warn('ignorado: comandos so em host'); return; }
+    let sent = false;
+    const emitEcho = () => {
+      try { window.dispatchEvent(new CustomEvent('collar:echo', { detail: { line: txt, source: 'fscore' } })); } catch(_){ }
+    };
+    const emitTx = () => {
+      try { window.dispatchEvent(new CustomEvent('collar:tx', { detail: { line: txt } })); return true; } catch(_){ return false; }
+    };
+    try {
+      const tunnel = window.__COLLAR_TUNNEL__;
+      if (tunnel && typeof tunnel.send === 'function') {
+        await tunnel.send(txt, { via: 'fscore', kind: 'cmd' });
+        sent = true;
+        emitEcho();
+      }
+    } catch(e){ console.warn('falha tunnel', e); }
+    if (!sent) {
+      try {
+        if (typeof window.collarSend === 'function') {
+          await window.collarSend(txt);
+          sent = true;
+          emitEcho(); // telemetria para graficos/logs sem reenviar para serial
+        } else if (typeof window.dispatchEvent === 'function') {
+          sent = emitTx();
+        }
+      } catch(e){ console.warn('falha serial', e); }
+      if (!sent && typeof window.dispatchEvent === 'function') {
+        sent = emitTx(); // fallback: ao menos tenta evento para serial/log
+      }
+    }
+    if (!sent && sendChat) {
+      try { sendChat(buildPayload(txt)); sent = true; }
+      catch(e){ console.warn('falha chat', e); }
+      emitEcho();
+    }
+  }
+
+
+  const delay = (ms)=> new Promise(r=> setTimeout(r, ms));
+
+  function currentMode(){
+    const btn = document.querySelector('.mode-btn.active');
+    if (btn?.dataset?.mode) return btn.dataset.mode;
+    return S.mode || 'SHOCK';
+  }
+
+  async function pulseOnce(level, dur){
+    const lvl = clamp(Math.round(level),0,100);
+    const mode = currentMode();
+    await sendCommand(`HOLDON ${mode},${lvl},${S.channel}`);
+    await delay(dur);
+    await sendCommand('HOLDOFF');
+  }
+
+  async function fireProfile(points){
+    const pf = S.profiles[points] || S.profiles[1];
+    const level = clamp(S.level * (pf.lvlMul||1), 0, 100);
+    const dur   = Math.max(1, Math.round(S.baseMs * (pf.durMul||1)));
+
+    for (let i=0;i<(pf.pulses||1);i++){
+      await pulseOnce(level, dur);
+      if (i<(pf.pulses||1)-1) await delay(S.gapMs);
+    }
+  }
+
+  async function pressRouletteButton() {
+    return new Promise(resolve => {
+      const rouletteButton = document.getElementById('r3Btn');
+      if (rouletteButton) {
+        const finishListener = () => {
+          window.removeEventListener('roulette:finished', finishListener);
+          appendLog('Sinal de finalização da roleta recebido.', 'fs-remote');
+          resolve();
+        };
+        window.addEventListener('roulette:finished', finishListener);
+  
+        appendLog('Acionando roleta...', 'fs-remote');
+        rouletteButton.dispatchEvent(new Event('pointerdown', {bubbles: true}));
+        
+        setTimeout(() => {
+          rouletteButton.dispatchEvent(new Event('pointerup', {bubbles: true}));
+          appendLog('Roleta girando...');
+        }, 3000);
+  
+      } else {
+        appendLog('Botão da roleta (#r3Btn) não encontrado!', 'fs-remote');
+        resolve(); // Resolve immediately if button is not found
+      }
+    });
+  }
+  async function fireDelta(delta){
+    if (!S.armed) {
+      appendLog(`Ignorado (desarmado): ${delta}pts`, 'fs-remote');
+      return;
+    }
+
+    if (S.rouletteMode) {
+      appendLog(`Modo roleta: ${delta} giro(s)`, 'fs-remote');
+      for (let i = 0; i < delta; i++) {
+        await pressRouletteButton();
+        if (i < delta - 1) await delay(S.gapMs);
+      }
+    } else {
+      appendLog(`Modo padrão: ${delta}pts`, 'fs-remote');
+      if (S.preDelayMs && S.preDelayMs > 0) await delay(S.preDelayMs);
+      for (const v of decompose(delta)){
+        await fireProfile(v);
+        await delay(S.gapMs);
+      }
+    }
+  }
+
+  function whichSide(target, snap){
+    const t = norm(target);
+    if (S.anySide) return 'any';
+    // sem alvo definido => ignora disparo
+    if (!t) return null;
+    if (norm(snap.homeName).includes(t)) return 'home';
+    if (norm(snap.awayName).includes(t)) return 'away';
+    return null;
+  }
+
+  function handleScore(payload){
+    if (!payload || typeof payload !== 'object') return;
+    const key = `${payload.origin || 'peer'}:${payload.ts || '0'}`;
+    if (seenScore.has(key)) return;
+    seenScore.add(key);
+    const prevSnap = lastSnap;
+    const snap = {
+      homeName: payload.homeName || '',
+      awayName: payload.awayName || '',
+      homeScore: Number.isFinite(payload.homeScore) ? payload.homeScore : null,
+      awayScore: Number.isFinite(payload.awayScore) ? payload.awayScore : null,
+      ended: payload.ended === true
+    };
+    const src = payload.origin || 'peer';
+    const ts = Number.isFinite(payload.ts) ? payload.ts : (payload.ts ? Number(payload.ts) : Date.now());
+    const hash = JSON.stringify([snap.homeName, snap.awayName, snap.homeScore, snap.awayScore, snap.ended]);
+    if (hash === lastScoreHash && ts <= lastScoreTs) return;
+    lastScoreHash = hash; lastScoreTs = ts;
+    appendLog(`${snap.homeName || 'Casa'} ${Number.isFinite(snap.homeScore) ? snap.homeScore : '-'} x ${Number.isFinite(snap.awayScore) ? snap.awayScore : '-'} ${snap.awayName || 'Fora'} (${payload.reason || 'update'})`, src);
+
+    try {
+      window.dispatchEvent(new CustomEvent('fs-score:local', { detail: { payload: snap, peerId: payload.origin || 'fs-remote' } }));
+    } catch(_){ }
+    // also publish via cross-document bus so mirrors in other documents receive it
+    try { if (window.__FS_BUS__ && typeof window.__FS_BUS__.send === 'function') window.__FS_BUS__.send({ type:'fs-score', payload: snap, peerId: payload.origin || 'fs-remote' }); } catch(_){ }
+
+    const isFirstOrSwapped = !prevSnap || snap.homeName !== prevSnap.homeName || snap.awayName !== prevSnap.awayName;
+    lastSnap = snap;
+    if (isFirstOrSwapped) return;
+
+    const dHome = (Number.isInteger(snap.homeScore) && Number.isInteger(prevSnap.homeScore) && snap.homeScore > prevSnap.homeScore)
+      ? (snap.homeScore - prevSnap.homeScore) : 0;
+    const dAway = (Number.isInteger(snap.awayScore) && Number.isInteger(prevSnap.awayScore) && snap.awayScore > prevSnap.awayScore)
+      ? (snap.awayScore - prevSnap.awayScore) : 0;
+
+    const side = whichSide(S.team, snap);
+    if (!side) return;
+
+    if (S.anySide){
+      const total = dHome + dAway;
+      if (total > 0) enqueue(()=> fireDelta(total));
+    } else if (side === 'home' && dHome > 0){
+      enqueue(()=> fireDelta(dHome));
+    } else if (side === 'away' && dAway > 0){
+      enqueue(()=> fireDelta(dAway));
+    }
+  }
+
+  function triggerTestPoint(side) {
+    if (!lastSnap) {
+        appendLog('Sem placar para adicionar ponto de teste.', 'fs-remote');
+        return;
+    }
+
+    const newPayload = { ...lastSnap, ts: Date.now(), reason: 'test-point', origin: 'local-test' };
+
+    if (side === 'home') {
+        newPayload.homeScore = (lastSnap.homeScore || 0) + 1;
+    } else {
+        newPayload.awayScore = (lastSnap.awayScore || 0) + 1;
+    }
+
+    handleScore(newPayload);
+  }
+
+function mountProfileRows(){
+    [1,2,3].forEach((p)=>{
+      const target = document.querySelector(`#fs-remote-card [data-p="${p}"]`);
+      if (!target) return;
+      target.innerHTML = `
+        <div class="d-flex align-items-end gap-2">
+          <div style="width:64px;" class="pt-1">${p} ${p===1?'pt':'pts'}</div>
+          <div style="width:90px;">
+            <input class="form-control form-control-sm" id="fsr-p${p}-pulses" type="number" min="1" max="10" step="1">
+          </div>
+          <div class="flex-grow-1">
+            <input class="form-range level-slider" id="fsr-p${p}-lvl" type="range" min="0.1" max="3" step="0.05">
+          </div>
+          <div class="flex-grow-1">
+            <input class="form-control form-control-sm" id="fsr-p${p}-dur" type="number" min="0.1" max="5" step="0.05">
+          </div>
+          <div style="width:80px;" class="text-end">
+            <button class="btn btn-outline-light btn-sm" id="fsr-p${p}-test" type="button">Testar</button>
+          </div>
+        </div>`;
+      inputs[`p${p}`] = {
+        pulses: $(`fsr-p${p}-pulses`),
+        lvl: $(`fsr-p${p}-lvl`),
+        dur: $(`fsr-p${p}-dur`),
+        test: $(`fsr-p${p}-test`)
+      };
+      const pf = S.profiles[p] || (S.profiles[p] = { pulses:1,lvlMul:1,durMul:1 });
+      if (inputs[`p${p}`].pulses) inputs[`p${p}`].pulses.value = pf.pulses;
+      if (inputs[`p${p}`].lvl) inputs[`p${p}`].lvl.value = pf.lvlMul;
+      if (inputs[`p${p}`].dur) inputs[`p${p}`].dur.value = pf.durMul;
+    });
+  }
+  mountProfileRows();
+
+  function syncInputs(){
+    if (inputs.armed) inputs.armed.checked = !!S.armed;
+    if (inputs.rouletteMode) inputs.rouletteMode.classList.toggle('active', !!S.rouletteMode);
+    [1,2,3].forEach((p)=>{
+      const pf = S.profiles[p];
+      const refs = inputs[`p${p}`];
+      if (!pf || !refs) return;
+      if (refs.pulses) refs.pulses.value = pf.pulses ?? '';
+      if (refs.lvl) refs.lvl.value = pf.lvlMul ?? '';
+      if (refs.dur) refs.dur.value = pf.durMul ?? '';
+    });
+    // preview
+    if (preview.target) preview.target.textContent = S.anySide ? 'Ambos' : (S.team || 'Nenhum');
+    if (preview.armed) {
+      preview.armed.textContent = S.armed ? 'armado' : 'desarmado';
+      preview.armed.className = S.armed ? 'badge text-bg-success' : 'badge text-bg-dark';
+    }
+    if (preview.mode) preview.mode.textContent = S.mode || '-';
+    if (preview.level) preview.level.textContent = S.level ?? '-';
+    if (preview.chan) preview.chan.textContent = S.channel ?? '-';
+    if (preview.gap) preview.gap.textContent = S.gapMs ? `${S.gapMs}ms` : '-';
+    if (preview.base) preview.base.textContent = S.baseMs ? `${S.baseMs}ms` : '-';
+    if (preview.preDelay) preview.preDelay.textContent = S.preDelayMs ? `${S.preDelayMs}ms` : '0ms';
+  }
+  function syncMirrorTargetFromState(){
+    try{
+      const mirror = window.__FS_SCORE_MIRROR__;
+      if (!mirror || typeof mirror.setActiveTarget !== 'function') return;
+      const fallback = typeof mirror.getCurrentTargetKey === 'function' ? mirror.getCurrentTargetKey() : 'any';
+      const side = S?.anySide ? 'any' : (S?.side || fallback);
+      mirror.setActiveTarget(side);
+    } catch(_){}
+  }
+  syncInputs();
+
+  function controlSnapshot(includeTarget = false, includeProfiles = true){
+    const base = {
+      armed: S.armed,
+      rouletteMode: S.rouletteMode,
+      mode: S.mode,
+      level: S.level,
+      channel: S.channel,
+      gapMs: S.gapMs,
+      baseMs: S.baseMs,
+      preDelayMs: S.preDelayMs
+    };
+    if (includeTarget) {
+      base.team = S.team;
+      base.anySide = S.anySide;
+      base.side = S.anySide ? 'any' : (S.side || 'home');
+    }
+    if (includeProfiles) base.profiles = S.profiles;
+    return base;
+  }
+
+  function broadcastConfig(reason, opts = {}){
+    const includeTarget = opts.includeTarget === true;
+    const includeProfiles = opts.includeProfiles !== false;
+    const ts = Date.now();
+    const payload = { ...controlSnapshot(includeTarget, includeProfiles), reason: reason || 'change', ts, origin: SELF_ID };
+    markTsFromPayload(payload, ts);
+    if (sendConfig) {
+      try { sendConfig(payload); } catch(_){}
+    }
+    if (opts.toBus !== false && window.__FS_BUS__ && typeof window.__FS_BUS__.send === 'function') {
+      const busPayload = { ...payload };
+      delete busPayload.profiles; // não enviar multiplicadores ao controle remoto
+      try { window.__FS_BUS__.send({ type:'fs-control', payload: busPayload }); } catch(_){}
+    }
+  }
+
+  function relayControlPayload(payload, opts = {}){
+    if (!payload || typeof payload !== 'object') return;
+    if (!shouldRelayPayload(payload)) return;
+    const toBus = opts.toBus !== false;
+    const toRoom = opts.toRoom !== false;
+    // preserva ts/origin do remetente
+    if (toRoom && sendConfig) {
+      try { sendConfig(payload); } catch(_){}
+    }
+    if (toBus && window.__FS_BUS__ && typeof window.__FS_BUS__.send === 'function') {
+      const busPayload = { ...payload };
+      delete busPayload.profiles; // bus para controle remoto sem multiplicadores
+      try { window.__FS_BUS__.send({ type:'fs-control', payload: busPayload }); } catch(_){}
+    }
+  }
+
+  function attachSliderTooltip(el, formatter){
+    if (!el) return;
+    const fmt = formatter || (v=>v);
+    const update = ()=>{
+      const val = el.value;
+      const txt = fmt(val);
+      el.setAttribute('title', txt);
+      el.setAttribute('data-bs-original-title', txt);
+    };
+    el.addEventListener('input', update);
+    setTimeout(update, 0);
+  }
+
+  function bindInputs(){
+    if (inputs.armed) inputs.armed.addEventListener('change', (e)=>{ S.armed = !!e.target.checked; saveState(); broadcastConfig('armed'); syncInputs(); });
+    if (inputs.rouletteMode) inputs.rouletteMode.addEventListener('click', ()=>{ S.rouletteMode = !S.rouletteMode; saveState(); broadcastConfig('rouletteMode'); syncInputs(); });
+
+    [1,2,3].forEach((p)=>{
+      const refs = inputs[`p${p}`];
+      if (!refs) return;
+      refs.pulses?.addEventListener('change', (e)=>{
+        const pf = S.profiles[p] || (S.profiles[p] = {pulses:1,lvlMul:1,durMul:1});
+        pf.pulses = Math.max(1, parseInt(e.target.value,10)||1);
+        e.target.value = pf.pulses;
+        saveState(); // não propaga para remoto (multiplicadores são locais)
+      });
+      refs.lvl?.addEventListener('input', (e)=>{
+        const pf = S.profiles[p] || (S.profiles[p] = {pulses:1,lvlMul:1,durMul:1});
+        pf.lvlMul = clamp(parseFloat(e.target.value)||1, 0.1, 3);
+        e.target.value = pf.lvlMul;
+        saveState(); // não propaga para remoto (multiplicadores são locais)
+      });
+      refs.dur?.addEventListener('change', (e)=>{
+        const pf = S.profiles[p] || (S.profiles[p] = {pulses:1,lvlMul:1,durMul:1});
+        pf.durMul = clamp(parseFloat(e.target.value)||1, 0.1, 5);
+        e.target.value = pf.durMul;
+        saveState(); // não propaga para remoto (multiplicadores são locais)
+      });
+      refs.test?.addEventListener('click', ()=> enqueue(()=> fireProfile(p)));
+      attachSliderTooltip(refs.lvl, (v)=>`x${v}`);
+    });
+
+    const testHomePointBtn = $('fsr-test-home-point-btn');
+    if (testHomePointBtn) {
+        testHomePointBtn.addEventListener('click', () => triggerTestPoint('home'));
+    }
+
+    const testAwayPointBtn = $('fsr-test-away-point-btn');
+    if (testAwayPointBtn) {
+        testAwayPointBtn.addEventListener('click', () => triggerTestPoint('away'));
+    }
+
+    // Pesquisa Flashscore -> tampermonkey (lista ao vivo)
+    const searchOrigins = [
+      'https://www.flashscore.com.br',
+      'https://www.flashscore.com',
+      'https://m.flashscore.com.br',
+      'https://www.flashscore.mobi'
+    ];
+    const sendSearchToFlashscore = (term)=>{
+      if (!flashIframe || !flashIframe.contentWindow) return false;
+      const payload = { type: 'fs-select-match', term, ts: Date.now(), source: 'fscore' };
+      searchOrigins.forEach((origin)=>{
+        try { flashIframe.contentWindow.postMessage(payload, origin); } catch(_){}
+      });
+      try { flashIframe.contentWindow.postMessage(payload, '*'); } catch(_){}
+      return true;
+    };
+    const triggerSearch = ()=>{
+      if (!searchBox.input) return;
+      const term = (searchBox.input.value || '').trim();
+      if (!term) { setSearchStatus('Digite um time', 'warning'); return; }
+      searchBox.lastTerm = term;
+      if (!sendSearchToFlashscore(term)) {
+        setSearchStatus('Browser indisponivel', 'danger');
+        return;
+      }
+      setSearchStatus('Enviado ao Flashscore', 'success');
+      appendLog(`Pesquisa enviada para lista: ${term}`, 'fs-remote');
+    };
+    if (searchBox.btn) searchBox.btn.addEventListener('click', triggerSearch);
+    if (searchBox.input) {
+      searchBox.input.addEventListener('keydown', (e)=>{
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          triggerSearch();
+        }
+      });
+    }
+  }
+  bindInputs();
+
+  
+  function applyConfig(cfg, opts = { persist:true, toBus:false }){
+    if (!cfg || typeof cfg !== 'object') return;
+    const isRemoteAuthority = cfg.origin === 'remote-control';
+    if (cfg.origin && cfg.origin === SELF_ID && !opts.allowSelf && !isRemoteAuthority) return;
+    const ts = Number.isFinite(cfg.ts) ? cfg.ts : (cfg.ts ? Number(cfg.ts) : Date.now());
+    const hasTeam = Object.prototype.hasOwnProperty.call(cfg, 'team');
+    const hasAny  = Object.prototype.hasOwnProperty.call(cfg, 'anySide');
+    const hasSide = Object.prototype.hasOwnProperty.call(cfg, 'side');
+    const nextTeam = hasTeam ? String(cfg.team || '').trim() : S.team;
+    const rawSide = hasSide ? String(cfg.side || '').toLowerCase() : (S.side || 'any');
+    const nextSide = ['home','away','any'].includes(rawSide) ? rawSide : null;
+    // só aplica team vazio se anySide vier junto; evita apagar alvo ao receber patch incompleto
+    if (hasTeam) {
+      if (nextTeam || hasAny) S.team = nextTeam;
+    }
+    if (hasSide && ts > fieldTs.side && nextSide) { S.side = nextSide; fieldTs.side = ts; }
+    if (hasAny) {
+      S.anySide = !!cfg.anySide;
+      if (S.anySide) S.side = 'any';
+    } else if (hasSide && nextSide) {
+      S.anySide = nextSide === 'any';
+    } else if (hasTeam && nextTeam) {
+      S.anySide = false;
+    }
+    if (S.anySide && S.side !== 'any') S.side = 'any';
+    if (!S.anySide && S.side === 'any' && nextSide && nextSide !== 'any') S.side = nextSide;
+    if (cfg.armed != null && ts > fieldTs.armed) { S.armed = !!cfg.armed; fieldTs.armed = ts; }
+    if (cfg.rouletteMode != null && ts > fieldTs.rouletteMode) { S.rouletteMode = !!cfg.rouletteMode; fieldTs.rouletteMode = ts; }
+    if (cfg.mode && ts > fieldTs.mode) { S.mode = String(cfg.mode); fieldTs.mode = ts; }
+    if (cfg.level != null && ts > fieldTs.level) { S.level = clamp(parseInt(cfg.level,10)||0,0,100); fieldTs.level = ts; }
+    if (cfg.channel != null && ts > fieldTs.channel) { S.channel = clamp(parseInt(cfg.channel,10)||1,1,99); fieldTs.channel = ts; }
+    if (cfg.gapMs != null && ts > fieldTs.gapMs) { S.gapMs = Math.max(10, parseInt(cfg.gapMs,10)||200); fieldTs.gapMs = ts; }
+    if (cfg.baseMs != null && ts > fieldTs.baseMs) { S.baseMs = Math.max(10, parseInt(cfg.baseMs,10)||300); fieldTs.baseMs = ts; }
+    if (cfg.preDelayMs != null && ts > fieldTs.preDelayMs) { S.preDelayMs = Math.max(0, parseInt(cfg.preDelayMs,10)||0); fieldTs.preDelayMs = ts; }
+    if (cfg.profiles && typeof cfg.profiles === 'object'){
+      for (const k of [1,2,3]){
+        if (!cfg.profiles[k]) continue;
+        const pf = S.profiles[k] || (S.profiles[k] = {pulses:1,lvlMul:1,durMul:1});
+        if (cfg.profiles[k].pulses != null && ts > fieldTs.profiles[k].pulses) { pf.pulses = Math.max(1, parseInt(cfg.profiles[k].pulses,10)||1); fieldTs.profiles[k].pulses = ts; }
+        if (cfg.profiles[k].lvlMul != null && ts > fieldTs.profiles[k].lvlMul) { pf.lvlMul = clamp(parseFloat(cfg.profiles[k].lvlMul)||1, 0.1, 3); fieldTs.profiles[k].lvlMul = ts; }
+        if (cfg.profiles[k].durMul != null && ts > fieldTs.profiles[k].durMul) { pf.durMul = clamp(parseFloat(cfg.profiles[k].durMul)||1, 0.1, 5); fieldTs.profiles[k].durMul = ts; }
+      }
+    }
+    if (opts.persist !== false) saveState();
+    const shouldRelay = cfg.origin && cfg.origin !== SELF_ID && opts.relay !== false;
+    if (shouldRelay) {
+      relayControlPayload(cfg, { toBus: opts.toBus !== false, toRoom: opts.toRoom !== false });
+    }
+    syncInputs();
+    syncMirrorTargetFromState();
+  }
+
+  function bindRoom(nextRoom){
+    room = nextRoom;
+    sendChat = null;
+    sendConfig = null;
+    sendScore = null;
+    setStatus(room ? 'conectado' : 'desconectado');
+    if (!room || typeof room.makeAction !== 'function') return;
+
+    try { const [sc] = room.makeAction('chat'); sendChat = sc; } catch(_){}
+    try {
+      const [sendCfg, getCfg] = room.makeAction('fs-config');
+      sendConfig = sendCfg;
+      if (typeof getCfg === 'function') getCfg((cfg)=>{
+        if (!cfg) return;
+        if (cfg.__fs_req === 'control-state') {
+          if (cfg.origin && cfg.origin === SELF_ID) return;
+          const tsNow = Date.now();
+          const snap = controlSnapshot(true, true);
+          markTsFromPayload(snap, tsNow);
+          try { sendConfig({ ...snap, ts: tsNow, origin: SELF_ID }); } catch(_){}
+          return;
+        }
+        applyConfig(cfg, { persist:false, toBus:false, toRoom:false });
+        relayControlPayload(cfg, { toBus:true, toRoom:false });
+      });
+      // solicita estado atual ao conectar
+      try { sendConfig({ __fs_req:'control-state', origin: SELF_ID }); } catch(_){}
+    } catch(_){}
+    try {
+      const pair = room.makeAction('fs-score');
+      if (Array.isArray(pair) && pair.length >= 2){
+        sendScore = pair[0];
+        const getScore = pair[1];
+        if (typeof getScore === 'function') getScore((data)=> handleScore(data));
+      }
+    } catch(_){}
+    try {
+      const [, getControl] = room.makeAction('fs-control');
+      if (typeof getControl === 'function') getControl((patch)=> {
+        applyConfig(patch, { toBus:false, toRoom:false });
+        relayControlPayload(patch, { toBus:true, toRoom:false });
+      });
+    } catch(_){}
+
+    // ao conectar, reenvia ultimo snapshot (se existir) para espelhos
+    if (sendScore && lastSnap) {
+      try { sendScore({ ...lastSnap, ts: Date.now(), origin: 'fs-remote', reason: 'connect-replay' }); } catch(_){}
+    }
+  }
+
+  window.addEventListener('trystero:room', (ev) => bindRoom(ev?.detail?.room || null));
+  if (window.__TRYSTERO_ROOM__) bindRoom(window.__TRYSTERO_ROOM__);
+
+  // respond to replay requests from mirrors via bus
+  if (window.__FS_BUS__) {
+    window.__FS_BUS__.on((m)=>{
+      try{
+        if (!m) return;
+        if (m.type === 'request-replay') {
+          if (lastSnap) {
+            try { window.__FS_BUS__.send({ type:'fs-score', payload: lastSnap, peerId: 'fs-remote' }); } catch(_){}
+          }
+        }
+        if (m.type === 'request-control') {
+          broadcastConfig('request-sync', { includeTarget:true });
+        }
+        if (m.type === 'fs-control' && m.payload) {
+          // ignora eco proprio
+          if (m.payload.origin && m.payload.origin === SELF_ID) return;
+          applyConfig(m.payload, { toBus:false, toRoom:false, relay:false });
+          // encaminha para sala trystero para outros peers
+          relayControlPayload(m.payload, { toBus:false, toRoom:true });
+        }
+      }catch(_){ }
+    });
+  }
+
+  const toggleBtn = document.getElementById('fsr-toggle');
+  const body = document.getElementById('fsr-body');
+  if (toggleBtn && body) {
+    const saved = localStorage.getItem(STORAGE_KEY_UI);
+    const wantOpen = saved === 'open';
+    body.classList.toggle('d-none', !wantOpen);
+    setToggleVisual(toggleBtn, wantOpen);
+    toggleBtn.addEventListener('click', ()=>{
+      const hidden = body.classList.toggle('d-none');
+      setToggleVisual(toggleBtn, !hidden);
+      try { localStorage.setItem(STORAGE_KEY_UI, hidden ? 'closed' : 'open'); } catch(_){}
+    });
+  }
+  } catch (e) {
+    try { console.error('fs_remote init error', e); } catch(_){}
+    try { const s = document.getElementById('fsr-status'); if (s) s.textContent = 'erro'; } catch(_){}
+  }
+})();
+</script>
+
+<!-- Flashscore Browser (incorporado) -->
+<script>
+  (() => {
+    if (window.flashscoreBrowserModuleLoaded) return;
+    window.flashscoreBrowserModuleLoaded = true;
+
+    const homeBtn = document.getElementById('home-flashscore-browser');
+    const toggleBtn = document.getElementById('toggle-flashscore-browser');
+    const browserBody = document.getElementById('flashscore-browser-body');
+    const iframe = document.getElementById('flashscore-browser-iframe');
+    const urlInput = document.getElementById('flashscore-url-input');
+    const goBtn = document.getElementById('flashscore-go-btn');
+    const consentKey = 'flashscore-consent-v1';
+    const consentRequest = 'flashscore-consent';
+    const consentAck = 'flashscore-consent-ack';
+    const consentOrigins = [
+      'https://www.flashscore.com.br',
+      'https://www.flashscore.com',
+      'https://m.flashscore.com.br',
+      'https://www.flashscore.mobi'
+    ];
+
+    if (!homeBtn || !toggleBtn || !browserBody || !iframe || !urlInput || !goBtn) {
+      console.error("Flashscore Browser: elementos ausentes.");
+      return;
+    }
+
+    const initialSrc = 'https://www.flashscore.com.br/basquete/';
+    const storageKey = 'flashscore-browser-last-url';
+    const toggleIcon = toggleBtn.querySelector('i');
+    const visibilityKey = 'flashscore-browser-visibility';
+
+    const applyExpandedState = (expanded) => {
+      browserBody.style.display = expanded ? 'block' : 'none';
+      if (toggleIcon) {
+        toggleIcon.classList.toggle('fa-chevron-up', expanded);
+        toggleIcon.classList.toggle('fa-chevron-down', !expanded);
+      }
+      const label = expanded ? 'Ocultar' : 'Expandir';
+      toggleBtn.setAttribute('title', label);
+      toggleBtn.setAttribute('aria-label', label);
+      toggleBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    };
+
+    let savedVisibility = null;
+    try { savedVisibility = localStorage.getItem(visibilityKey); } catch(_){}
+    let isExpanded = savedVisibility === null ? false : savedVisibility === 'expanded';
+    applyExpandedState(isExpanded);
+
+    const lastUrl = localStorage.getItem(storageKey);
+    if (lastUrl && lastUrl !== initialSrc) {
+      iframe.src = lastUrl;
+      urlInput.value = lastUrl;
+    } else {
+      iframe.src = initialSrc;
+    }
+
+    const navigateTo = (url) => {
+      const trimmedUrl = url.trim();
+      if (trimmedUrl && (trimmedUrl.startsWith('https://www.flashscore.com.br') || trimmedUrl.startsWith('https://www.flashscore.mobi'))) {
+        iframe.src = trimmedUrl;
+        localStorage.setItem(storageKey, trimmedUrl);
+        urlInput.value = trimmedUrl;
+      } else if (trimmedUrl) {
+        console.warn('URL inválida. Use flashscore.com.br ou flashscore.mobi');
+      }
+    };
+
+    goBtn.addEventListener('click', () => navigateTo(urlInput.value));
+    urlInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        navigateTo(urlInput.value);
+      }
+    });
+
+    homeBtn.addEventListener('click', () => {
+      if (iframe.src !== initialSrc) {
+        iframe.src = initialSrc;
+        urlInput.value = '';
+        localStorage.setItem(storageKey, initialSrc);
+      }
+    });
+
+    toggleBtn.addEventListener('click', () => {
+      isExpanded = !isExpanded;
+      applyExpandedState(isExpanded);
+      try { localStorage.setItem(visibilityKey, isExpanded ? 'expanded' : 'collapsed'); } catch(_){}
+    });
+
+    const markConsent = ()=> {
+      try { localStorage.setItem(consentKey, 'granted'); } catch(_){}
+    };
+    const sendConsent = ()=> {
+      if (!iframe?.contentWindow) return;
+      const msg = { type: consentRequest, consent: true, granted: true };
+      consentOrigins.forEach((origin)=>{
+        try { iframe.contentWindow.postMessage(msg, origin); } catch(_){}
+      });
+      try { iframe.contentWindow.postMessage(msg, '*'); } catch(_){}
+    };
+
+    const storedConsent = localStorage.getItem(consentKey) === 'granted';
+    if (storedConsent) sendConsent();
+
+    window.addEventListener('message', (event)=>{
+      if (!event?.data || event.data.type !== consentAck) return;
+      if (event.origin && !event.origin.includes('flashscore')) return;
+      if (event.data.granted === true) markConsent();
+    });
+
+    iframe.addEventListener('load', () => {
+      iframe.blur();
+      sendConsent();
+    });
+
+    if (!storedConsent) {
+      markConsent();
+      sendConsent();
+    }
+  })();
+</script>
+
+<script>
+  function isHost(){
+    try {
+      const tags = (window.__TRYSTERO_PEER__ && typeof window.__TRYSTERO_PEER__.getLocalTags === 'function')
+        ? window.__TRYSTERO_PEER__.getLocalTags() : [];
+      if (Array.isArray(tags) && tags.map(t=>String(t||'').toLowerCase()).includes('host')) return true;
+    } catch(_){}
+    return document.documentElement.classList.contains('host-on');
+  }
+</script>

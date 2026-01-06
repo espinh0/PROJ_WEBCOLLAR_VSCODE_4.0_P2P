@@ -1,0 +1,1464 @@
+<!-- ROLETAS v4.4 (Sync determinístico por timestamps + resync em visibilitychange; lock robusto) -->
+<div class="r3 card p-3 mt-3 position-relative" style="background:#111;border:1px solid #333;border-radius:.75rem;">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h5 class="m-0">Roletas</h5>
+    <small class="text-secondary">Segure para carregar • Solte para lançar</small>
+  </div>
+
+  <div class="d-flex gap-4 flex-wrap align-items-start justify-content-center r3-layout">
+    <div class="d-flex gap-4 flex-wrap align-items-start justify-content-center r3-wheels">
+      <div class="r3-wrap" id="r3WrapMode">
+        <div class="r3-pointer" aria-hidden="true"></div>
+        <div class="r3-wheel" id="r3WheelMode">
+          <div class="r3-sel" aria-hidden="true"></div>
+          <div class="r3-labels"></div>
+        </div>
+        <button class="r3-lock-below" id="lockModeBtn" aria-pressed="false">
+          <i class="fa-solid fa-lock-open"></i> Bloquear
+        </button>
+      </div>
+
+      <div class="r3-wrap" id="r3WrapInt">
+        <div class="r3-pointer" aria-hidden="true"></div>
+        <div class="r3-wheel" id="r3WheelInt">
+          <div class="r3-sel" aria-hidden="true"></div>
+          <div class="r3-labels"></div>
+          <div class="r3-centericon"><i class="fa-solid fa-signal"></i></div>
+        </div>
+        <button class="r3-lock-below" id="lockIntBtn" aria-pressed="false">
+          <i class="fa-solid fa-lock-open"></i> Bloquear
+        </button>
+      </div>
+
+      <div class="r3-wrap" id="r3WrapDur">
+        <div class="r3-pointer" aria-hidden="true"></div>
+        <div class="r3-wheel" id="r3WheelDur">
+          <div class="r3-sel" aria-hidden="true"></div>
+          <div class="r3-labels"></div>
+          <div class="r3-centericon"><i class="fa-solid fa-clock"></i></div>
+        </div>
+        <button class="r3-lock-below" id="lockDurBtn" aria-pressed="false">
+          <i class="fa-solid fa-lock-open"></i> Bloquear
+        </button>
+      </div>
+    </div>
+
+    <div class="r3-readouts">
+      <div class="r3-readout">
+        <div class="text-secondary small">Modo</div>
+        <div id="r3ModeRes" class="fw-semibold">—</div>
+      </div>
+      <div class="r3-readout">
+        <div class="text-secondary small">Intensidade</div>
+        <div id="r3IntRes" class="fw-semibold">—</div>
+      </div>
+      <div class="r3-readout">
+        <div class="text-secondary small">Duração (s)</div>
+        <div id="r3DurRes" class="fw-semibold">—</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="r3-mode-toggles mt-3">
+    <div class="text-secondary small mb-2">Modos ativos</div>
+    <div class="r3-mode-grid">
+      <div class="form-check form-switch r3-mode-switch">
+        <input class="form-check-input" type="checkbox" id="r3ModeToggleBeep" checked>
+        <label class="form-check-label" for="r3ModeToggleBeep"><i class="fa-solid fa-volume-high"></i> Beep</label>
+      </div>
+      <div class="form-check form-switch r3-mode-switch">
+        <input class="form-check-input" type="checkbox" id="r3ModeToggleVibration" checked>
+        <label class="form-check-label" for="r3ModeToggleVibration"><i class="fa-solid fa-mobile-screen-button"></i> Vibra</label>
+      </div>
+      <div class="form-check form-switch r3-mode-switch">
+        <input class="form-check-input" type="checkbox" id="r3ModeToggleShock" checked>
+        <label class="form-check-label" for="r3ModeToggleShock"><i class="fa-solid fa-bolt-lightning"></i> Choque</label>
+      </div>
+      <div class="form-check form-switch r3-mode-switch">
+        <input class="form-check-input" type="checkbox" id="r3ModeToggleLight" checked>
+        <label class="form-check-label" for="r3ModeToggleLight"><i class="fa-solid fa-lightbulb"></i> Luz</label>
+      </div>
+    </div>
+  </div>
+
+  <div class="mt-3 d-flex flex-column align-items-center">
+    <div class="d-flex align-items-center gap-2 justify-content-center position-relative">
+      <button id="r3Btn" class="btn r3-btn-hold fw-semibold px-4" aria-pressed="false" aria-live="polite">
+        <span class="r3BtnMask" aria-hidden="true"></span>
+        <span class="r3BtnContent"><i class="fa-solid fa-dice"></i> <span id="r3BtnText">Segurar para girar</span></span>
+      </button>
+      <span id="r3Countdown" class="badge text-bg-secondary ms-2" style="display:none;">0s</span>
+    </div>
+
+  </div>
+
+  <div id="r3Status" class="text-secondary small position-absolute" style="right:12px; bottom:10px;">Pronto</div>
+</div>
+
+<style>
+  .r3-layout{ gap:1.5rem; }
+  .r3-wheels{ display:flex; gap:clamp(.5rem, 1.5vw, 1.5rem); flex-wrap:nowrap; align-items:flex-start; justify-content:center; }
+  .r3-readouts{ display:flex; flex-direction:column; gap:1rem; align-self:flex-start; min-width:150px; }
+  .r3-readout{ padding:0; border:0; background:transparent; }
+  .r3-readout .fw-semibold{ font-size:2rem; }
+  @media (max-width: 1024px){
+    .r3-readouts{ flex-direction:row; flex-wrap:wrap; align-self:stretch; justify-content:center; align-items:flex-start; gap:.75rem 1rem; }
+    .r3-readout{ min-width:120px; text-align:center; }
+  }
+  .r3-wrap{ position:relative; width:clamp(96px, 18vw, 200px); aspect-ratio:1/1; display:flex; flex-direction:column; align-items:center; }
+  .r3-wheel{ position:relative; width:100%; aspect-ratio:1/1; border-radius:50%; border:1px solid #2a2a2e; background:transparent;
+    will-change: transform; backface-visibility:hidden; transform:translateZ(0); contain:layout paint; }
+  .r3-wheel::before{ content:""; position:absolute; inset:6px; border-radius:50%; border:2px dashed #4b4b58; pointer-events:none; z-index:1; }
+
+  .r3-labels{ position:absolute; inset:0; border-radius:50%; z-index:3; pointer-events:none; will-change:transform; backface-visibility:hidden; }
+  .r3-pointer{ position:absolute; top:-1px; left:50%; transform:translateX(-50%); width:0; height:0;
+    border-left:8px solid transparent; border-right:8px solid transparent; border-top:14px solid #0d6efd;
+    filter:drop-shadow(0 0 2px rgba(13,110,253,.6)); z-index:4; pointer-events:none; }
+
+  .r3-centericon{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); z-index:3; color:#8aa4ff; opacity:.9; pointer-events:none; }
+  .r3-centericon .fa-solid{ font-size:clamp(.9rem, 2.2vw, 1.35rem); }
+
+  .r3-label{
+    position:absolute; left:50%; top:50%;
+    transform-origin:center left;
+    color:#e6e6e6; font-weight:800; font-size:clamp(.72rem, 1.6vw, 1.02rem);
+    display:flex; align-items:center; justify-content:center;
+    text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    text-shadow:0 1px 0 rgba(0,0,0,.5); user-select:none; padding:0 .2rem;
+    will-change:transform; backface-visibility:hidden; transform:translateZ(0);
+  }
+  .r3-label.icon-only{ font-size:clamp(.9rem, 2.6vw, 1.6rem); }
+
+  .r3-sel{ position:absolute; inset:0; border-radius:50%; z-index:2; pointer-events:none; opacity:0; transition:opacity .12s ease; }
+
+  .r3-wrap.manual-on .r3-wheel{ box-shadow: inset 0 0 0 9999px rgba(220,53,69,.12); border-color:#6b2a34; cursor:pointer; }
+  .r3-wrap.manual-on .r3-label{ pointer-events:auto; cursor:pointer; border-radius:.45rem; }
+  .r3-wrap.manual-on .r3-label:hover{ background:transparent; }
+
+  .r3-btn-hold{ position:relative; overflow:hidden; color:#fff; border-color:#0d6efd; background:linear-gradient(90deg, rgba(13,110,253,.85), rgba(255,165,0,.9), rgba(220,53,69,.95)); isolation:isolate; min-width: 14rem; }
+  .r3BtnMask{
+    position:absolute; inset:0; z-index:1; background:#0d6efd;
+    clip-path: inset(0 0 0 calc(var(--p, 0) * 100%));
+    transition: clip-path .08s linear; will-change: clip-path; pointer-events: none;
+  }
+  .r3BtnContent{ position:relative; z-index:2; display:inline-flex; align-items:center; gap:.5rem; }
+  .r3-btn-hold.r3-pressing{ transform:translateY(1px) scale(.99); }
+  .r3-btn-hold:focus-visible{ outline:2px solid #ffd17a; outline-offset:2px; }
+
+  .r3-lock-below{ margin-top:.5rem; background:#101219; border:1px solid #2b2b31; color:#d0d0d0; padding:.25rem .6rem; border-radius:.6rem; font-size:.8rem; }
+  .r3-mode-toggles{ border-top:1px solid #222; padding-top:.75rem; }
+  .r3-mode-grid{ display:flex; flex-wrap:wrap; gap:.4rem 1rem; justify-content:center; }
+  .r3-mode-switch{ display:flex; align-items:center; gap:.45rem; margin:0; }
+  .r3-mode-switch .form-check-input{ margin-top:0; cursor:pointer; }
+  .r3-mode-switch .form-check-label{ display:flex; align-items:center; gap:.4rem; cursor:pointer; color:#d0d0d0; }
+  .r3-mode-switch i{ color:#8aa4ff; }
+  .r3 i,
+  .r3 .fa-solid,
+  .r3 .fa-regular,
+  .r3 .fa-brands{ color:#fff; }
+</style>
+
+<script>
+(()=> {
+  // =========================
+  // Dados
+  // =========================
+  const MODES_ALL = [
+    {key:"BEEP",      icon:"fa-volume-high",          label:"Beep"},
+    {key:"VIBRATION", icon:"fa-mobile-screen-button", label:"Vibra"},
+    {key:"SHOCK",     icon:"fa-bolt-lightning",       label:"Choque"},
+    {key:"LIGHT",     icon:"fa-lightbulb",            label:"Luz"},
+  ];
+  // Keep in sync with Modules/Event_Timeline_Chart colors.
+  const MODE_SLICE_COLORS = {
+    BEEP: "#60a5fa",
+    VIBRATION: "#10b981",
+    SHOCK: "#f97316",
+    LIGHT: "#facc15"
+  };
+  const MODE_SLICE_BG_TONES = ["#0e1013", "#15181d", "#1b1f25", "#232831"];
+  const MODE_SLICE_BG_ALPHA = 0.12;
+  let MODES = MODES_ALL.slice();
+  const INT_STEPS   = [0,1,10,20,30,40,50,60,70,80,90,100];
+  const DUR_VALUES  = [0,0.5,1,2,3,4,5,6,7,8,9,10];
+  const DUR_WEIGHTS = [1,1,1,1,1,1,1,1,1,1,1,1];
+
+  // Carregamento (somente UI)
+  const CHARGE_RATE_PCT_PER_SEC = 96;
+  const CHARGE_RATE_PCT_PER_MS  = CHARGE_RATE_PCT_PER_SEC / 1000;
+
+  // Velocidades determinísticas por roda (deg/s) durante HOLD (host manda também)
+  const DEFAULT_DPS = { m: 720, i: 860, d: 640 };
+  const MODE_STORAGE_KEY = 'r3_modes_enabled_v1';
+  const MIN_ACTIVE_MODES = 2;
+
+  // =========================
+  // DOM
+  // =========================
+  const wM = document.getElementById('r3WheelMode');
+  const wI = document.getElementById('r3WheelInt');
+  const wD = document.getElementById('r3WheelDur');
+  const selM = wM.querySelector('.r3-sel');
+  const selI = wI.querySelector('.r3-sel');
+  const selD = wD.querySelector('.r3-sel');
+  const labelsM = wM.querySelector('.r3-labels');
+  const labelsI = wI.querySelector('.r3-labels');
+  const labelsD = wD.querySelector('.r3-labels');
+
+  const rM = document.getElementById('r3ModeRes');
+  const rI = document.getElementById('r3IntRes');
+  const rD = document.getElementById('r3DurRes');
+
+  const btn = document.getElementById('r3Btn');
+  const btnText = document.getElementById('r3BtnText');
+  const statusEl = document.getElementById('r3Status');
+  const countdownEl = document.getElementById('r3Countdown');
+
+  const lockModeBtn = document.getElementById('lockModeBtn');
+  const lockIntBtn  = document.getElementById('lockIntBtn');
+  const lockDurBtn  = document.getElementById('lockDurBtn');
+
+  const wrapM = document.getElementById('r3WrapMode');
+  const wrapI = document.getElementById('r3WrapInt');
+  const wrapD = document.getElementById('r3WrapDur');
+  const modeToggleEls = {
+    BEEP: document.getElementById('r3ModeToggleBeep'),
+    VIBRATION: document.getElementById('r3ModeToggleVibration'),
+    SHOCK: document.getElementById('r3ModeToggleShock'),
+    LIGHT: document.getElementById('r3ModeToggleLight'),
+  };
+
+  // =========================
+  // Estado visual local (ângulos CSS)
+  // =========================
+  let angleM = 0, angleI = 0, angleD = 0;
+  let suppressModeToggle = false;
+  let suppressCfgBroadcast = false;
+  let lastCfgTs = 0;
+  let lastCfgFrom = '';
+
+  // Lock UI local (será “autoridade” apenas quando você for host)
+  let lockM = false, lockI = false, lockD = false;
+  let manualIdxM = 0, manualIdxI = 0, manualIdxD = 0;
+  const spinAnims = { m: null, i: null, d: null };
+  let btnGradVisible = false;
+  let controlDelayMs = null;
+
+  // =========================
+  // Utils
+  // =========================
+  const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+  const mod = (x,n)=>((x%n)+n)%n;
+
+  function setAngle(el,deg){ el.style.transform = `rotate(${deg}deg)`; }
+  function setStatus(t){ statusEl.textContent = t; }
+  function setBtnProgressPct(pct){
+    const v = clamp(pct,0,100)/100;
+    btn.style.setProperty('--p', v);
+    const shouldShow = v > 0;
+    btnGradVisible = shouldShow;
+    btn.style.setProperty('--gOpacity', shouldShow ? 1 : 0);
+  }
+  function getChannel(){ try{ return (window.channel|0) || 1; }catch{ return 1; } }
+  function getMainDelayMs(){
+    if (controlDelayMs != null) return controlDelayMs;
+    try {
+      const raw = localStorage.getItem("remote_control_state_v1");
+      if (!raw) return 0;
+      const parsed = JSON.parse(raw);
+      const adv = parsed?.advanced;
+      // prefer atraso inicial (preDelayMs), sem usar o intervalo entre pulsos
+      const preMs = Number(adv?.preDelayMs);
+      if (Number.isFinite(preMs) && preMs >= 0) return preMs;
+      const preSec = Number(adv?.preDelay);
+      if (Number.isFinite(preSec) && preSec >= 0) return preSec * 1000;
+    } catch(_){}
+    return 0;
+  }
+  // atualiza delay via bus (fs-control)
+  function handleControlPatch(payload){
+    const preMs = Number(payload?.preDelayMs);
+    if (Number.isFinite(preMs) && preMs >= 0) {
+      controlDelayMs = preMs;
+      return;
+    }
+    const preSec = Number(payload?.preDelay);
+    if (Number.isFinite(preSec) && preSec >= 0) {
+      controlDelayMs = preSec * 1000;
+    }
+  }
+
+  // =========================
+  // Conic / Slices
+  // =========================
+  function buildConicBackgroundEqual(count, c0, c1){
+    const sec = 360/count, stops=[];
+    for(let i=0;i<count;i++){
+      const a0 = i*sec, a1 = (i+1)*sec;
+      stops.push(`${(i%2?c1:c0)} ${a0}deg ${a1}deg`);
+    }
+    return `conic-gradient(from 0deg, ${stops.join(',')})`;
+  }
+  function buildConicBackgroundPalette(colors, fallback){
+    const list = Array.isArray(colors) ? colors : [];
+    const count = Math.max(1, list.length);
+    const sec = 360 / count;
+    const stops = [];
+    for (let i = 0; i < count; i++) {
+      const a0 = i * sec;
+      const a1 = (i + 1) * sec;
+      const color = list[i] || fallback || "#181c24";
+      stops.push(`${color} ${a0}deg ${a1}deg`);
+    }
+    return `conic-gradient(from 0deg, ${stops.join(',')})`;
+  }
+  function hexToRgb(hex){
+    const raw = String(hex || "").trim().replace("#", "");
+    if (raw.length !== 6) return null;
+    const num = parseInt(raw, 16);
+    if (!Number.isFinite(num)) return null;
+    return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
+  }
+  function tintForSlice(hex){
+    const rgb = hexToRgb(hex);
+    if (!rgb) return "#181c24";
+    return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${MODE_SLICE_BG_ALPHA})`;
+  }
+  function buildConicBackgroundSlices(slices, c0, c1){
+    const { starts = [], spans = [] } = slices || {};
+    const stops = [];
+    for (let i = 0; i < starts.length; i++) {
+      const a0 = starts[i];
+      const a1 = a0 + (spans[i] || 0);
+      stops.push(`${(i % 2 ? c1 : c0)} ${a0}deg ${a1}deg`);
+    }
+    return `conic-gradient(from 0deg, ${stops.join(',')})`;
+  }
+
+  function makeEqualSlices(N){
+    const sec = 360/N;
+    const starts = Array.from({length:N}, (_,i)=> i*sec);
+    const centers = starts.map(s=> s + sec/2);
+    return {starts, spans:Array(N).fill(sec), centers, total:360};
+  }
+  function makeWeightedSlices(weights){
+    const totalUnits = weights.reduce((a,b)=>a+b,0);
+    const unit = 360/totalUnits;
+    let acc=0; const starts=[], spans=[], centers=[];
+    weights.forEach((w)=>{
+      const span = w*unit;
+      starts.push(acc);
+      spans.push(span);
+      centers.push(acc + span/2);
+      acc += span;
+    });
+    return {starts, spans, centers, total:360};
+  }
+
+  function normalizeModeKeys(keys){
+    const out = [];
+    const seen = new Set();
+    MODES_ALL.forEach((m)=>{
+      if (Array.isArray(keys) && keys.includes(m.key) && !seen.has(m.key)) {
+        seen.add(m.key);
+        out.push(m.key);
+      }
+    });
+    return out;
+  }
+  function ensureMinModeKeys(keys, minCount, fallbackKey){
+    let normalized = normalizeModeKeys(keys);
+    if (!normalized.length && fallbackKey) normalized = [fallbackKey];
+    if (normalized.length >= minCount) return normalized;
+    MODES_ALL.forEach((m)=>{
+      if (!normalized.includes(m.key)) normalized.push(m.key);
+      if (normalized.length >= minCount) return;
+    });
+    return normalized;
+  }
+  function getModeKeysFromToggles(){
+    return MODES_ALL.filter((m)=>modeToggleEls[m.key]?.checked).map((m)=>m.key);
+  }
+  function setModeToggleState(keys){
+    const keySet = new Set(keys || []);
+    suppressModeToggle = true;
+    MODES_ALL.forEach((m)=>{
+      const el = modeToggleEls[m.key];
+      if (el) el.checked = keySet.has(m.key);
+    });
+    suppressModeToggle = false;
+  }
+  function readModeKeysFromStorage(){
+    try {
+      const raw = localStorage.getItem(MODE_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return null;
+      const normalized = normalizeModeKeys(parsed);
+      return normalized.length ? normalized : null;
+    } catch(_){}
+    return null;
+  }
+  function writeModeKeysToStorage(keys){
+    try { localStorage.setItem(MODE_STORAGE_KEY, JSON.stringify(keys)); } catch(_){}
+  }
+  function applyModeKeys(keys, opts = {}){
+    const preferredKey = opts.preferredKey || MODES[0]?.key || MODES_ALL[0]?.key;
+    const fallbackKey = opts.fallbackKey || preferredKey || MODES_ALL[0]?.key;
+    let normalized = ensureMinModeKeys(keys || [], MIN_ACTIVE_MODES, fallbackKey);
+
+    if (opts.updateToggles) setModeToggleState(normalized);
+
+    MODES = MODES_ALL.filter((m)=>normalized.includes(m.key));
+    slicesMode = makeEqualSlices(MODES.length);
+    buildAll();
+
+    let idx = MODES.findIndex((m)=>m.key === preferredKey);
+    if (idx < 0) idx = 0;
+    manualIdxM = idx;
+
+    angleM = angleForIndexEqual(idx, MODES.length);
+    setAngle(wM, angleM);
+    rM.textContent = MODES[idx]?.label ?? '--';
+
+    updateManualUI();
+    return normalized;
+  }
+  function updateModesFromToggles(ev){
+    if (suppressModeToggle) return;
+    const keys = getModeKeysFromToggles();
+    if (keys.length < MIN_ACTIVE_MODES) {
+      const target = ev?.target;
+      if (target && target.checked === false) {
+        suppressModeToggle = true;
+        target.checked = true;
+        suppressModeToggle = false;
+      }
+      setStatus(`Ative pelo menos ${MIN_ACTIVE_MODES} modos.`);
+      return;
+    }
+    const prevKey = MODES[selectedIndex('mode')]?.key || MODES_ALL[0]?.key;
+    const applied = applyModeKeys(keys, {
+      updateToggles: true,
+      preferredKey: prevKey,
+      fallbackKey: prevKey
+    });
+    writeModeKeysToStorage(applied);
+    broadcastCfg('modes');
+  }
+  function syncModesFromEvent(msg){
+    const keys = msg?.modeKeys;
+    if (!Array.isArray(keys) || !keys.length) return;
+    const prevKey = MODES[selectedIndex('mode')]?.key || MODES_ALL[0]?.key;
+    const applied = applyModeKeys(keys, { updateToggles: true, preferredKey: prevKey, fallbackKey: prevKey });
+    writeModeKeysToStorage(applied);
+  }
+
+  function clampIndex(i, len){
+    const max = Math.max(0, (len|0) - 1);
+    if (!Number.isFinite(i)) return 0;
+    return clamp(Math.round(i), 0, max);
+  }
+
+  function applyLockState(lock, lockIdx, opts = {}){
+    const nextLockM = (lock && lock.m != null) ? !!lock.m : lockM;
+    const nextLockI = (lock && lock.i != null) ? !!lock.i : lockI;
+    const nextLockD = (lock && lock.d != null) ? !!lock.d : lockD;
+
+    if (lockIdx) {
+      if (Number.isFinite(lockIdx.m)) manualIdxM = clampIndex(lockIdx.m, MODES.length);
+      if (Number.isFinite(lockIdx.i)) manualIdxI = clampIndex(lockIdx.i, INT_STEPS.length);
+      if (Number.isFinite(lockIdx.d)) manualIdxD = clampIndex(lockIdx.d, DUR_VALUES.length);
+    }
+
+    lockM = nextLockM;
+    lockI = nextLockI;
+    lockD = nextLockD;
+
+    updateManualUI();
+
+    if (opts.applyAngles) {
+      if (lockM) { angleM = angleForIndexEqual(manualIdxM, MODES.length); setAngle(wM, angleM); }
+      if (lockI) { angleI = angleForIndexEqual(manualIdxI, INT_STEPS.length); setAngle(wI, angleI); }
+      if (lockD) { angleD = angleForIndexWeighted(manualIdxD, slicesDur); setAngle(wD, angleD); }
+      setLiveReadoutsFromAngles();
+    }
+  }
+
+  function canBroadcastCfg(){
+    return SYNC.enabled && syncBound && typeof sendSync === 'function';
+  }
+
+  function buildCfgPayload(reason){
+    const ts = hostNowMs();
+    return {
+      t: 'cfg',
+      ts,
+      from: SYNC.selfId,
+      reason: reason || 'update',
+      modeKeys: MODES.map((m)=>m.key),
+      lock: { m: !!lockM, i: !!lockI, d: !!lockD },
+      lockIdx: { m: manualIdxM, i: manualIdxI, d: manualIdxD }
+    };
+  }
+
+  function broadcastCfg(reason){
+    if (suppressCfgBroadcast || !canBroadcastCfg()) return;
+    const payload = buildCfgPayload(reason);
+    lastCfgTs = payload.ts || Date.now();
+    lastCfgFrom = payload.from || lastCfgFrom;
+    try { sendSync(payload); } catch(_){}
+  }
+
+  function applyCfgFromEvent(msg, peerId){
+    if (!msg || typeof msg !== 'object') return;
+    const fromId = msg.from || peerId || null;
+    const ts = Number(msg.ts || 0);
+    if (ts) {
+      if (ts < lastCfgTs) return;
+      if (ts === lastCfgTs && fromId && lastCfgFrom && String(fromId) <= String(lastCfgFrom)) return;
+    }
+    lastCfgTs = ts || Date.now();
+    if (fromId) lastCfgFrom = String(fromId);
+
+    suppressCfgBroadcast = true;
+    if (Array.isArray(msg.modeKeys) && msg.modeKeys.length) {
+      const prevKey = MODES[selectedIndex('mode')]?.key || MODES_ALL[0]?.key;
+      const applied = applyModeKeys(msg.modeKeys, { updateToggles: true, preferredKey: prevKey, fallbackKey: prevKey });
+      writeModeKeysToStorage(applied);
+    }
+    applyLockState(msg.lock, msg.lockIdx, { applyAngles: SYNC.phase === 'idle' });
+    suppressCfgBroadcast = false;
+  }
+
+  function layoutLabels(wheel, labelsContainer, centersDeg, spansDeg, isMode=false){
+    const R = wheel.clientWidth/2;
+    const LR_FACTOR = isMode ? 0.62 : 0.56;
+    const r = R * LR_FACTOR;
+
+    labelsContainer.querySelectorAll('.r3-label').forEach((span, i)=>{
+      const theta = centersDeg[i] - 90;
+      const sRad = (Math.PI * spansDeg[i]) / 180;
+      const chord = 2 * r * Math.sin(sRad/2);
+      const maxW = Math.floor(chord * 0.92);
+      span.style.width = `${maxW}px`;
+      span.style.transform = `translate(-50%,-50%) rotate(${theta}deg) translate(${r}px) rotate(${-theta}deg) translateZ(0)`;
+    });
+  }
+
+  function setSelectionOverlay(elSel, startDeg, sweepDeg){
+    elSel.style.background =
+      `conic-gradient(from 0deg,
+        transparent 0deg ${startDeg}deg,
+        rgba(220,53,69,.35) ${startDeg}deg ${startDeg+sweepDeg}deg,
+        transparent ${startDeg+sweepDeg}deg 360deg)`;
+  }
+  function resolveMaybeFn(val){
+    return (typeof val === 'function') ? val() : val;
+  }
+  function getPointerConicAngle(e, wheelEl){
+    const rect = wheelEl.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dx = e.clientX - cx;
+    const dy = e.clientY - cy;
+    const r = rect.width / 2;
+    if (!(r > 0)) return null;
+    const dist = Math.hypot(dx, dy);
+    if (dist > r) return null;
+    const deg = Math.atan2(dy, dx) * 180 / Math.PI;
+    const conic = mod(deg + 90, 360);
+    return { conic, dist, r };
+  }
+  function idxFromConicAngle(conic, slices){
+    if (!slices || !Array.isArray(slices.starts) || !Array.isArray(slices.spans)) return null;
+    const d = mod(conic, 360);
+    const starts = slices.starts;
+    const spans = slices.spans;
+    for (let i = 0; i < starts.length; i++) {
+      const s = starts[i];
+      const e = s + (spans[i] || 0);
+      if (d >= s && d < e) return i;
+    }
+    return starts.length ? (starts.length - 1) : null;
+  }
+  function pickSliceIndexFromEvent(e, wheelEl, slices, wheelAngle){
+    const hit = getPointerConicAngle(e, wheelEl);
+    if (!hit) return null;
+    const angle = Number.isFinite(wheelAngle) ? wheelAngle : 0;
+    const local = mod(hit.conic - angle, 360);
+    return idxFromConicAngle(local, slices);
+  }
+  function showSliceHover(elSel, slices, idx){
+    if (!elSel || !slices || !Array.isArray(slices.starts) || !Array.isArray(slices.spans)) return;
+    const start = slices.starts[idx] || 0;
+    const sweep = slices.spans[idx] || 0;
+    if (sweep <= 0) return;
+    setSelectionOverlay(elSel, start, sweep);
+    elSel.style.opacity = '1';
+  }
+  function hideSliceHover(elSel){
+    if (!elSel) return;
+    elSel.style.opacity = '0';
+  }
+
+  const wheelAngleToConic = a => mod(-a, 360);
+  function setSelectionOverlayForAngle(elSel, angleDeg, sweepDeg){
+    const start = mod(wheelAngleToConic(angleDeg) - sweepDeg/2, 360);
+    setSelectionOverlay(elSel, start, sweepDeg);
+  }
+  function idxFromAngleEqual(angle, N){
+    const sec = 360/N, d = wheelAngleToConic(angle);
+    return Math.floor(d / sec) % N;
+  }
+  function angleForIndexEqual(i, N){
+    const sec = 360/N;
+    const center = i*sec + sec/2;
+    return -center;
+  }
+  function idxFromAngleWeighted(angle, slices){
+    const d = wheelAngleToConic(angle);
+    const {starts, spans} = slices;
+    for(let i=0;i<starts.length;i++){
+      const s = starts[i], e = s + spans[i];
+      if (d >= s && d < e) return i;
+    }
+    return starts.length-1;
+  }
+  function angleForIndexWeighted(i, slices){
+    const center = slices.centers[i];
+    return -center;
+  }
+
+  function setLiveReadoutsFromAngles(){
+    const idxM = idxFromAngleEqual(angleM, MODES.length);
+    const idxI = idxFromAngleEqual(angleI, INT_STEPS.length);
+    const idxD = idxFromAngleWeighted(angleD, slicesDur);
+    rM.textContent = MODES[idxM]?.label ?? '—';
+    rI.textContent = INT_STEPS[idxI] ?? '—';
+    rD.textContent = DUR_VALUES[idxD] ?? '—';
+  }
+
+  function planSpinAngle(current, target){
+    let t = target;
+    while (t >= current) t -= 360;
+    if ((current - t) < 90) t -= 240; // garante uma volta perceptível
+    return t;
+  }
+
+  function spinTo(kind, targetAngle, onDone){
+    const ref = kind === 'm' ? { wheel: wM, set: v => angleM = v, cur: angleM }
+               : kind === 'i' ? { wheel: wI, set: v => angleI = v, cur: angleI }
+               : { wheel: wD, set: v => angleD = v, cur: angleD };
+    if (!ref.wheel) return;
+    if (spinAnims[kind]) cancelAnimationFrame(spinAnims[kind]);
+
+    const start = ref.cur;
+    const end = planSpinAngle(start, targetAngle);
+    const duration = 600;
+    const t0 = performance.now();
+
+    const tick = (now)=>{
+      const t = Math.min(1, (now - t0) / duration);
+      const eased = 0.5 - Math.cos(Math.PI * t) / 2;
+      const val = start + (end - start) * eased;
+      ref.set(val);
+      setAngle(ref.wheel, val);
+      setLiveReadoutsFromAngles();
+      if (t < 1) {
+        spinAnims[kind] = requestAnimationFrame(tick);
+      } else {
+        spinAnims[kind] = null;
+        if (onDone) onDone();
+      }
+    };
+    spinAnims[kind] = requestAnimationFrame(tick);
+  }
+
+  // =========================
+  // Build / Layout
+  // =========================
+  function populateMode(){
+    labelsM.innerHTML = '';
+    MODES.forEach((m,i)=>{
+      const span = document.createElement('div');
+      span.className = 'r3-label icon-only';
+      span.innerHTML = `<i class="fa-solid ${m.icon}" aria-label="${m.label}"></i>`;
+      span.dataset.index = i;
+      span.style.color = MODE_SLICE_COLORS[m.key] || "#e6e6e6";
+      labelsM.appendChild(span);
+    });
+  }
+  function populateNumbers(container, arr){
+    container.innerHTML = '';
+    arr.forEach((v,i)=>{
+      const span = document.createElement('div');
+      span.className = 'r3-label';
+      span.textContent = v;
+      span.dataset.index = i;
+      container.appendChild(span);
+    });
+  }
+
+  let slicesMode = makeEqualSlices(MODES.length);
+  const slicesInt  = makeEqualSlices(INT_STEPS.length);
+  const slicesDur  = makeWeightedSlices(DUR_WEIGHTS);
+
+  function buildAll(){
+    const modeColors = MODES.map((_, i)=> MODE_SLICE_BG_TONES[i % MODE_SLICE_BG_TONES.length]);
+    wM.style.background = buildConicBackgroundPalette(modeColors, "#181c24");
+    wI.style.background = buildConicBackgroundEqual(INT_STEPS.length, '#0a1630', '#061126');
+    wD.style.background = buildConicBackgroundEqual(DUR_VALUES.length, '#10162c', '#0b1020');
+
+    populateMode();
+    populateNumbers(labelsI, INT_STEPS);
+    populateNumbers(labelsD, DUR_VALUES);
+
+    layoutLabels(wM, labelsM, slicesMode.centers, slicesMode.spans, true);
+    layoutLabels(wI, labelsI, slicesInt.centers,  slicesInt.spans,  false);
+
+    const durCenters = DUR_VALUES.map((_,i)=> slicesDur.centers[i]);
+    const durSpans   = DUR_VALUES.map((_,i)=> slicesDur.spans[i]);
+    layoutLabels(wD, labelsD, durCenters, durSpans, false);
+  }
+
+  const storedModeKeys = readModeKeysFromStorage();
+  const initialModeKeys = (storedModeKeys && storedModeKeys.length) ? storedModeKeys : MODES_ALL.map((m)=>m.key);
+  applyModeKeys(initialModeKeys, { updateToggles: true, preferredKey: initialModeKeys[0], fallbackKey: MODES_ALL[0]?.key });
+  if (document.fonts?.ready) { document.fonts.ready.then(()=>buildAll()).catch(()=>{}); }
+  const ro = new ResizeObserver(()=>buildAll());
+  ro.observe(wM); ro.observe(wI); ro.observe(wD);
+  window.addEventListener('resize', ()=>buildAll(), {passive:true});
+
+  // =========================
+  // Manual lock + click (funciona sempre localmente; em sync, host “define” o lock efetivo)
+  // =========================
+  function updateManualUI(){
+    [[wrapM,lockModeBtn,lockM,selM,slicesMode,()=>angleM],
+     [wrapI,lockIntBtn, lockI,selI,slicesInt, ()=>angleI ],
+     [wrapD,lockDurBtn, lockD,selD,slicesDur, ()=>angleD]].forEach(([wrap,btnEl,locked,sel,slices,getAngle])=>{
+      wrap.classList.toggle('manual-on', locked);
+      btnEl.setAttribute('aria-pressed', String(locked));
+      btnEl.innerHTML = `<i class="fa-solid ${locked? 'fa-lock' : 'fa-lock-open'}"></i> ${locked?'Desbloquear':'Bloquear'}`;
+      hideSliceHover(sel);
+    });
+  }
+  function attachChipClicks(wrapEl, wheelEl, getSlices, getAngle, onPick){
+    wheelEl.addEventListener('click', (e)=>{
+      if (!wrapEl.classList.contains('manual-on')) return;
+      const slices = resolveMaybeFn(getSlices);
+      const angle = resolveMaybeFn(getAngle);
+      let idx = pickSliceIndexFromEvent(e, wheelEl, slices, angle);
+      if (!Number.isFinite(idx)) {
+        const lab = e.target.closest('.r3-label');
+        if (!lab) return;
+        idx = +lab.dataset.index;
+        if (!Number.isFinite(idx)) return;
+      }
+      onPick(idx);
+    });
+  }
+  function attachSliceHover(wrapEl, wheelEl, selEl, getSlices, getAngle){
+    let lastIdx = null;
+    wheelEl.addEventListener('mousemove', (e)=>{
+      if (!wrapEl.classList.contains('manual-on')) {
+        if (lastIdx !== null) { hideSliceHover(selEl); lastIdx = null; }
+        return;
+      }
+      const slices = resolveMaybeFn(getSlices);
+      const angle = resolveMaybeFn(getAngle);
+      const idx = pickSliceIndexFromEvent(e, wheelEl, slices, angle);
+      if (!Number.isFinite(idx)) {
+        if (lastIdx !== null) { hideSliceHover(selEl); lastIdx = null; }
+        return;
+      }
+      if (idx === lastIdx) return;
+      lastIdx = idx;
+      showSliceHover(selEl, slices, idx);
+    });
+    wheelEl.addEventListener('mouseleave', ()=>{
+      if (lastIdx !== null) { hideSliceHover(selEl); lastIdx = null; }
+    });
+    wheelEl.addEventListener('click', ()=>{
+      if (lastIdx !== null) { hideSliceHover(selEl); lastIdx = null; }
+    });
+  }
+
+  attachChipClicks(wrapM, wM, ()=>slicesMode, ()=>angleM, (idx)=>{
+    manualIdxM = idx;
+    const targetAngle = angleForIndexEqual(idx, MODES.length);
+    spinTo('m', targetAngle, () => {
+      rM.textContent = MODES[idx].label;
+    });
+    broadcastCfg('manual-m');
+  });
+  attachSliceHover(wrapM, wM, selM, ()=>slicesMode, ()=>angleM);
+  attachChipClicks(wrapI, wI, slicesInt, ()=>angleI, (idx)=>{
+    manualIdxI = idx;
+    const targetAngle = angleForIndexEqual(idx, INT_STEPS.length);
+    spinTo('i', targetAngle, () => {
+      rI.textContent = INT_STEPS[idx];
+    });
+    broadcastCfg('manual-i');
+  });
+  attachSliceHover(wrapI, wI, selI, slicesInt, ()=>angleI);
+  attachChipClicks(wrapD, wD, slicesDur, ()=>angleD, (idx)=>{
+    manualIdxD = idx;
+    const targetAngle = angleForIndexWeighted(idx, slicesDur);
+    spinTo('d', targetAngle, () => {
+      rD.textContent = DUR_VALUES[idx];
+    });
+    broadcastCfg('manual-d');
+  });
+  attachSliceHover(wrapD, wD, selD, slicesDur, ()=>angleD);
+
+  lockModeBtn.addEventListener('click', ()=>{
+    lockM = !lockM; updateManualUI();
+    if (lockM) { angleM = angleForIndexEqual(manualIdxM, MODES.length); setAngle(wM, angleM); }
+    broadcastCfg('lock-m');
+  });
+  lockIntBtn.addEventListener('click', ()=>{
+    lockI = !lockI; updateManualUI();
+    if (lockI) { angleI = angleForIndexEqual(manualIdxI, INT_STEPS.length); setAngle(wI, angleI); }
+    broadcastCfg('lock-i');
+  });
+  lockDurBtn.addEventListener('click', ()=>{
+    lockD = !lockD; updateManualUI();
+    if (lockD) { angleD = angleForIndexWeighted(manualIdxD, slicesDur); setAngle(wD, angleD); }
+    broadcastCfg('lock-d');
+  });
+  updateManualUI();
+  Object.values(modeToggleEls).forEach((el)=>{
+    if (!el) return;
+    el.addEventListener('change', updateModesFromToggles);
+  });
+
+  function selectedIndex(which){
+    if (which==='mode') return lockM ? manualIdxM : idxFromAngleEqual(angleM, MODES.length);
+    if (which==='int')  return lockI ? manualIdxI : idxFromAngleEqual(angleI, INT_STEPS.length);
+    if (which==='dur')  return lockD ? manualIdxD : idxFromAngleWeighted(angleD, slicesDur);
+    return 0;
+  }
+
+  // =========================
+  // Tunnel/Chat -> comandos
+  // =========================
+  async function pushToChat(text){
+    const t = String(text || '').trim();
+    if (!t) return;
+
+    const tunnel = window.__COLLAR_TUNNEL__;
+    if (tunnel && typeof tunnel.send === 'function') {
+      await tunnel.send(t, { via: 'roleta', kind: 'cmd' });
+      return;
+    }
+
+    if (typeof window.collarSend === 'function') {
+      await window.collarSend(t);
+      return;
+    }
+    if (window.SerialBridge && typeof window.SerialBridge.send === 'function') {
+      await window.SerialBridge.send(t);
+      return;
+    }
+
+    const chat = window.__TRYSTERO_CHAT__;
+    if (!chat || typeof chat.send !== 'function') {
+      setStatus('Chat Trystero indisponivel.');
+      return;
+    }
+    await chat.send(t, { via: 'roleta', kind: 'cmd', fallback: 'chat' });
+  }
+  function buildCmd(modeKey, intensity){
+    const lvl = (modeKey==='SHOCK'||modeKey==='VIBRATION') ? intensity : 0;
+    return `${modeKey},${lvl},${getChannel()}`;
+  }
+  async function sendOnce(modeKey, intensity){
+    await pushToChat(buildCmd(modeKey, intensity));
+    setStatus(`Enviado: ${modeKey} • ${intensity}`);
+  }
+
+  // HOLD com deadline (HOLDOFF correto)
+  let holdEndAtMs = null;
+  let holdTickTimer = null;
+  let holdOffSent = false;
+
+  function stopHoldTimers(){
+    if (holdTickTimer) { clearInterval(holdTickTimer); holdTickTimer = null; }
+    holdEndAtMs = null;
+    holdOffSent = false;
+    countdownEl.style.display = 'none';
+  }
+
+  async function sendHold(modeKey, intensity, durSec){
+    return new Promise(async (resolve) => { // Return a promise
+      stopHoldTimers();
+      await pushToChat(`HOLDON ${buildCmd(modeKey, intensity)}`);
+
+      const durMs = Math.max(1, Math.round(Number(durSec) * 1000));
+      holdEndAtMs = Date.now() + durMs;
+      holdOffSent = false;
+
+      countdownEl.style.display = 'inline-block';
+
+      const tick = async ()=>{
+        if (!holdEndAtMs) return;
+        const now = Date.now();
+        const msLeft = holdEndAtMs - now;
+        const secLeft = Math.max(0, Math.ceil(msLeft / 1000));
+        countdownEl.textContent = `${secLeft}s`;
+
+        if (msLeft <= 0 && !holdOffSent) {
+          holdOffSent = true;
+          countdownEl.style.display = 'none';
+          await pushToChat("HOLDOFF");
+          setStatus('Fim');
+          stopHoldTimers();
+          resolve(); // Resolve the promise here
+        }
+      };
+
+      await tick();
+      setStatus(`Transmitindo por ${Math.max(1, Math.round(durSec))}s…`);
+      holdTickTimer = setInterval(()=>{ tick(); }, 200);
+    });
+  }
+
+  async function finalizeAndSend(idxM, idxI, idxD){
+    const mode = MODES[idxM];
+    const inten = INT_STEPS[idxI];
+    const dur = DUR_VALUES[idxD];
+
+    rM.textContent = mode.label;
+    rI.textContent = inten;
+    rD.textContent = dur;
+
+    if (inten === 0 || dur === 0) {
+      setStatus('Ignorado: intensidade ou duração zero.');
+      countdownEl.style.display = 'none';
+      window.dispatchEvent(new CustomEvent('roulette:finished', { detail: { reason: 'zero' } }));
+      return;
+    }
+
+    try{
+      if (dur>0) await sendHold(mode.key, inten, dur);
+      else       await sendOnce(mode.key, inten);
+    } catch(e){
+      setStatus('Erro de envio');
+    } finally {
+      window.dispatchEvent(new CustomEvent('roulette:finished', { detail: { reason: 'sent' } }));
+    }
+  }
+
+  // =========================
+  // Sync determinístico (sem depender de "animação rodando")
+  // =========================
+  const SYNC_ACTION = 'r3sync_v1';
+  let trRoom = null;
+  let sendSync = null;
+  let onSync = null;
+  let syncBound = false;
+
+  const SYNC = {
+    enabled: true,
+    inited: false,
+    isHost: false,
+    hostId: null,
+    selfId: null,
+    offsetMs: 0,
+    lastEventId: null,
+    phase: 'idle', // idle | hold | release
+    evt: null,     // evento atual (hold/release)
+    holdStartPerf: 0,
+    localHolding: false,
+  };
+
+  function inferSelfId(){
+    try { return trRoom?.selfId || trRoom?.id || trRoom?.peerId || null; }
+    catch { return null; }
+  }
+  function listPeerIds(){
+    const out = new Set();
+    try {
+      const p = trRoom?.peers;
+      if (Array.isArray(p)) p.forEach(x=>out.add(x));
+      else if (p && typeof p === 'object') Object.keys(p).forEach(k=>out.add(k));
+    } catch(_){}
+    try {
+      const gp = trRoom?.getPeers?.();
+      if (Array.isArray(gp)) gp.forEach(x=>out.add(x));
+      else if (gp && typeof gp === 'object') Object.keys(gp).forEach(k=>out.add(k));
+    } catch(_){}
+    return [...out].filter(Boolean);
+  }
+  function electHost(){
+    SYNC.selfId = inferSelfId();
+    const ids = [SYNC.selfId, ...listPeerIds()].filter(Boolean).sort();
+    const hostId = ids[0] || SYNC.selfId || 'host';
+    SYNC.hostId = hostId;
+    SYNC.isHost = (hostId === (SYNC.selfId || hostId));
+  }
+
+  // hostNow = localNow + offset
+  function hostNowMs(){ return Date.now() + (SYNC.offsetMs|0); }
+  function hostToLocalMs(hostTs){ return (hostTs|0) - (SYNC.offsetMs|0); }
+
+  function bindSyncFromRoom(room){
+    if (!room || typeof room.makeAction !== 'function') return false;
+
+    trRoom = room;
+    let a;
+    try { a = trRoom.makeAction(SYNC_ACTION); } catch { a = null; }
+
+    const s = Array.isArray(a) ? a[0] : a?.send;
+    const o = Array.isArray(a) ? a[1] : a?.onMessage;
+
+    if (typeof s !== 'function' || typeof o !== 'function') {
+      sendSync = null; onSync = null; syncBound = false;
+      return false;
+    }
+
+    sendSync = s; onSync = o; syncBound = true;
+    initTrysteroSync();
+    return true;
+  }
+
+  function requestClockSync(){
+    if (!SYNC.enabled || SYNC.isHost || !syncBound) return;
+    try { sendSync({ t:'ping', t0: Date.now(), from: SYNC.selfId }); } catch(_) {}
+  }
+
+  function initTrysteroSync(){
+    if (!syncBound || SYNC.inited) return;
+    SYNC.inited = true;
+
+    electHost();
+    setStatus(`Sync: pronto (${SYNC.isHost ? 'host' : 'peer'}).`);
+
+    onSync((msg, peerId)=>{
+      if (!msg || typeof msg !== 'object') return;
+
+      if (msg.t === 'hello') {
+        electHost();
+        requestClockSync();
+        if (SYNC.isHost) broadcastCfg('hello');
+        return;
+      }
+
+      if (msg.t === 'cfg') {
+        applyCfgFromEvent(msg, peerId);
+        return;
+      }
+
+      if (msg.t === 'ping') {
+        if (!SYNC.isHost) return;
+        try { sendSync({ t:'pong', t0: msg.t0, th: Date.now(), to: peerId }); } catch(_) {}
+        return;
+      }
+
+      if (msg.t === 'pong') {
+        if (msg.to && SYNC.selfId && msg.to !== SYNC.selfId) return;
+        const t1 = Date.now();
+        const t0 = Number(msg.t0 || 0);
+        const th = Number(msg.th || 0);
+        if (t0 > 0 && th > 0) SYNC.offsetMs = th - ((t0 + t1) / 2);
+        return;
+      }
+
+      if (msg.t === 'hold') {
+        if (!msg.id) return;
+        if (SYNC.lastEventId === msg.id && SYNC.phase === 'hold') return;
+        SYNC.lastEventId = msg.id;
+        SYNC.phase = 'hold';
+        SYNC.evt = msg;
+        applyHoldEvent(msg);
+        return;
+      }
+
+      if (msg.t === 'release') {
+        if (!msg.id) return;
+        if (SYNC.lastEventId === msg.id && SYNC.phase === 'release') return;
+        SYNC.lastEventId = msg.id;
+        SYNC.phase = 'release';
+        SYNC.evt = msg;
+        applyReleaseEvent(msg);
+        return;
+      }
+    });
+
+    try { sendSync({ t:'hello', from: SYNC.selfId, ts: Date.now() }); } catch(_) {}
+    if (SYNC.isHost) broadcastCfg('init');
+    requestClockSync();
+    setInterval(()=>{ electHost(); requestClockSync(); }, 6000);
+  }
+
+  // =========================
+  // Render determinístico (única fonte da verdade)
+  // =========================
+  let raf = null;
+
+  function ensureRenderLoop(){
+    if (raf) return;
+    const tick = ()=>{
+      raf = null;
+      if (document.hidden) return; // nada de loop em background
+      renderNow();
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+  }
+
+  function stopRenderLoop(){
+    if (raf) { cancelAnimationFrame(raf); raf = null; }
+  }
+
+  function easeOutCubic(t){ return 1 - Math.pow(1 - t, 3); }
+  function ensureForwardEnd(aRel, end, minTravel){
+    const minEnd = aRel + (minTravel || 0);
+    if (end <= minEnd) {
+      const jumps = Math.ceil((minEnd - end) / 360);
+      return end + Math.max(1, jumps) * 360;
+    }
+    return end;
+  }
+
+  function renderNow(){
+    const evt = SYNC.evt;
+    const nowH = hostNowMs();
+
+    // se não há sync ativo, não interfere
+    if (!SYNC.enabled || !syncBound || !evt || SYNC.phase === 'idle') return;
+
+    // Respeita lock efetivo do host (evt.lock.*) durante sync
+    const lockEff = evt.lock || { m:false, i:false, d:false };
+    const dps = evt.dps  || DEFAULT_DPS;
+    const a0  = evt.a0   || { m: angleM, i: angleI, d: angleD };
+
+    // durante HOLD: angle = a0 + dps * dt
+    if (SYNC.phase === 'hold' && evt.startedAt) {
+      const dt = Math.max(0, (nowH - evt.startedAt) / 1000);
+
+      const aM = lockEff.m ? a0.m : (a0.m + dps.m * dt);
+      const aI = lockEff.i ? a0.i : (a0.i + dps.i * dt);
+      const aD = lockEff.d ? a0.d : (a0.d + dps.d * dt);
+
+      angleM = aM; angleI = aI; angleD = aD;
+
+      setAngle(wM, angleM);
+      setAngle(wI, angleI);
+      setAngle(wD, angleD);
+      setLiveReadoutsFromAngles();
+
+      // UI de carregar (visual)
+      const pct = clamp((nowH - evt.startedAt) * CHARGE_RATE_PCT_PER_MS, 0, 100);
+      setBtnProgressPct(pct);
+      return;
+    }
+
+    // RELEASE: interpola do ângulo no release até alvo (com voltas extras) por duration
+    if (SYNC.phase === 'release' && evt.releasedAt && evt.durationMs && evt.targets) {
+      const t = clamp((nowH - evt.releasedAt) / evt.durationMs, 0, 1);
+      const e = easeOutCubic(t);
+
+      // ângulo no momento do release (derivado do hold, determinístico)
+      const dtHold = Math.max(0, (evt.releasedAt - evt.startedAt) / 1000);
+      const aRel = {
+        m: lockEff.m ? a0.m : (a0.m + dps.m * dtHold),
+        i: lockEff.i ? a0.i : (a0.i + dps.i * dtHold),
+        d: lockEff.d ? a0.d : (a0.d + dps.d * dtHold),
+      };
+
+      const spins = evt.spins || { m: 4, i: 5, d: 4 };
+      const aTgt = evt.aTgt || {
+        m: evt.targets.m,
+        i: evt.targets.i,
+        d: evt.targets.d
+      };
+
+      // targets são ângulos finais “base” (sem voltas)
+      const minTravel = 360;
+      const end = {
+        m: lockEff.m ? aRel.m : ensureForwardEnd(aRel.m, aTgt.m + spins.m*360, minTravel),
+        i: lockEff.i ? aRel.i : ensureForwardEnd(aRel.i, aTgt.i + spins.i*360, minTravel),
+        d: lockEff.d ? aRel.d : ensureForwardEnd(aRel.d, aTgt.d + spins.d*360, minTravel),
+      };
+
+      angleM = aRel.m + (end.m - aRel.m) * e;
+      angleI = aRel.i + (end.i - aRel.i) * e;
+      angleD = aRel.d + (end.d - aRel.d) * e;
+
+      setAngle(wM, angleM);
+      setAngle(wI, angleI);
+      setAngle(wD, angleD);
+      setLiveReadoutsFromAngles();
+
+      // acabou: fixa exatamente no alvo base e finaliza fase
+      if (t >= 1) {
+        angleM = aTgt.m; angleI = aTgt.i; angleD = aTgt.d;
+        setAngle(wM, angleM); setAngle(wI, angleI); setAngle(wD, angleD);
+        setBtnProgressPct(0);
+        if (typeof evt.idxM === 'number') rM.textContent = MODES[evt.idxM]?.label ?? '--';
+        if (typeof evt.idxI === 'number') rI.textContent = INT_STEPS[evt.idxI] ?? '--';
+        if (typeof evt.idxD === 'number') rD.textContent = DUR_VALUES[evt.idxD] ?? '--';
+
+        SYNC.phase = 'idle'; // encerra render de sync
+        SYNC.evt = null;
+        stopRenderLoop();
+      }
+      return;
+    }
+  }
+
+  function applyHoldEvent(msg){
+    syncModesFromEvent(msg);
+    applyLockState(msg?.lock, msg?.lockIdx, { applyAngles: true });
+    // Atualiza UI e inicia loop de render determinístico
+    btn.classList.add('r3-pressing');
+    btn.setAttribute('aria-pressed','true');
+    btnText.textContent = 'Solte para lançar';
+    setStatus(SYNC.isHost ? 'Sync: segurando (host)…' : 'Sync: segurando…');
+
+    // startAngles do host (a0) garantem que todos vejam igual
+    angleM = msg.a0?.m ?? angleM;
+    angleI = msg.a0?.i ?? angleI;
+    angleD = msg.a0?.d ?? angleD;
+    setAngle(wM, angleM); setAngle(wI, angleI); setAngle(wD, angleD);
+
+    // loop apenas quando visível
+    if (!document.hidden) ensureRenderLoop();
+  }
+
+  function applyReleaseEvent(msg){
+    syncModesFromEvent(msg);
+    applyLockState(msg?.lock, msg?.lockIdx, { applyAngles: false });
+    // UI
+    btn.classList.remove('r3-pressing');
+    btn.setAttribute('aria-pressed','false');
+    btnText.textContent = 'Segurar para girar';
+    setBtnProgressPct(0);
+
+    setStatus(SYNC.isHost ? 'Sync: girando (host)…' : 'Sync: girando…');
+
+    // Se aba está hidden, não “anima”; mas ao voltar renderiza no estado correto.
+    if (!document.hidden) ensureRenderLoop();
+
+    // Host envia comando no final (usando timestamps, não timers frágeis)
+    if (SYNC.isHost) {
+      const hostEnd = (msg.releasedAt || 0) + (msg.durationMs || 0);
+      const spinDelay = Math.max(0, hostEnd - hostNowMs());
+      setStatus(`Sync: aguardando roletas (${spinDelay}ms)...`);
+      setTimeout(()=>{
+        const extraDelay = Math.max(0, getMainDelayMs());
+        const debugInfo = { spinDelay, extraDelay, controlDelayMs, preDelayLocal: getMainDelayMs() };
+        try { console.debug('[Roleta] delay debug', debugInfo); } catch(_){}
+        if (extraDelay > 0) {
+          setStatus(`Sync: atraso inicial ${extraDelay}ms...`);
+        }
+        setTimeout(()=>{
+          // garante que ainda é o mesmo evento e ainda somos host
+          electHost();
+          if (!SYNC.isHost) return;
+          if (SYNC.lastEventId !== msg.id) return;
+
+          setStatus('Sync: parou. Enviando...');
+          finalizeAndSend(msg.idxM, msg.idxI, msg.idxD);
+        }, extraDelay);
+      }, spinDelay);
+    }
+  }
+
+  // Resync forte ao voltar do background
+  document.addEventListener('visibilitychange', ()=>{
+    if (!SYNC.enabled || !syncBound) return;
+
+    if (!document.hidden) {
+      // ao voltar: renderiza uma vez imediatamente e reinicia loop se necessário
+      renderNow();
+      if (SYNC.phase !== 'idle') ensureRenderLoop();
+    } else {
+      // ao esconder: não roda loop (evita drift)
+      stopRenderLoop();
+    }
+  }, {passive:true});
+
+  // =========================
+  // Host: construção de eventos (hold/release)
+  // =========================
+  function computeSpins(durationMs){
+    // determinístico (sem random): apenas baseado na duração
+    const s = clamp(Math.round(durationMs / 450), 3, 10);
+    return { m: s, i: Math.round(s*1.15), d: Math.round(s*0.95) };
+  }
+
+  function computeDurationMs(holdMs){
+    // determinístico; mais hold => mais tempo
+    const pct = clamp(holdMs * CHARGE_RATE_PCT_PER_MS, 0, 100);
+    return 1600 + Math.round(14*pct);
+  }
+
+  function buildHoldEvent(){
+    const id = 'r3_' + Math.random().toString(36).slice(2);
+    const startedAt = Date.now();
+    const modeKeys = MODES.map((m)=>m.key);
+
+    // lock efetivo do host
+    const lockEff = { m: !!lockM, i: !!lockI, d: !!lockD };
+    const lockIdx = { m: manualIdxM, i: manualIdxI, d: manualIdxD };
+
+    // ângulos iniciais enviados aos peers (todos começam do mesmo)
+    const a0 = {
+      m: lockEff.m ? angleForIndexEqual(lockIdx.m, MODES.length) : angleM,
+      i: lockEff.i ? angleForIndexEqual(lockIdx.i, INT_STEPS.length) : angleI,
+      d: lockEff.d ? angleForIndexWeighted(lockIdx.d, slicesDur) : angleD,
+    };
+
+    // dps=0 para lock
+    const dps = {
+      m: lockEff.m ? 0 : DEFAULT_DPS.m,
+      i: lockEff.i ? 0 : DEFAULT_DPS.i,
+      d: lockEff.d ? 0 : DEFAULT_DPS.d
+    };
+
+    return { t:'hold', id, startedAt, a0, dps, lock: lockEff, lockIdx, modeKeys };
+  }
+
+  function buildReleaseEvent(holdEvt){
+    const releasedAt = Date.now();
+    const holdMs = Math.max(0, releasedAt - holdEvt.startedAt);
+    const durationMs = computeDurationMs(holdMs);
+    const modeKeys = (Array.isArray(holdEvt.modeKeys) && holdEvt.modeKeys.length) ? holdEvt.modeKeys : MODES.map((m)=>m.key);
+    const modeCount = modeKeys.length || MODES.length;
+
+    // índices finais (host decide). Se lock, fixa.
+    const idxM = holdEvt.lock.m ? holdEvt.lockIdx.m : Math.floor(Math.random()*modeCount);
+    const idxI = holdEvt.lock.i ? holdEvt.lockIdx.i : Math.floor(Math.random()*INT_STEPS.length);
+    const idxD = holdEvt.lock.d ? holdEvt.lockIdx.d : Math.floor(Math.random()*DUR_VALUES.length);
+
+    const aTgt = {
+      m: angleForIndexEqual(idxM, modeCount),
+      i: angleForIndexEqual(idxI, INT_STEPS.length),
+      d: angleForIndexWeighted(idxD, slicesDur),
+    };
+
+    const spins = computeSpins(durationMs);
+
+    return {
+      t:'release',
+      id: holdEvt.id,
+      startedAt: holdEvt.startedAt,
+      releasedAt,
+      durationMs,
+      dps: holdEvt.dps,
+      lock: holdEvt.lock,
+      a0: holdEvt.a0,
+      modeKeys,
+      idxM, idxI, idxD,
+      aTgt,
+      targets: aTgt,
+      spins
+    };
+  }
+
+  // =========================
+  // Botão principal
+  // =========================
+  let currentHoldEvt = null;
+
+  function onDown(){
+    if (SYNC.enabled && syncBound) {
+      electHost();
+      if (!SYNC.isHost) { setStatus('Sync: aguardando host…'); return; }
+
+      currentHoldEvt = buildHoldEvent();
+      try { sendSync(currentHoldEvt); } catch(_) {}
+
+      // aplica localmente como se recebesse
+      SYNC.lastEventId = currentHoldEvt.id;
+      SYNC.phase = 'hold';
+      SYNC.evt = currentHoldEvt;
+      applyHoldEvent(currentHoldEvt);
+      return;
+    }
+
+    // fallback local (sem sync): mantém o comportamento antigo mínimo, mas não é o foco
+    btn.classList.add('r3-pressing');
+    btnText.textContent = 'Solte para lançar';
+    setStatus('Carregando…');
+  }
+
+  function onUp(){
+    if (SYNC.enabled && syncBound) {
+      electHost();
+      if (!SYNC.isHost) return;
+      if (!currentHoldEvt) return;
+
+      const rel = buildReleaseEvent(currentHoldEvt);
+      try { sendSync(rel); } catch(_) {}
+
+      SYNC.lastEventId = rel.id;
+      SYNC.phase = 'release';
+      SYNC.evt = rel;
+      applyReleaseEvent(rel);
+
+      currentHoldEvt = null;
+      return;
+    }
+
+    btn.classList.remove('r3-pressing');
+    btnText.textContent = 'Segurar para girar';
+    setStatus('Girando…');
+  }
+
+  btn.addEventListener('pointerdown', onDown);
+  ['pointerup','pointerleave','pointercancel'].forEach(e=>btn.addEventListener(e,onUp));
+
+  // =========================
+  // Init angles
+  // =========================
+  const initModeIdx = clamp(manualIdxM, 0, Math.max(0, MODES.length - 1));
+  angleM = angleForIndexEqual(initModeIdx, MODES.length); setAngle(wM, angleM); rM.textContent = MODES[initModeIdx]?.label ?? '--';
+  angleI = angleForIndexEqual(0, INT_STEPS.length); setAngle(wI, angleI); rI.textContent = INT_STEPS[0];
+  angleD = angleForIndexWeighted(0, slicesDur); setAngle(wD, angleD); rD.textContent = DUR_VALUES[0];
+
+  // =========================
+  // Bind Trystero room
+  // =========================
+  function onRoomChanged(room){
+    if (!room) {
+      trRoom = null;
+      sendSync = null;
+      onSync = null;
+      syncBound = false;
+      SYNC.inited = false;
+      SYNC.phase = 'idle';
+      SYNC.evt = null;
+      stopRenderLoop();
+      setStatus('Sync: desconectado.');
+      return;
+    }
+    bindSyncFromRoom(room);
+  }
+
+  if (window.__TRYSTERO_ROOM__ && typeof window.__TRYSTERO_ROOM__.makeAction === 'function') {
+    onRoomChanged(window.__TRYSTERO_ROOM__);
+  } else {
+    setStatus('Sync: aguardando conexão do Trystero…');
+  }
+
+  window.addEventListener('trystero:room', (ev)=>{
+    onRoomChanged(ev?.detail?.room || null);
+  }, { passive:true });
+
+  // Escuta fs-control via bus para capturar gapMs do controle principal
+  if (window.__FS_BUS__ && typeof window.__FS_BUS__.on === 'function') {
+    try {
+      window.__FS_BUS__.on((msg) => {
+        if (msg && msg.type === 'fs-control' && msg.payload) {
+          handleControlPatch(msg.payload);
+        }
+      });
+    } catch(_){}
+  }
+
+})();
+</script>

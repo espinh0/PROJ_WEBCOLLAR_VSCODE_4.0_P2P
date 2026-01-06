@@ -1,0 +1,633 @@
+<div class="host-only">
+  <div id="hbka-widget" style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 1rem 0; padding: .75rem 1rem; border-radius: .75rem; border: 1px solid #333; background: #111; color: #e5e7eb; font-size: .9rem;">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;flex-wrap:wrap;">
+      <div>
+        <span style="font-weight:700;">Heartbeat + Keep-awake</span>
+        <div id="hbka-title-note" style="font-size:.8rem;color:#9ca3af;">Requer tag host (Trystero).</div>
+      </div>
+      <div style="font-size:.8rem;color:#9ca3af;">Somente o host controla a serial.</div>
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:stretch;margin-top:.65rem;">
+      <div style="flex:1 1 300px;padding:.65rem .75rem;border:1px solid #222;border-radius:.65rem;background:#0c0c0c;min-width:260px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">
+        <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;">
+          <input id="hbka-heartbeat-toggle" type="checkbox" checked style="width:16px;height:16px;accent-color:#10b981;cursor:pointer;" />
+          <span><strong>Heartbeat (PING)</strong></span>
+        </label>
+        <div style="display:flex;align-items:center;gap:.35rem;">
+          <span id="hbka-heartbeat-dot" title="Status" style="display:inline-block;width:10px;height:10px;border-radius:999px;background:#6b7280;"></span>
+          <span id="hbka-heartbeat-label" style="font-size:.8rem;color:#9ca3af;">Parado</span>
+        </div>
+      </div>
+
+      <div style="margin-top:.45rem;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
+        <label style="display:flex;align-items:center;gap:.35rem;font-size:.85rem;color:#cbd5e1;">
+          Intervalo
+          <input id="hbka-heartbeat-interval" type="number" min="150" step="50" value="500"
+            style="width:92px;padding:.25rem .35rem;border-radius:.5rem;border:1px solid #333;background:#0b0b0b;color:#e5e7eb;" />
+          <span style="color:#9ca3af;">ms</span>
+        </label>
+
+        <button id="hbka-send-now" type="button"
+          style="padding:.35rem .6rem;border-radius:.55rem;border:1px solid #333;background:#0b0b0b;color:#e5e7eb;cursor:pointer;">
+          Enviar PING agora
+        </button>
+      </div>
+
+      <div style="margin-top:.35rem;font-size:.78rem;color:#9ca3af;line-height:1.3;">
+        Envia "PING" periodicamente (silencioso). Usa window.port/window.writer se disponivel; nao chama ensureSerial().
+      </div>
+      </div>
+
+      <div style="flex:1 1 300px;padding:.65rem .75rem;border:1px solid #222;border-radius:.65rem;background:#0c0c0c;min-width:260px;">
+        <div style="display:flex;align-items:center;gap:.5rem;">
+          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;">
+            <input id="hbka-browser-wakelock-toggle" type="checkbox" checked style="width:16px;height:16px;accent-color:#10b981;cursor:pointer;" />
+            <span><strong>Manter navegador ativo</strong></span>
+          </label>
+        </div>
+        <div id="hbka-browser-wakelock-status" style="margin-top:.4rem;font-size:.8rem;color:#9ca3af;">
+          Impede o navegador de suspender a aba.
+        </div>
+        <div style="margin-top:.35rem;font-size:.78rem;color:#6b7280;line-height:1.35;">
+          Requer API WakeLock. Pode aumentar o uso de bateria.
+        </div>
+      </div>
+
+      <div style="flex:1 1 300px;padding:.65rem .75rem;border:1px solid #222;border-radius:.65rem;background:#0c0c0c;min-width:260px;">
+      <div style="display:flex;align-items:center;gap:.5rem;">
+        <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;">
+          <input id="hbka-keepawake-toggle" type="checkbox" checked style="width:16px;height:16px;accent-color:#10b981;cursor:pointer;" />
+          <span><strong>Keep-awake ocioso</strong> <small style="color:#9ca3af;">(2.5 min)</small></span>
+        </label>
+      </div>
+      <div id="hbka-keepawake-status" style="margin-top:.4rem;font-size:.8rem;color:#9ca3af;">
+        Envia LIGHT,0,1 e LIGHT,0,2 apenas se nenhum OK for visto por 2.5 minutos.
+      </div>
+      <div style="margin-top:.35rem;font-size:.78rem;color:#6b7280;line-height:1.35;">
+        Observa RX para OK/ERR; ERR nao adia ping. Ignora eco de OK do proprio keep-awake por 500 ms.
+      </div>
+      </div>
+    </div>
+  </div>
+<style>
+  @keyframes hbkaPulse {
+    0%   { transform: scale(1);    opacity: 1; }
+    50%  { transform: scale(1.35); opacity: 1; }
+    100% { transform: scale(1);    opacity: .9; }
+  }
+  .hbka-blink {
+    background: #10b981 !important;
+    animation: hbkaPulse 220ms ease-out 1;
+  }
+</style>
+
+</div>
+<script>
+(() => {
+  'use strict';
+  if (window.__HBKA_WIDGET_READY__) {
+    console.warn('[HB+KA] Widget ja inicializado.');
+    return;
+  }
+  window.__HBKA_WIDGET_READY__ = true;
+
+  const $ = (id) => document.getElementById(id);
+
+  const hbToggle = $('hbka-heartbeat-toggle');
+  const hbIntervalInput = $('hbka-heartbeat-interval');
+  const hbSendNowBtn = $('hbka-send-now');
+  const hbDot = $('hbka-heartbeat-dot');
+  const hbLabel = $('hbka-heartbeat-label');
+
+  const kaToggle = $('hbka-keepawake-toggle');
+  const kaStatusEl = $('hbka-keepawake-status');
+  const titleNoteEl = $('hbka-title-note');
+
+  const browserWakeLockToggle = $('hbka-browser-wakelock-toggle');
+  const browserWakeLockStatusEl = $('hbka-browser-wakelock-status');
+
+  const HB_MIN_MS = 150;
+  const HB_MAX_MS = 60000;
+  const HB_DEFAULT_MS = 500;
+
+  const KA_INTERVAL_MS = 150000;       // 2.5 min
+  const KA_COMMAND = 'LIGHT,0,1';
+  const KA_COMMAND_ALT = 'LIGHT,0,2';
+  const KA_COMMAND_LABEL = 'LIGHT,0,1 e LIGHT,0,2';
+  const KA_OK_WINDOW_MS = 500;
+  const HOST_REQUIRED_MSG = 'Somente host pode manter ativo (tag host).';
+
+  const enc = new TextEncoder();
+
+  let hbTimer = null;
+  let hbPingInFlight = false;
+
+  let keepAwakeTimer = null;
+  let keepAwakeEnabled = true;
+
+  let browserWakeLockSentinel = null;
+
+  let lastActivityTs = 0;
+  let lastKeepAwakeSendTs = 0;
+
+  function isHost() {
+    try {
+      const tags = (window.__TRYSTERO_PEER__ && typeof window.__TRYSTERO_PEER__.getLocalTags === 'function')
+        ? window.__TRYSTERO_PEER__.getLocalTags()
+        : [];
+      const hasHostTag = Array.isArray(tags) && tags.map((t) => String(t || '').toLowerCase()).includes('host');
+      if (hasHostTag) return true;
+      return document.documentElement.classList.contains('host-on');
+    } catch {
+      return document.documentElement.classList.contains('host-on');
+    }
+  }
+
+  function setTitleHostNote(host) {
+    if (!titleNoteEl) return;
+    titleNoteEl.textContent = host ? 'Host detectado (Trystero).' : 'Requer tag host (Trystero).';
+  }
+
+  function setHbStatus(state) {
+    // state: running | waiting | stopped | host
+    if (!hbDot || !hbLabel) return;
+    if (state === 'running') {
+      hbDot.style.background = '#10b981';
+      hbLabel.textContent = 'Ativo';
+      hbLabel.style.color = '#9ca3af';
+    } else if (state === 'waiting') {
+      hbDot.style.background = '#f59e0b';
+      hbLabel.textContent = 'Aguardando conexao';
+      hbLabel.style.color = '#fcd34d';
+    } else if (state === 'host') {
+      hbDot.style.background = '#6b7280';
+      hbLabel.textContent = 'Somente host';
+      hbLabel.style.color = '#9ca3af';
+    } else {
+      hbDot.style.background = '#6b7280';
+      hbLabel.textContent = 'Parado';
+      hbLabel.style.color = '#9ca3af';
+    }
+  }
+
+  function blinkDot() {
+    if (!hbDot) return;
+    hbDot.classList.remove('hbka-blink');
+    void hbDot.offsetWidth;
+    hbDot.classList.add('hbka-blink');
+    setTimeout(() => hbDot.classList.remove('hbka-blink'), 260);
+  }
+
+  function parseHeartbeatInterval() {
+    let v = parseInt(hbIntervalInput?.value || HB_DEFAULT_MS, 10);
+    if (!isFinite(v)) v = HB_DEFAULT_MS;
+    v = Math.max(HB_MIN_MS, Math.min(HB_MAX_MS, v));
+    if (hbIntervalInput) hbIntervalInput.value = String(v);
+    return v;
+  }
+
+  async function writePingLine() {
+    const port = window.port;
+    if (!isHost()) return false;
+    if (!port || !port.writable) return false;
+
+    if (window.writer) {
+      try {
+        await window.writer.write(enc.encode('PING\n'));
+        return true;
+      } catch (_) {
+        // fallback para writer temporario
+      }
+    }
+
+    let w = null;
+    try {
+      if (port.writable.locked) return false;
+      w = port.writable.getWriter();
+      await w.write(enc.encode('PING\n'));
+      return true;
+    } catch (_) {
+      return false;
+    } finally {
+      try { if (w) w.releaseLock(); } catch (_) {}
+    }
+  }
+
+  async function sendHeartbeatPing() {
+    if (!hbToggle?.checked || !isHost()) return;
+    if (hbPingInFlight) return;
+    hbPingInFlight = true;
+    try {
+      const ok = await writePingLine();
+      if (ok) {
+        blinkDot();
+        setHbStatus('running');
+      } else {
+        setHbStatus(hbToggle.checked ? 'waiting' : 'stopped');
+      }
+    } finally {
+      hbPingInFlight = false;
+    }
+  }
+
+  function stopHeartbeat(reason) {
+    if (hbTimer) { clearInterval(hbTimer); hbTimer = null; }
+    setHbStatus(reason === 'host' ? 'host' : 'stopped');
+  }
+
+  function pauseHeartbeatWaiting() {
+    if (hbTimer) { clearInterval(hbTimer); hbTimer = null; }
+    setHbStatus('waiting');
+  }
+
+  function startHeartbeat() {
+    if (!hbToggle?.checked) { stopHeartbeat(); return; }
+    if (!isHost()) { stopHeartbeat('host'); return; }
+
+    stopHeartbeat();
+    const ms = parseHeartbeatInterval();
+    sendHeartbeatPing();
+    hbTimer = setInterval(() => {
+      if (!hbToggle.checked) return;
+      sendHeartbeatPing();
+    }, ms);
+  }
+
+  function setKeepAwakeStatus(text) {
+    if (kaStatusEl) kaStatusEl.textContent = text;
+  }
+
+  // ============== GRAMPO NO WRITER (para pings internos) ==============
+  (function hookWriter() {
+    try {
+      const NativeWritable = window.WritableStream;
+      if (!NativeWritable) return;
+
+      const origGetWriter = NativeWritable.prototype.getWriter;
+      if (typeof origGetWriter !== 'function') return;
+
+      if (!window.__kaWriterHooked) {
+        window.__kaWriterHooked = true;
+
+        NativeWritable.prototype.getWriter = function (...args) {
+          const writer = origGetWriter.apply(this, args);
+
+          if (!writer.__kaWrapped) {
+            writer.__kaWrapped = true;
+            writer.__kaInternalWrite = false; // flag de escrita interna
+            console.log('[HB+KA] Writer serial capturado.');
+          }
+
+          window.__kaSerialWriter = writer;
+          return writer;
+        };
+      }
+    } catch (e) {
+      console.log('[HB+KA] Nao foi possivel hookar getWriter:', e);
+    }
+  })();
+
+  // ============== GRAMPO NO READER (para ver OK/ERR) ==============
+  (function hookReader() {
+    try {
+      const NativeReadable = window.ReadableStream;
+      if (!NativeReadable) return;
+
+      const origGetReader = NativeReadable.prototype.getReader;
+      if (typeof origGetReader !== 'function') return;
+
+      if (!window.__kaReaderHooked) {
+        window.__kaReaderHooked = true;
+
+        NativeReadable.prototype.getReader = function (...args) {
+          const reader = origGetReader.apply(this, args);
+
+          if (!reader.__kaWrapped) {
+            reader.__kaWrapped = true;
+            const origRead = reader.read;
+            reader.__kaDecoder = new TextDecoder();
+            reader.__kaBuf = '';
+
+            reader.read = function (...rArgs) {
+              return origRead.apply(this, rArgs).then(result => {
+                try {
+                  const { value, done } = result;
+                  if (!done && value) {
+                    let text = '';
+                    if (value instanceof Uint8Array || ArrayBuffer.isView(value)) {
+                      text = reader.__kaDecoder.decode(value, { stream: true });
+                    } else if (typeof value === 'string') {
+                      text = value;
+                    }
+
+                    if (text) {
+                      reader.__kaBuf += text;
+                      let idx;
+                      while ((idx = reader.__kaBuf.indexOf('\n')) !== -1) {
+                        const line = reader.__kaBuf.slice(0, idx).replace(/\r$/, '');
+                        reader.__kaBuf = reader.__kaBuf.slice(idx + 1);
+                        handleRxLine(line);
+                      }
+                    }
+                  }
+                } catch (e) {
+                  // ignora erros para nao travar fluxo
+                }
+                return result;
+              });
+            };
+
+            console.log('[HB+KA] Reader serial capturado.');
+          }
+
+          return reader;
+        };
+      }
+    } catch (e) {
+      console.log('[HB+KA] Nao foi possivel hookar getReader:', e);
+    }
+  })();
+
+  function handleRxLine(line) {
+    if (!line) return;
+    const trimmed = line.trim();
+    const upper = trimmed.toUpperCase();
+
+    // Ex.: "OK BEEP,0,1" -> comando aceito
+    if (upper.startsWith('OK')) {
+      const now = Date.now();
+      const dt = now - lastKeepAwakeSendTs;
+
+      // Se o OK veio logo apos um ping do keep-awake, ignoramos como "uso"
+      if (dt >= 0 && dt <= KA_OK_WINDOW_MS) {
+        console.log('[HB+KA] OK eco do ping interno, ignorando como atividade:', trimmed);
+        return;
+      }
+
+      // OK de comando valido do usuario -> adia ping
+      lastActivityTs = now;
+      console.log('[HB+KA] OK de comando valido do usuario, atividade registrada:', trimmed);
+      return;
+    }
+
+    // "ERR formato" e outros erros NAO contam como atividade
+    if (upper.startsWith('ERR')) {
+      console.log('[HB+KA] RX com erro (nao adia ping):', trimmed);
+      return;
+    }
+
+    // resto das linhas: ignorado para efeito de keep-awake
+  }
+
+  // ======== Escrita interna do KeepAwake ========
+  async function writeSerialKeepAwake(line) {
+    line = String(line ?? "").trim();
+    if (!line) return;
+    try {
+      lastKeepAwakeSendTs = Date.now();
+
+      const opts = { forceBothChannels: true, noMirror: true };
+      if (window.SerialBridge && typeof window.SerialBridge.send === 'function') {
+        window.SerialBridge.send(line, opts);
+        console.log('[HB+KA] Enviado (keep-awake via SerialBridge):', KA_COMMAND_LABEL);
+        return;
+      }
+      if (typeof window.collarSend === 'function') {
+        window.collarSend(line, opts);
+        console.log('[HB+KA] Enviado (keep-awake via collarSend):', KA_COMMAND_LABEL);
+        return;
+      }
+    } catch (err) {
+      console.log('[HB+KA] Erro ao enviar (keep-awake via bridge):', err);
+      return;
+    }
+
+    const writer = window.__kaSerialWriter;
+    if (!writer) {
+      console.log('[HB+KA] Nenhum writer disponivel ainda (conecte a porta primeiro).');
+      return;
+    }
+
+    const mirrorHelper = window.__SERIAL_MIRROR__;
+    const mirrored = mirrorHelper && typeof mirrorHelper.mirrorCommandToOppositeChannel === 'function'
+      ? mirrorHelper.mirrorCommandToOppositeChannel(line)
+      : (line === KA_COMMAND ? KA_COMMAND_ALT : null);
+    const commands = (mirrored && mirrored !== line) ? [line, mirrored] : [line];
+
+    try {
+      writer.__kaInternalWrite = true;
+      for (const cmd of commands) {
+        const payload = cmd.endsWith('\n') ? cmd : (cmd + '\n');
+        await writer.write(enc.encode(payload));
+        console.log('[HB+KA] Enviado (keep-awake):', cmd);
+      }
+    } catch (err) {
+      console.log('[HB+KA] Erro ao enviar (keep-awake):', err);
+    } finally {
+      writer.__kaInternalWrite = false;
+    }
+  }
+
+  function sendKeepAwakeIfIdle() {
+    if (!keepAwakeEnabled || !isHost()) return;
+    const now = Date.now();
+    const last = lastActivityTs || 0;
+    const diff = now - last;
+
+    if (diff >= KA_INTERVAL_MS) {
+      void writeSerialKeepAwake(KA_COMMAND);
+    } else {
+      const restante = Math.round((KA_INTERVAL_MS - diff) / 1000);
+      console.log('[HB+KA] Uso recente (OK). Ping adiado. Faltam ~' + restante + 's.');
+    }
+  }
+
+  function startKeepAwakeLoop() {
+    if (keepAwakeTimer) clearInterval(keepAwakeTimer);
+
+    keepAwakeTimer = setInterval(() => {
+      sendKeepAwakeIfIdle();
+    }, KA_INTERVAL_MS);
+
+    // Ao ativar, so manda se ja estiver ocioso ha 2.5 min
+    sendKeepAwakeIfIdle();
+
+    setKeepAwakeStatus(
+      'Envia ' + KA_COMMAND_LABEL +
+      ' se nenhum OK chegar por 2.5 minutos.'
+    );
+    console.log('[HB+KA] Keep-awake ativado (baseado em OK/ERR de RX).');
+  }
+
+  function stopKeepAwakeLoop(message) {
+    if (keepAwakeTimer) {
+      clearInterval(keepAwakeTimer);
+      keepAwakeTimer = null;
+    }
+    setKeepAwakeStatus(message || 'Keep-awake desligado.');
+    console.log('[HB+KA] Keep-awake desativado.' + (message ? ' Motivo: ' + message : ''));
+  }
+
+  // ======== Browser Wake Lock API ========
+  const acquireWakeLock = async () => {
+    if (browserWakeLockSentinel) return;
+    if (!('wakeLock' in navigator)) return;
+
+    try {
+      browserWakeLockSentinel = await navigator.wakeLock.request('screen');
+      console.log('[HB+KA] WakeLock de tela ativado.');
+
+      if (isHost() && browserWakeLockStatusEl) {
+        browserWakeLockStatusEl.textContent = 'Ativo. A aba não será suspensa.';
+        browserWakeLockStatusEl.style.color = '#4ade80';
+      }
+
+      browserWakeLockSentinel.addEventListener('release', () => {
+        console.log('[HB+KA] WakeLock de tela liberado pelo sistema.');
+        if (isHost() && browserWakeLockStatusEl) {
+          browserWakeLockStatusEl.textContent = 'Inativo (liberado pelo sistema).';
+          browserWakeLockStatusEl.style.color = '#9ca3af';
+        }
+        browserWakeLockSentinel = null;
+      });
+    } catch (err) {
+      console.error('[HB+KA] Falha ao ativar WakeLock:', err);
+      if (isHost() && browserWakeLockStatusEl) {
+        browserWakeLockStatusEl.textContent = `Erro: ${err.name}`;
+        browserWakeLockStatusEl.style.color = '#fca5a5';
+        if (browserWakeLockToggle) browserWakeLockToggle.checked = false;
+      }
+      browserWakeLockSentinel = null;
+    }
+  };
+
+  const releaseWakeLock = async () => {
+    if (!browserWakeLockSentinel) return;
+    await browserWakeLockSentinel.release();
+    if (isHost() && browserWakeLockStatusEl) {
+      browserWakeLockStatusEl.textContent = 'Inativo. O navegador pode suspender a aba.';
+    }
+  };
+
+  const handleVisibilityChange = () => {
+    const shouldReacquire = !isHost() || (browserWakeLockToggle && browserWakeLockToggle.checked);
+    if (shouldReacquire && document.visibilityState === 'visible') {
+      acquireWakeLock();
+    }
+  };
+
+  function syncKeepAwake() {
+    if (!kaToggle?.checked) {
+      keepAwakeEnabled = false;
+      stopKeepAwakeLoop('Keep-awake desligado.');
+      return;
+    }
+    keepAwakeEnabled = true;
+    if (!isHost()) {
+      stopKeepAwakeLoop(HOST_REQUIRED_MSG);
+      return;
+    }
+    startKeepAwakeLoop();
+  }
+
+  function syncAll() {
+    const host = isHost();
+    setTitleHostNote(host);
+
+    // Host-only features
+    if (host) {
+      if (hbToggle?.checked) startHeartbeat();
+      else stopHeartbeat('host');
+
+      keepAwakeEnabled = kaToggle ? kaToggle.checked : keepAwakeEnabled;
+      syncKeepAwake();
+    } else {
+      // Clean up host features if user is not host
+      stopHeartbeat('host');
+      stopKeepAwakeLoop(HOST_REQUIRED_MSG);
+    }
+
+    // Browser Wake Lock feature for everyone
+    if (!('wakeLock' in navigator)) {
+      if (host && browserWakeLockStatusEl) {
+        browserWakeLockStatusEl.textContent = 'API WakeLock não suportada.';
+        browserWakeLockStatusEl.style.color = '#fca5a5';
+        if (browserWakeLockToggle) browserWakeLockToggle.disabled = true;
+      }
+    } else {
+      if (host) {
+        // Host follows the toggle
+        if (browserWakeLockToggle && browserWakeLockToggle.checked) {
+          acquireWakeLock();
+        } else {
+          releaseWakeLock();
+        }
+      } else {
+        // Non-host always gets it
+        acquireWakeLock();
+      }
+    }
+  }
+
+
+  // ======== EVENT LISTENERS ========
+  if (hbToggle) {
+    hbToggle.addEventListener('change', () => {
+      if (hbToggle.checked) startHeartbeat();
+      else stopHeartbeat();
+    });
+  }
+
+  if (hbIntervalInput) {
+    hbIntervalInput.addEventListener('change', () => {
+      if (!hbToggle?.checked) return;
+      startHeartbeat();
+    });
+  }
+
+  if (hbSendNowBtn) {
+    hbSendNowBtn.addEventListener('click', () => {
+      sendHeartbeatPing();
+    });
+  }
+
+  if (kaToggle) {
+    kaToggle.addEventListener('change', () => {
+      keepAwakeEnabled = kaToggle.checked;
+      syncKeepAwake();
+    });
+  }
+
+  if (browserWakeLockToggle) {
+    browserWakeLockToggle.addEventListener('change', () => {
+      if (browserWakeLockToggle.checked) {
+        acquireWakeLock();
+      } else {
+        releaseWakeLock();
+      }
+    });
+  }
+
+  // Global events
+  window.addEventListener('serial-connected', () => {
+    if (hbToggle?.checked) startHeartbeat();
+  });
+  window.addEventListener('serial-disconnected', () => {
+    if (hbToggle?.checked) pauseHeartbeatWaiting();
+    else stopHeartbeat();
+  });
+
+  window.addEventListener('trystero:localTags', () => {
+    syncAll();
+  });
+
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+
+
+  // ======== INITIALIZATION ========
+  syncAll();
+
+})();
+</script>

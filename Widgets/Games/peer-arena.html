@@ -1,0 +1,4215 @@
+<meta charset="UTF-8">
+<!-- Peer Arena: cada peer é um emoji (homem/mulher + tom de pele) movendo-se no canvas com setas -->
+<style>
+  #peer-arena-card {
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  #peer-arena-canvas {
+    width: 100%;
+    height: 520px;
+    background: radial-gradient(circle at 20% 20%, rgba(255,255,255,0.04), transparent 28%),
+                radial-gradient(circle at 80% 40%, rgba(255,255,255,0.05), transparent 32%),
+                #0f1115;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    display: block;
+  }
+  .peer-arena-controls {
+    gap: 10px;
+  }
+  .peer-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    padding: 0;
+    border-radius: 14px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.08);
+    font-weight: 600;
+    font-size: 55px;
+    line-height: 1.05;
+    white-space: nowrap;
+    position: relative;
+    min-height: 86px;
+    min-width: 92px;
+    overflow: visible; /* preview pode "vazar" */
+  }
+  #peer-arena-preview-canvas{
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 180px;  /* player grande dentro do chip pequeno */
+    height: 180px;
+    display: block;
+    pointer-events: none;
+  }
+  #peer-arena-preview{
+    width: 92px;
+    height: 86px;
+    flex: 0 0 auto;
+  }
+  .peer-chip .peer-avatar {
+    display: block;
+    position: relative;
+    z-index: 3; /* avatar na frente das mãos */
+  }
+  .peer-chip .peer-hand-left-aim {
+    position: absolute;
+    left: calc(50% - 18px);
+    top: calc(50% + 6px);
+    transform: translate(-50%, -50%);
+    font-size: 34px;
+    line-height: 1;
+    pointer-events: none;
+    z-index: 2; /* mão atrás do avatar e na frente das pernas */
+  }
+  .peer-chip .peer-aim {
+    position: absolute;
+    left: 50%;
+    top: 66%;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+    z-index: 4; /* gun na frente do avatar */
+  }
+  .peer-chip .peer-aim .peer-gun,
+  .peer-chip .peer-aim .peer-hand {
+    position: absolute;
+    top: 0;
+    transform: translate(-50%, -50%);
+    font-size: 34px;
+    line-height: 1;
+    z-index: 2;
+  }
+  .peer-chip .peer-aim .peer-gun {
+    left: -30px;
+    transform: translate(-50%, -50%) scaleX(-1);
+    z-index: 3; /* arma na frente das mãos */
+  }
+  .peer-chip .peer-aim .peer-hand-left {
+    left: -6px;
+  }
+  .peer-chip .peer-aim .peer-hand-right {
+    left: 6px;
+  }
+  .peer-chip .peer-hand-right-acc {
+    position: absolute;
+    right: -14px;
+    top: calc(50% + 6px);
+    transform: translateY(-50%);
+    font-size: 34px;
+    line-height: 1;
+    pointer-events: none;
+    z-index: 2; /* atrás do avatar e na frente das pernas */
+  }
+  .peer-chip .peer-acc {
+    position: absolute;
+    right: -12px;
+    top: calc(50% + 20px);
+    transform: translateY(-50%);
+    font-size: 28px;
+    line-height: 1;
+    pointer-events: none;
+    z-index: 3; /* acessório na frente da mão */
+  }
+  .peer-chip .peer-head {
+    position: absolute;
+    top: -26px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 55px;
+    line-height: 1;
+    pointer-events: none;
+    z-index: 6; /* sempre na frente, inclusive da arma */
+  }
+  .peer-chip .peer-foot {
+    position: absolute;
+    bottom: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 36px;
+    line-height: 1;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .peer-chip .peer-foot-left {
+    left: 38%;
+    transform: translateX(-50%) scaleX(-1);
+  }
+  .peer-chip .peer-foot-right {
+    left: 62%;
+    transform: translateX(-50%);
+  }
+  /* 🦶 (pé) vem virado “pro lado errado” em alguns sistemas: inverte no pé direito */
+  #peer-arena-preview[data-shoe-flip="1"] .peer-foot-left {
+    transform: translateX(-50%);
+  }
+  #peer-arena-preview[data-shoe-flip="1"] .peer-foot-right {
+    transform: translateX(-50%) scaleX(-1);
+  }
+  .tone-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+    padding: 0;
+    border: 2px solid rgba(255,255,255,0.3);
+  }
+  .tone-btn.active {
+    border-color: #5ea2ff;
+    box-shadow: 0 0 0 2px rgba(94,162,255,0.32);
+  }
+  .tone-btn:disabled {
+    opacity: 0.45;
+  }
+  #peer-arena-randomize {
+    width: 44px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    font-size: 18px;
+    line-height: 1;
+    user-select: none;
+  }
+  .emoji-select {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 160px;
+  }
+  /* Bootstrap input-group compat: remove the 1px gap and radius */
+  .input-group > .emoji-select {
+    flex: 1 1 auto;
+    width: 1%;
+  }
+  .input-group > .emoji-select .emoji-select-btn {
+    width: 100%;
+  }
+  .input-group > .emoji-select:not(:first-child) .emoji-select-btn {
+    margin-left: -1px;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+  }
+  .input-group > .emoji-select:not(:last-child) .emoji-select-btn {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+  .emoji-select-native {
+    display: none;
+  }
+  .emoji-select-btn {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .emoji-select-btn .emoji-select-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    overflow: hidden;
+  }
+  .emoji-select-btn .emoji-select-emoji {
+    font-size: 1.35em;
+    line-height: 1;
+  }
+  .emoji-select-btn .emoji-select-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .emoji-select-btn::after {
+    content: "";
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid rgba(255,255,255,0.75);
+    opacity: 0.85;
+  }
+  .emoji-select-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    z-index: 50;
+    display: none;
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+    gap: 8px;
+    padding: 12px;
+    border-radius: 14px;
+    background: rgba(20, 22, 28, 0.96);
+    border: 1px solid rgba(255,255,255,0.12);
+    box-shadow: 0 18px 40px rgba(0,0,0,0.55);
+    max-height: min(340px, 55vh);
+    overflow-y: auto;
+    overflow-x: hidden;
+    backdrop-filter: blur(8px);
+    box-sizing: border-box;
+  }
+  .emoji-select.open .emoji-select-menu {
+    display: grid;
+  }
+  .emoji-select-item {
+    appearance: none;
+    border: 1px solid rgba(255,255,255,0.10);
+    background: rgba(255,255,255,0.04);
+    color: #fff;
+    border-radius: 12px;
+    padding: 10px 8px;
+    text-align: center;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 92px;
+    overflow: hidden;
+  }
+  .emoji-select-item:hover {
+    background: rgba(255,255,255,0.08);
+    border-color: rgba(94,162,255,0.55);
+  }
+  .emoji-select-item.active {
+    border-color: #5ea2ff;
+    box-shadow: 0 0 0 2px rgba(94,162,255,0.22);
+    background: rgba(94,162,255,0.12);
+  }
+  .emoji-select-item .emoji {
+    font-size: 3em; /* 3x */
+    line-height: 1;
+    display: block;
+  }
+  .emoji-select-item .text {
+    font-size: 0.75rem;
+    opacity: 0.85;
+    line-height: 1.05;
+    max-width: 100%;
+    white-space: normal;
+    word-break: break-word;
+  }
+  #peer-arena-lobby {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    background: rgba(12, 14, 20, 0.85);
+    backdrop-filter: blur(8px);
+    border-radius: 16px;
+    z-index: 12;
+  }
+  .peer-arena-lobby-card {
+    width: min(760px, 100%);
+    background: rgba(24, 27, 36, 0.94);
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 16px 48px rgba(0,0,0,0.55);
+    border-radius: 14px;
+    padding: 16px;
+  }
+  .peer-arena-lobby-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.06);
+    background: rgba(255,255,255,0.03);
+  }
+  .peer-arena-ready-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 999px;
+    background: #d9534f;
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.08);
+  }
+  .peer-arena-ready-dot.ready {
+    background: #53d769;
+    box-shadow: 0 0 0 2px rgba(83,215,105,0.26);
+  }
+  .peer-arena-lobby-name {
+    font-weight: 600;
+    letter-spacing: .01em;
+  }
+  .peer-arena-lobby-sub {
+    color: rgba(255,255,255,0.72);
+  }
+  .peer-arena-lobby-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+  }
+  .peer-arena-lobby-tile {
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    background: linear-gradient(145deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02));
+    padding: 10px;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 10px;
+    align-items: center;
+  }
+  .peer-arena-lobby-preview {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 240px;
+    height: 240px;
+    min-width: 240px;
+    min-height: 240px;
+    border-radius: 14px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    box-shadow: 0 10px 32px rgba(0,0,0,0.35);
+    overflow: visible; /* avatar pode vazar */
+  }
+  .peer-arena-lobby-preview canvas {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 280px;
+    height: 280px;
+    pointer-events: none;
+  }
+  .peer-arena-lobby-meta {
+    display: grid;
+    gap: 6px;
+  }
+  .peer-arena-lobby-ready {
+    font-size: 0.8rem;
+    opacity: 0.85;
+  }
+  .peer-arena-countdown {
+    border: 1px solid rgba(94,162,255,0.35);
+    background: rgba(94,162,255,0.10);
+  }
+</style>
+
+<div id="peer-arena-card" class="card p-3 shadow-lg glass-background">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+    <div class="d-flex align-items-center gap-3">
+      <div class="peer-chip" id="peer-arena-preview"><canvas id="peer-arena-preview-canvas"></canvas></div>
+      <div>
+        <div class="fw-bold">Peer Arena</div>
+        <div class="text-secondary small">Setas para mover seu emoji. Escolha gênero e tom.</div>
+      </div>
+    </div>
+    <div class="d-flex flex-wrap peer-arena-controls">
+      <div class="input-group input-group-sm" style="min-width: 200px; max-width: 260px;">
+        <label class="input-group-text" for="peer-arena-name">Nome</label>
+        <input id="peer-arena-name" class="form-control" type="text" placeholder="Seu nome" />
+      </div>
+      <div class="input-group input-group-sm" style="min-width: 200px; max-width: 300px;">
+        <label class="input-group-text" for="peer-arena-gender">Avatar</label>
+        <select id="peer-arena-gender" class="form-select">
+          <option value="👨">👨 Homem</option>
+          <option value="🧑">🧑 Pessoa</option>
+          <option value="👩">👩 Mulher</option>
+          <option value="👩‍🦱">👩‍🦱 Mulher cacheada</option>
+          <option value="🧑‍🦰">🧑‍🦰 Pessoa ruiva</option>
+          <option value="👩‍🦰">👩‍🦰 Mulher ruiva</option>
+          <option value="👨‍🦰">👨‍🦰 Homem ruivo</option>
+          <option value="👨‍🦱">👨‍🦱 Homem cacheado</option>
+          <option value="👩‍🦱">👩‍🦱 Mulher cacheada</option>
+          <option value="👨‍🦳">👨‍🦳 Homem grisalho</option>
+          <option value="🧑‍🦳">🧑‍🦳 Pessoa grisalha</option>
+          <option value="👩‍🦳">👩‍🦳 Mulher grisalha</option>
+          <option value="👱">👱 Pessoa loira</option>
+          <option value="👱‍♂️">👱‍♂️ Homem loiro</option>
+          <option value="👱‍♀️">👱‍♀️ Mulher loira</option>
+          <option value="🧑‍🦲">🧑‍🦲 Pessoa careca</option>
+          <option value="👩‍🦲">👩‍🦲 Mulher careca</option>
+          <option value="🧔">🧔 Pessoa barbada</option>
+          <option value="🙅">🙅 Pessoa negando</option>
+          <option value="🙅‍♂️">🙅‍♂️ Homem negando</option>
+          <option value="🙅‍♀️">🙅‍♀️ Mulher negando</option>
+          <option value="🙎">🙎 Pessoa contrariada</option>
+          <option value="🙎‍♀️">🙎‍♀️ Mulher contrariada</option>
+          <option value="🙎‍♂️">🙎‍♂️ Homem contrariado</option>
+          <option value="😈">😈 Diabinho</option>
+          <option value="👿">👿 Diabo</option>
+          <option value="👹">👹 Oni</option>
+          <option value="💀">💀 Caveira</option>
+          <option value="☠️">☠️ Perigo</option>
+          <option value="👽">👽 Alien</option>
+          <option value="👻">👻 Fantasma</option>
+          <option value="👺">👺 Tengu</option>
+          <option value="🦄">🦄 Unicórnio</option>
+          <option value="🐷">🐷 Porquinho</option>
+          <option value="🐖">🐖 Porco rosa</option>
+          <option value="🐗">🐗 Javaporco</option>
+          <option value="🐄">🐄 Vaca</option>
+          <option value="🐃">🐃 Boi</option>
+          <option value="🐂">🐂 Touro</option>
+          <option value="🐮">🐮 Vaquinha</option>
+          <option value="🐑">🐑 Ovelha</option>
+          <option value="🦒">🦒 Girafa</option>
+          <option value="🐘">🐘 Elefante</option>
+          <option value="🐁">🐁 Camundongo</option>
+          <option value="🐀">🐀 Rato</option>
+          <option value="🐹">🐹 Hamster</option>
+          <option value="🦉">🦉 Coruja</option>
+          <option value="🐤">🐤 Pintinho</option>
+          <option value="🐥">🐥 Piu-piu</option>
+          <option value="🦍">🦍 Gorila</option>
+          <option value="🦊">🦊 Raposa</option>
+          <option value="🐈">🐈 Gato</option>
+          <option value="🐴">🐴 Cavalo</option>
+          <option value="🦌">🦌 Alce</option>
+          <option value="🐇">🐇 Coelho</option>
+          <option value="🐰">🐰 Coelho fofo</option>
+          <option value="🦢">🦢 Cisne</option>
+          <option value="🦆">🦆 Pato</option>
+          <option value="🐸">🐸 Sapo</option>
+          <option value="🦩">🦩 Flamingo</option>
+          <option value="🦓">🦓 Zebra</option>
+          <option value="🦬">🦬 Bisão</option>
+          <option value="🐆">🐆 Onça</option>
+          <option value="🐅">🐅 Tigre</option>
+          <option value="🐯">🐯 Tigre face</option>
+          <option value="🦁">🦁 Leão</option>
+        </select>
+      </div>
+      <div class="input-group input-group-sm" style="min-width: 200px; max-width: 260px;">
+        <label class="input-group-text" for="peer-arena-head">Cabeça</label>
+        <div class="emoji-select" data-emoji-select>
+          <button type="button" class="form-select emoji-select-btn" aria-haspopup="listbox" aria-expanded="false">
+            <span class="emoji-select-label">
+              <span class="emoji-select-emoji">🙂</span>
+              <span class="emoji-select-text">Nenhum</span>
+            </span>
+          </button>
+          <div class="emoji-select-menu" role="listbox"></div>
+          <select id="peer-arena-head" class="form-select emoji-select-native">
+          <option value="">Nenhum</option>
+          <option value="🧢">🧢 Boné</option>
+          <option value="🎩">🎩 Cartola</option>
+          <option value="👒">👒 Chapéu feminino</option>
+          <option value="🎓">🎓 Capelo (formatura)</option>
+          <option value="🪖">🪖 Capacete</option>
+          <option value="👑">👑 Coroa</option>
+          <option value="🧣">🧣 Cachecol</option>
+          <option value="🧤">🧤 Luvas</option>
+          <option value="🧦">🧦 Meias</option>
+          <option value="🕶️">🕶️ Óculos escuros</option>
+          <option value="👓">👓 Óculos de grau</option>
+          <option value="🥽">🥽 Óculos de proteção</option>
+          </select>
+        </div>
+      </div>
+      <div class="input-group input-group-sm" style="min-width: 200px; max-width: 260px;">
+        <label class="input-group-text" for="peer-arena-acc">Acessório</label>
+        <div class="emoji-select" data-emoji-select>
+          <button type="button" class="form-select emoji-select-btn" aria-haspopup="listbox" aria-expanded="false">
+            <span class="emoji-select-label">
+              <span class="emoji-select-emoji">🙂</span>
+              <span class="emoji-select-text">Nenhum</span>
+            </span>
+          </button>
+          <div class="emoji-select-menu" role="listbox"></div>
+          <select id="peer-arena-acc" class="form-select emoji-select-native">
+          <option value="">Nenhum</option>
+          <option value="👜">👜 Bolsa feminina</option>
+          <option value="👛">👛 Porta-moedas</option>
+          <option value="💼">💼 Pasta / maleta</option>
+          <option value="🎒">🎒 Mochila</option>
+          <option value="🧳">🧳 Mala</option>
+          <option value="💍">💍 Anel</option>
+          <option value="📿">📿 Colar / contas</option>
+          <option value="💎">💎 Joia</option>
+          <option value="⌚">⌚ Relógio</option>
+          <option value="📱">📱 Celular</option>
+          </select>
+        </div>
+      </div>
+      <div class="input-group input-group-sm" style="min-width: 200px; max-width: 260px;">
+        <label class="input-group-text" for="peer-arena-shoe">Calçado</label>
+        <div class="emoji-select" data-emoji-select>
+          <button type="button" class="form-select emoji-select-btn" aria-haspopup="listbox" aria-expanded="false">
+            <span class="emoji-select-label">
+              <span class="emoji-select-emoji">🙂</span>
+              <span class="emoji-select-text">Nenhum</span>
+            </span>
+          </button>
+          <div class="emoji-select-menu" role="listbox"></div>
+          <select id="peer-arena-shoe" class="form-select emoji-select-native">
+          <option value="">Nenhum</option>
+          <option value="👟">👟 Tênis</option>
+          <option value="👞">👞 Sapato social</option>
+          <option value="👠">👠 Salto alto</option>
+          <option value="👡">👡 Sandália feminina</option>
+          <option value="👢">👢 Bota</option>
+          <option value="🩰">🩰 Sapatilha / balé</option>
+          <option value="🩴">🩴 Chinelo</option>
+          <option value="🦶">🦶 Pé</option>
+          <option value="🦵">🦵 Perna</option>
+          </select>
+        </div>
+      </div>
+      <div class="input-group input-group-sm" style="width: 200px;">
+        <div id="peer-arena-tone-group" class="btn-group btn-group-sm w-100 justify-content-between px-1" role="group" aria-label="Tom de pele">
+          <button type="button" class="btn btn-outline-light tone-btn" data-tone="" style="background:#ffd447" aria-label="Padrão"></button>
+          <button type="button" class="btn btn-outline-light tone-btn" data-tone="🏻" style="background:#f6d8b6" aria-label="Claro"></button>
+          <button type="button" class="btn btn-outline-light tone-btn" data-tone="🏼" style="background:#f0c89d" aria-label="Médio claro"></button>
+          <button type="button" class="btn btn-outline-light tone-btn" data-tone="🏽" style="background:#d7a676" aria-label="Médio"></button>
+          <button type="button" class="btn btn-outline-light tone-btn" data-tone="🏾" style="background:#a16d44" aria-label="Médio escuro"></button>
+          <button type="button" class="btn btn-outline-light tone-btn" data-tone="🏿" style="background:#704025" aria-label="Escuro"></button>
+        </div>
+      </div>
+      <button id="peer-arena-randomize" type="button" class="btn btn-outline-light btn-sm" title="Sortear look (segure para rolar)" aria-label="Sortear look">🎲</button>
+    </div>
+  </div>
+
+  <div class="mt-3 position-relative">
+    <canvas id="peer-arena-canvas" width="1100" height="520"></canvas>
+    <div id="peer-arena-lobby" class="d-none">
+      <div class="peer-arena-lobby-card">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+          <div>
+            <div class="text-uppercase text-secondary small fw-semibold">Lobby</div>
+            <div id="peer-arena-lobby-title" class="fw-bold fs-5">Aguardando jogadores</div>
+            <div id="peer-arena-lobby-status" class="peer-arena-lobby-sub small">Conecte-se e marque pronto.</div>
+          </div>
+          <div class="d-flex flex-column align-items-end gap-1">
+            <button id="peer-arena-ready-btn" type="button" class="btn btn-primary btn-sm px-3">
+              Estou pronto
+            </button>
+            <small class="text-secondary">Todos precisam marcar ready para começar.</small>
+          </div>
+        </div>
+        <div class="mt-3 peer-arena-lobby-list" id="peer-arena-lobby-list"></div>
+        <div id="peer-arena-countdown" class="peer-arena-countdown alert alert-info mt-3 mb-0 py-2 px-3 d-none" role="status">
+          <div id="peer-arena-countdown-label" class="fw-semibold small">Sincronizando partida...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById("peer-arena-canvas");
+  const ctx = canvas.getContext("2d");
+  const genderSel = document.getElementById("peer-arena-gender");
+  const toneGroup = document.getElementById("peer-arena-tone-group");
+  const toneButtons = toneGroup ? Array.from(toneGroup.querySelectorAll(".tone-btn")) : [];
+  const headSel = document.getElementById("peer-arena-head");
+  const accSel = document.getElementById("peer-arena-acc");
+  const shoeSel = document.getElementById("peer-arena-shoe");
+  const randomizeBtn = document.getElementById("peer-arena-randomize");
+  const nameInput = document.getElementById("peer-arena-name");
+  const previewEl = document.getElementById("peer-arena-preview");
+  const previewCanvas = document.getElementById("peer-arena-preview-canvas");
+  const previewCtx = previewCanvas ? previewCanvas.getContext("2d") : null;
+  const lobbyEl = document.getElementById("peer-arena-lobby");
+  const lobbyListEl = document.getElementById("peer-arena-lobby-list");
+  const lobbyStatusEl = document.getElementById("peer-arena-lobby-status");
+  const lobbyTitleEl = document.getElementById("peer-arena-lobby-title");
+  const readyBtn = document.getElementById("peer-arena-ready-btn");
+  const countdownEl = document.getElementById("peer-arena-countdown");
+  const countdownLabelEl = document.getElementById("peer-arena-countdown-label");
+  const addBotBtn = document.getElementById("peer-arena-add-bot");
+  const clearBotsBtn = document.getElementById("peer-arena-clear-bots");
+
+  const EMOJI_MAN = String.fromCodePoint(0x1F468);
+  const EMOJI_WOMAN = String.fromCodePoint(0x1F469);
+  const EMOJI_PERSON = String.fromCodePoint(0x1F9D1);
+  const ZWJ = String.fromCodePoint(0x200D);
+  const EMOJI_RED_HAIR = String.fromCodePoint(0x1F9B0);
+  const EMOJI_CURLY_HAIR = String.fromCodePoint(0x1F9B1);
+  const EMOJI_BALD = String.fromCodePoint(0x1F9B2);
+  const EMOJI_WHITE_HAIR = String.fromCodePoint(0x1F9B3);
+  const EMOJI_BLOND_PERSON = String.fromCodePoint(0x1F471);
+  const EMOJI_BEARD = String.fromCodePoint(0x1F9D4);
+  const EMOJI_NO_GESTURE = String.fromCodePoint(0x1F645);
+  const EMOJI_POUTING = String.fromCodePoint(0x1F64D);
+  const VS16 = String.fromCodePoint(0xFE0F);
+  const MALE_SIGN = String.fromCodePoint(0x2642);
+  const FEMALE_SIGN = String.fromCodePoint(0x2640);
+  const EMOJI_ROBOT = String.fromCodePoint(0x1F916);
+  const EMOJI_NO_ENTRY = String.fromCodePoint(0x1F6AB);
+  const EMOJI_SMILEY = String.fromCodePoint(0x1F642);
+
+  const PERSON_RED_HAIR = EMOJI_PERSON + ZWJ + EMOJI_RED_HAIR;
+  const WOMAN_RED_HAIR = EMOJI_WOMAN + ZWJ + EMOJI_RED_HAIR;
+  const MAN_RED_HAIR = EMOJI_MAN + ZWJ + EMOJI_RED_HAIR;
+  const MAN_CURLY_HAIR = EMOJI_MAN + ZWJ + EMOJI_CURLY_HAIR;
+  const WOMAN_CURLY_HAIR = EMOJI_WOMAN + ZWJ + EMOJI_CURLY_HAIR;
+  const PERSON_CURLY_HAIR = EMOJI_PERSON + ZWJ + EMOJI_CURLY_HAIR;
+  const MAN_WHITE_HAIR = EMOJI_MAN + ZWJ + EMOJI_WHITE_HAIR;
+  const PERSON_WHITE_HAIR = EMOJI_PERSON + ZWJ + EMOJI_WHITE_HAIR;
+  const WOMAN_WHITE_HAIR = EMOJI_WOMAN + ZWJ + EMOJI_WHITE_HAIR;
+  const MAN_BLOND = EMOJI_BLOND_PERSON + ZWJ + MALE_SIGN + VS16;
+  const WOMAN_BLOND = EMOJI_BLOND_PERSON + ZWJ + FEMALE_SIGN + VS16;
+  const PERSON_BALD = EMOJI_PERSON + ZWJ + EMOJI_BALD;
+  const WOMAN_BALD = EMOJI_WOMAN + ZWJ + EMOJI_BALD;
+  const NO_GESTURE_MAN = EMOJI_NO_GESTURE + ZWJ + MALE_SIGN + VS16;
+  const NO_GESTURE_WOMAN = EMOJI_NO_GESTURE + ZWJ + FEMALE_SIGN + VS16;
+  const POUTING_WOMAN = EMOJI_POUTING + ZWJ + FEMALE_SIGN + VS16;
+  const POUTING_MAN = EMOJI_POUTING + ZWJ + MALE_SIGN + VS16;
+
+  const STORAGE_KEY = "peer_arena_state_v1";
+  const EMOJI_MAP = { base: EMOJI_MAN };
+  const SKINS = ["", String.fromCodePoint(0x1F3FB), String.fromCodePoint(0x1F3FC), String.fromCodePoint(0x1F3FD), String.fromCodePoint(0x1F3FE), String.fromCodePoint(0x1F3FF)];
+  const SKIN_COMPATIBLE = new Set([
+    EMOJI_MAN, EMOJI_WOMAN, EMOJI_PERSON,
+    PERSON_RED_HAIR, WOMAN_RED_HAIR, MAN_RED_HAIR,
+    MAN_CURLY_HAIR, WOMAN_CURLY_HAIR, PERSON_CURLY_HAIR,
+    MAN_WHITE_HAIR, PERSON_WHITE_HAIR, WOMAN_WHITE_HAIR,
+    EMOJI_BLOND_PERSON, MAN_BLOND, WOMAN_BLOND,
+    PERSON_BALD, WOMAN_BALD,
+    EMOJI_BEARD,
+    EMOJI_NO_GESTURE, NO_GESTURE_MAN, NO_GESTURE_WOMAN,
+    EMOJI_POUTING, POUTING_WOMAN, POUTING_MAN
+  ]);
+  let preferredTone = "";
+  const players = new Map(); // key -> {id, name, avatar, x, y, rx, ry, ts, host, sid, tinyUntil, speedUntil, bigUntil}
+  const bullets = []; // {id, owner, x, y, vx, vy, cmd}
+  const bulletIndex = new Map(); // id -> bullet ref
+  const removedBullets = new Map(); // bulletId -> ts (para ignorar updates atrasados)
+  const processedHits = new Map(); // hitKey -> ts
+  let items = []; // {id,type,x,y,expires}
+  let obstacles = []; // {id,type,x,y,r}
+  let fauna = []; // {id,type,x,y,rx,ry,vx,vy,tvx,tvy,nextTurn,seed}
+  let graves = []; // {id,sid,name,x,y}
+  let dangerZone = null; // {seq,mode,fromCx,fromCy,fromR,toCx,toCy,toR,t0,t1,phase}
+  let lastZoneBroadcast = 0;
+  let zoneRng = null;
+  let zoneRngKey = "";
+  const radDamageTouches = new Map(); // `${srcSid}|${tgtSid}` -> ts
+  let lastCocoSpawn = 0;
+  const SELF_ID = window.__TRYSTERO_STABLE_ID || `local-${Math.random().toString(36).slice(2)}`;
+  let worldAuthoritySid = SELF_ID;
+  const MOVE_SPEED = 320; // px/s (faster)
+  const GHOST_SPEED = 480; // px/s (dead/ghost)
+  const GHOST_MAX_SPEED = 640;
+  const GHOST_ACCEL = 1100; // px/s² ao segurar direção
+  const GHOST_FRICTION = 2.6; // fator de desaceleração ao soltar (mais escorregadio)
+  const MOVE_SEND_MS = 30;  // envio mais frequente em movimento
+  const IDLE_PING_MS = 200; // ping leve em idle
+  const WORLD_W = 6000;
+  const WORLD_H = 3200;
+  const MAX_HP = 5;
+  const BONUS_HP_MAX = 5;
+  // Use ASCII-only definition so platforms (ex.: Blogger) that escape emoji inside
+  // <script> blocks (turning them into &#10084;&#65039;) still render a real heart.
+  const HEART_EMOJI = String.fromCodePoint(0x2764, 0xfe0f);
+  const BONUS_HEART_EMOJI = String.fromCodePoint(0x1F49B);
+  const GHOST_EMOJI = String.fromCodePoint(0x1F47B);
+  const COFFIN_EMOJI = String.fromCodePoint(0x26B0, 0xFE0F);
+  const COFFIN_SCALE = 2.5;
+  const HAND_LEFT_EMOJI = String.fromCodePoint(0x1F44A);
+  const HAND_RIGHT_EMOJI = String.fromCodePoint(0x1F44A);
+  const GUN_EMOJI = String.fromCodePoint(0x1F52B);
+  const AVATAR_PLACEHOLDER_EMOJI = String.fromCodePoint(0x1F464);
+  const HOST_CROWN_EMOJI = String.fromCodePoint(0x1F451);
+  const MILK_EMOJI = String.fromCodePoint(0x1F95B);
+  const COCKTAIL_EMOJI = String.fromCodePoint(0x1F379);
+  const COFFEE_EMOJI = String.fromCodePoint(0x2615);
+  const RADIOACTIVE_EMOJI = String.fromCodePoint(0x2622, 0xFE0F);
+  const BUTTER_EMOJI = String.fromCodePoint(0x1F9C8);
+  const POOP_EMOJI = String.fromCodePoint(0x1F4A9);
+  const BULLET_SPEED = 520; // px/s
+  const BULLET_RADIUS = 6;
+  const HIT_RADIUS = 18;
+  const FIRE_COOLDOWN = 140; // ms
+  const ITEM_RADIUS = 18;
+  const ITEM_TTL = 12000;
+  const ITEM_TYPES = ["milk","cocktail","car","coco","radioactive","butter"];
+  const OBSTACLE_TYPES = ["cactus", "rock"];
+  const OBSTACLE_EMOJI = { cactus: String.fromCodePoint(0x1F335), rock: String.fromCodePoint(0x1FAA8) };
+  const OBSTACLE_BIOME = { cactus: "desert", rock: "desert" };
+  const OBSTACLE_RADIUS = 22;
+  const FAUNA_TYPES = ["fly-heart"];
+  const FAUNA_EMOJI = { "fly-heart": { left: String.fromCodePoint(0x1FABD), mid: HEART_EMOJI, right: String.fromCodePoint(0x1FABD) } };
+  const FAUNA_RADIUS = 20;
+  const ITEM_EFFECTS = {
+    milk: { tinyMs: 6000 },
+    cocktail: { bigMs: 4000 },
+    car: { speedMs: 3000 },
+    coco: { poopCharges: 5 },
+    radioactive: { ms: 15000 },
+    butter: { slideMs: 10000 }
+  };
+  const RAD_CLOUD_RADIUS = 62;
+  const RAD_DAMAGE_COOLDOWN_MS = 850;
+  const RAD_DAMAGE_AMOUNT = 2; // dano dobrado (2 corações)
+  const ZONE_HOLD_MS = 25000;
+  const ZONE_SHRINK_MS = 22000;
+  const ZONE_MIN_R = 220;
+  const ZONE_SHRINK_FACTOR = 0.72;
+  const ZONE_DAMAGE_EVERY_MS = 1200;
+  const ZONE_DAMAGE_AMOUNT = 1;
+  const ZONE_SNAPSHOT_MS = 1200;
+  const SPEED_MULT = 1.7;
+  const SWEEP_MS = 4000;
+  const EXP_MS = 9000;
+  const PHASE_LOBBY = "lobby";
+  const PHASE_COUNTDOWN = "countdown";
+  const PHASE_PLAYING = "playing";
+  const COUNTDOWN_MS = 5000;
+  let sendState = null;
+  let sendBulletAction = null;
+  let sendItemAction = null;
+  let boundRoom = null;
+  let lastBroadcast = 0;
+  let lastFaunaBroadcast = 0;
+  let lastFrame = performance.now();
+  const keysDown = new Set();
+  let isMoving = false;
+  let lastFireAt = 0;
+  let lastDir = { x: -1, y: 0 };
+  let audioCtx = null;
+  const FAUNA_SNAPSHOT_MS = 350;
+  let gamePhase = PHASE_LOBBY;
+  let countdownEndsAt = 0;
+  let selfReady = false;
+  const bots = new Map(); // botId -> bot player state (autoridade local controla)
+  const botBroadcastAt = new Map(); // botId -> ts ultimo broadcast
+  let botSeq = 1;
+  const BOT_RETARGET_MS = 1500;
+  const BOT_WANDER_MS = 2800;
+  const BOT_FIRE_INTERVAL = 750;
+  const BOT_RANGE = 1200;
+  const BOT_STRAFE = 0.42;
+  const BOT_MIN_RANGE = 320; // distância alvo para não grudar no player
+  const BOT_DODGE_LOOKAHEAD_MS = 900;
+  const BOT_DODGE_RADIUS = 120;
+  const BOT_DODGE_WEIGHT = 0.85;
+  const BOT_ZONE_BUFFER = 38;
+  const BOT_AI_MIN_STEP = 0.08; // segundos
+  const BOT_AI_MAX_STEP = 0.12; // segundos
+  const BOT_MAX_OWNER_BULLETS = 2;
+  const BOT_MOVE_SEND_MS = 80;
+  const BOT_IDLE_SEND_MS = 260;
+  let botAiAcc = 0;
+  let botAiStep = 0.1;
+  const BUTTER_ACCEL = 1400; // px/s²
+  const BUTTER_FRICTION = 1.6;
+  const BUTTER_MAX_SPEED = 600;
+
+  function lerp(a, b, t) { return a + (b - a) * t; }
+
+  function lerpAngle(a, b, t) {
+    const twoPi = Math.PI * 2;
+    const diff = ((b - a + twoPi * 3) % twoPi) - Math.PI;
+    return a + diff * t;
+  }
+
+  function normalizeAngle(a) {
+    const twoPi = Math.PI * 2;
+    const v = ((a % twoPi) + twoPi) % twoPi;
+    return v > Math.PI ? v - twoPi : v;
+  }
+
+  function clamp(v, lo, hi) {
+    return Math.max(lo, Math.min(hi, v));
+  }
+
+  function getViewRect() {
+    const vw = canvas.width;
+    const vh = canvas.height;
+    const me = players.get(SELF_ID);
+    const centerX = (me?.rx ?? me?.x ?? vw / 2);
+    const centerY = (me?.ry ?? me?.y ?? vh / 2);
+    const w = Math.max(1, vw);
+    const h = Math.max(1, vh);
+    const maxLeft = Math.max(0, WORLD_W - w);
+    const maxTop = Math.max(0, WORLD_H - h);
+    const left = clamp(centerX - w / 2, 0, maxLeft);
+    const top = clamp(centerY - h / 2, 0, maxTop);
+    return { left, top, right: left + w, bottom: top + h, w, h };
+  }
+
+  function botVisionRect(bot) {
+    const w = Math.max(1, canvas.width);
+    const h = Math.max(1, canvas.height);
+    const cx = bot?.x ?? (w / 2);
+    const cy = bot?.y ?? (h / 2);
+    const maxLeft = Math.max(0, WORLD_W - w);
+    const maxTop = Math.max(0, WORLD_H - h);
+    const left = clamp(cx - w / 2, 0, maxLeft);
+    const top = clamp(cy - h / 2, 0, maxTop);
+    return { left, top, right: left + w, bottom: top + h, w, h };
+  }
+
+  function inView(view, x, y, pad = 0) {
+    return x >= (view.left - pad) && x <= (view.right + pad) && y >= (view.top - pad) && y <= (view.bottom + pad);
+  }
+
+  function isDead(p) {
+    if (!p) return false;
+    if (p.dead) return true;
+    if (typeof p.hp === "number" && p.hp <= 0) return true;
+    return false;
+  }
+
+  function clampHpParts(base, extra = 0) {
+    const b = Math.max(0, Math.min(MAX_HP, Math.round(Number(base) || 0)));
+    const ex = Math.max(0, Math.min(BONUS_HP_MAX, Math.round(Number(extra) || 0)));
+    return { base: b, extra: ex, total: b + ex };
+  }
+
+  function hpFor(p) {
+    const parts = clampHpParts(p?.hp, p?.extraHp);
+    return parts.total;
+  }
+
+  function isPhasePlaying() { return gamePhase === PHASE_PLAYING; }
+  function isPhaseCountdown() { return gamePhase === PHASE_COUNTDOWN; }
+  function isBotPlayer(p) { return !!(p && p.bot); }
+
+  function getActivePlayers() {
+    const now = Date.now();
+    const cutoff = now - EXP_MS;
+    const list = [];
+    players.forEach((p, id) => {
+      if (id === SELF_ID) {
+        const self = players.get(SELF_ID) || p;
+        if (self) list.push(self);
+        return;
+      }
+      if (now - (Number(p?.ts) || 0) <= cutoff) list.push(p);
+      });
+    return list;
+  }
+
+  function setGamePhase(nextPhase, targetTs = 0) {
+    const prevPhase = gamePhase;
+    const allowed = [PHASE_LOBBY, PHASE_COUNTDOWN, PHASE_PLAYING];
+    const desired = allowed.includes(nextPhase) ? nextPhase : PHASE_LOBBY;
+    gamePhase = desired;
+    countdownEndsAt = desired === PHASE_COUNTDOWN ? Number(targetTs) || 0 : 0;
+    if (desired === PHASE_PLAYING && prevPhase !== PHASE_PLAYING) {
+      if (isWorldAuthority()) {
+        dangerZone = null;
+        lastZoneBroadcast = 0;
+      }
+    }
+    refreshLobbyUI();
+  }
+
+  function applyPhaseFromRemote(data) {
+    if (!data || !data.phase) return;
+    const phase = data.phase;
+    if (![PHASE_LOBBY, PHASE_COUNTDOWN, PHASE_PLAYING].includes(phase)) return;
+    const target = Number(data.countdownEndsAt) || 0;
+    if (phase === PHASE_COUNTDOWN) {
+      setGamePhase(PHASE_COUNTDOWN, target || (Date.now() + COUNTDOWN_MS));
+    } else {
+      setGamePhase(phase, 0);
+    }
+  }
+
+  function refreshBotButtons() {
+    const enabled = isWorldAuthority();
+    if (addBotBtn) {
+      addBotBtn.disabled = !enabled;
+      addBotBtn.title = enabled ? "Adicionar um bot controlado pelo host" : "Disponível apenas para o host";
+    }
+    if (clearBotsBtn) {
+      clearBotsBtn.disabled = !enabled || bots.size === 0;
+    }
+  }
+
+  function refreshLobbyUI(nowMs = Date.now()) {
+    if (!lobbyEl) return;
+    const overlayVisible = gamePhase !== PHASE_PLAYING;
+    lobbyEl.classList.toggle("d-none", !overlayVisible);
+    const active = getActivePlayers();
+    const readyCount = active.filter(p => !!p.ready).length;
+    const total = active.length;
+    const allReady = total > 0 && readyCount === total;
+    if (lobbyTitleEl) {
+      lobbyTitleEl.textContent = gamePhase === PHASE_COUNTDOWN ? "Sincronizando partida" : "Aguardando jogadores";
+    }
+    if (lobbyStatusEl) {
+      lobbyStatusEl.textContent = total
+        ? `${readyCount}/${total} prontos`
+        : "Nenhum jogador conectado";
+    }
+    if (lobbyListEl) {
+      lobbyListEl.innerHTML = "";
+      const ordered = active.slice().sort((a, b) => {
+        const an = (a.name || a.id || "").toLowerCase();
+        const bn = (b.name || b.id || "").toLowerCase();
+        return an.localeCompare(bn);
+      });
+      ordered.forEach(p => {
+        const row = document.createElement("div");
+        row.className = "peer-arena-lobby-tile";
+        const previewBox = document.createElement("div");
+        previewBox.className = "peer-chip peer-arena-lobby-preview";
+        const canv = document.createElement("canvas");
+        canv.width = 480;
+        canv.height = 480;
+        canv.style.width = "280px";
+        canv.style.height = "280px";
+        previewBox.appendChild(canv);
+        const meta = document.createElement("div");
+        meta.className = "peer-arena-lobby-meta";
+        const dot = document.createElement("span");
+        dot.className = "peer-arena-ready-dot" + (p.ready ? " ready" : "");
+        dot.title = p.ready ? "Ready" : "Aguardando";
+        const header = document.createElement("div");
+        header.className = "d-flex align-items-center gap-2";
+        const label = document.createElement("div");
+        label.className = "peer-arena-lobby-name";
+        const isBot = !!p.bot;
+        label.textContent = isBot ? `${EMOJI_ROBOT} ${p.name || p.id || "bot"}` : (p.name || p.id || "peer");
+        header.appendChild(dot);
+        header.appendChild(label);
+        const sub = document.createElement("div");
+        sub.className = "peer-arena-lobby-ready";
+        sub.textContent = isBot ? (p.ready ? "Bot pronto" : "Bot aguardando") : (p.ready ? "Pronto" : "Aguardando");
+        meta.appendChild(header);
+        meta.appendChild(sub);
+        row.appendChild(previewBox);
+        row.appendChild(meta);
+        lobbyListEl.appendChild(row);
+        renderLobbyPreviewToCanvas(p, canv);
+      });
+    }
+    if (readyBtn) {
+      readyBtn.textContent = selfReady ? "Cancelar ready" : "Estou pronto";
+      readyBtn.classList.toggle("btn-outline-light", selfReady);
+      readyBtn.classList.toggle("btn-primary", !selfReady);
+      readyBtn.disabled = false;
+    }
+    if (countdownEl && countdownLabelEl) {
+      if (gamePhase === PHASE_COUNTDOWN) {
+        const remaining = Math.max(0, Math.ceil((countdownEndsAt - nowMs) / 1000));
+        countdownLabelEl.textContent = `Sincronizando mapa em ${remaining}s`;
+        countdownEl.classList.remove("d-none");
+      } else {
+        countdownEl.classList.add("d-none");
+      }
+    }
+    refreshBotButtons();
+  }
+
+  function ensureLobbyFlow(nowMs = Date.now()) {
+    const active = getActivePlayers();
+    const readyCount = active.filter(p => !!p.ready).length;
+    const allReady = active.length > 0 && readyCount === active.length;
+    if (isWorldAuthority()) {
+      if (gamePhase === PHASE_LOBBY && allReady) {
+        setGamePhase(PHASE_COUNTDOWN, nowMs + COUNTDOWN_MS);
+        broadcastState(true, true);
+      } else if (gamePhase === PHASE_COUNTDOWN) {
+        if (!allReady) {
+          setGamePhase(PHASE_LOBBY, 0);
+          broadcastState(true, true);
+        } else if (countdownEndsAt && nowMs >= countdownEndsAt) {
+          setGamePhase(PHASE_PLAYING, 0);
+          broadcastState(true, true);
+        }
+      }
+    }
+    if (!isWorldAuthority() && gamePhase === PHASE_COUNTDOWN && countdownEndsAt && nowMs >= countdownEndsAt) {
+      setGamePhase(PHASE_PLAYING, 0);
+    }
+    refreshLobbyUI(nowMs);
+    return { active, readyCount, allReady };
+  }
+
+  function setReady(flag = true) {
+    selfReady = !!flag;
+    const me = players.get(SELF_ID) || upsertSelfPosition();
+    if (me) {
+      me.ready = selfReady;
+      me.ts = Date.now();
+    }
+    broadcastState(true, true);
+    ensureLobbyFlow();
+  }
+
+  function renderLobbyPreviewToCanvas(p, canvas) {
+    if (!p || !canvas) return;
+    const ctx2 = canvas.getContext("2d");
+    if (!ctx2) return;
+    const w = 250;
+    const h = 250;
+    if (canvas.width !== w) canvas.width = w;
+    if (canvas.height !== h) canvas.height = h;
+    ctx2.clearRect(0, 0, w, h);
+    const px = w / 2;
+    const py = h / 2 + 42;
+    const baseScale = scaleFor(p) * 2.4;
+    const scl = Math.max(2.2, Math.min(3.6, baseScale));
+    const copy = {
+      ...p,
+      x: px,
+      y: py,
+      rx: px,
+      ry: py,
+      hp: clampHpParts(p?.hp, p?.extraHp).base,
+      extraHp: clampHpParts(p?.hp, p?.extraHp).extra,
+      dead: isDead(p)
+    };
+    renderPlayer(ctx2, copy, copy.id || copy.sid || "peer", Date.now(), 0.016, {
+      px,
+      pyBase: py,
+      scl,
+      aimDir: { x: -1, y: 0 },
+      footBob: { left: 0, right: 0 },
+      accAngle: 0,
+      isHost: !!p.host,
+      showName: false,
+      showHearts: false
+    });
+  }
+
+  function graveColliderRadius(g) {
+    const explicit = Number(g?.r);
+    if (Number.isFinite(explicit) && explicit > 0) return explicit;
+    // aproximação do tamanho visual do emoji do caixão (círculo)
+    const px = 26 * COFFIN_SCALE;
+    return Math.max(18, px * 0.46);
+  }
+
+  function mulberry32(seed) {
+    let t = seed >>> 0;
+    return function() {
+      t += 0x6D2B79F5;
+      let r = Math.imul(t ^ (t >>> 15), 1 | t);
+      r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+      return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function hashStringToSeed(str) {
+    // FNV-1a 32-bit
+    let h = 0x811c9dc5;
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 0x01000193);
+    }
+    return h >>> 0;
+  }
+
+  function hash2i(x, y, seed = 0) {
+    // hash rápido para ints (tile/offset/rotação determinísticos)
+    let h = (seed ^ Math.imul(x | 0, 374761393) ^ Math.imul(y | 0, 668265263)) >>> 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
+    return (h ^ (h >>> 16)) >>> 0;
+  }
+
+  function smoothstep01(t) {
+    const x = Math.max(0, Math.min(1, t));
+    return x * x * (3 - 2 * x);
+  }
+
+  function zoneEnsureRng() {
+    const key = String(worldAuthoritySid || SELF_ID || "");
+    if (zoneRng && zoneRngKey === key) return;
+    zoneRngKey = key;
+    zoneRng = mulberry32(hashStringToSeed(`danger-zone:${key}`));
+  }
+
+  function zoneRandomPointInCircle(cx, cy, r) {
+    zoneEnsureRng();
+    const a = (zoneRng ? zoneRng() : Math.random()) * Math.PI * 2;
+    const d = Math.sqrt(zoneRng ? zoneRng() : Math.random()) * r;
+    return { x: cx + Math.cos(a) * d, y: cy + Math.sin(a) * d };
+  }
+
+  function zonePickNextTarget(fromCx, fromCy, fromR, toR) {
+    const margin = 18;
+    const maxShift = Math.max(0, fromR - toR);
+    for (let tries = 0; tries < 120; tries++) {
+      const pt = zoneRandomPointInCircle(fromCx, fromCy, maxShift);
+      const x = pt.x;
+      const y = pt.y;
+      // garante que o novo círculo caiba no mapa
+      if (x < (toR + margin) || x > (WORLD_W - toR - margin)) continue;
+      if (y < (toR + margin) || y > (WORLD_H - toR - margin)) continue;
+      return { x, y };
+    }
+    // fallback: clampa dentro do mundo
+    return {
+      x: clamp(fromCx, toR + margin, WORLD_W - toR - margin),
+      y: clamp(fromCy, toR + margin, WORLD_H - toR - margin)
+    };
+  }
+
+  function getDangerZoneAt(nowMs, z = dangerZone) {
+    if (!z) return null;
+    const denom = Math.max(1, (Number(z.t1) || 0) - (Number(z.t0) || 0));
+    const raw = ((nowMs - (Number(z.t0) || 0)) / denom);
+    const t = smoothstep01(raw);
+    return {
+      cx: lerp(Number(z.fromCx) || 0, Number(z.toCx) || 0, t),
+      cy: lerp(Number(z.fromCy) || 0, Number(z.toCy) || 0, t),
+      r: lerp(Number(z.fromR) || 0, Number(z.toR) || 0, t),
+      seq: Number(z.seq) || 0,
+      mode: z.mode || "hold",
+      phase: Number(z.phase) || 0
+    };
+  }
+
+  function ensureDangerZoneAuthority(nowMs) {
+    if (!isWorldAuthority()) return;
+    zoneEnsureRng();
+    if (!dangerZone) {
+      const r0 = Math.hypot(WORLD_W, WORLD_H) / 2;
+      dangerZone = {
+        seq: 1,
+        phase: 0,
+        mode: "hold",
+        fromCx: WORLD_W / 2,
+        fromCy: WORLD_H / 2,
+        fromR: r0,
+        toCx: WORLD_W / 2,
+        toCy: WORLD_H / 2,
+        toR: r0,
+        t0: nowMs,
+        t1: nowMs + ZONE_HOLD_MS
+      };
+      lastZoneBroadcast = 0; // força snapshot cedo
+      broadcastState(true, true);
+      return;
+    }
+    if (nowMs < (Number(dangerZone.t1) || 0)) return;
+
+    const cur = getDangerZoneAt(nowMs, dangerZone);
+    const cx = cur?.cx ?? (Number(dangerZone.toCx) || 0);
+    const cy = cur?.cy ?? (Number(dangerZone.toCy) || 0);
+    const r = cur?.r ?? (Number(dangerZone.toR) || 0);
+    const nextSeq = (Number(dangerZone.seq) || 0) + 1;
+    const nextPhase = (Number(dangerZone.phase) || 0) + 1;
+
+    if (dangerZone.mode === "hold") {
+      const nextR = Math.max(ZONE_MIN_R, r * ZONE_SHRINK_FACTOR);
+      const nextC = zonePickNextTarget(cx, cy, r, nextR);
+      dangerZone = {
+        seq: nextSeq,
+        phase: nextPhase,
+        mode: "shrink",
+        fromCx: cx,
+        fromCy: cy,
+        fromR: r,
+        toCx: nextC.x,
+        toCy: nextC.y,
+        toR: nextR,
+        t0: nowMs,
+        t1: nowMs + ZONE_SHRINK_MS
+      };
+    } else {
+      // shrink terminou: faz uma pausa (hold) no novo círculo
+      dangerZone = {
+        seq: nextSeq,
+        phase: nextPhase,
+        mode: "hold",
+        fromCx: cx,
+        fromCy: cy,
+        fromR: r,
+        toCx: cx,
+        toCy: cy,
+        toR: r,
+        t0: nowMs,
+        t1: nowMs + ZONE_HOLD_MS
+      };
+    }
+    lastZoneBroadcast = 0; // força snapshot rápido ao trocar fase
+    broadcastState(true, true);
+  }
+
+  function drawDangerZone(view, nowMs) {
+    const z = getDangerZoneAt(nowMs);
+    if (!z) return;
+    const cx = z.cx, cy = z.cy, r = Math.max(0, z.r);
+    if (!Number.isFinite(cx) || !Number.isFinite(cy) || !Number.isFinite(r) || r <= 0) return;
+
+    // sombra/overlay fora do círculo (sem cobrir players/bullets, fica no background)
+    ctx.save();
+    ctx.fillStyle = "rgba(255, 60, 60, 0.16)";
+    ctx.beginPath();
+    ctx.rect(view.left, view.top, view.w, view.h);
+    ctx.moveTo(cx + r, cy);
+    ctx.arc(cx, cy, r, 0, Math.PI * 2, true);
+    try { ctx.fill("evenodd"); } catch { ctx.fill(); }
+
+    // borda
+    ctx.strokeStyle = "rgba(255, 90, 90, 0.92)";
+    ctx.lineWidth = 3;
+    ctx.setLineDash([10, 10]);
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  function applyDangerZoneDamageAuthority(nowMs) {
+    if (!isWorldAuthority()) return;
+    const z = getDangerZoneAt(nowMs);
+    if (!z) return;
+    const cx = z.cx, cy = z.cy, r = z.r;
+    for (const p of players.values()) {
+      if (!p || isDead(p)) continue;
+      const sid = String(p.sid || p.id || "");
+      if (!sid) continue;
+      const px = Number(p.x) || 0;
+      const py = Number(p.y) || 0;
+      const dist = Math.hypot(px - cx, py - cy);
+      if (dist <= r) continue;
+      const last = Number(p.zoneLastDamage) || 0;
+      if (nowMs - last < ZONE_DAMAGE_EVERY_MS) continue;
+      p.zoneLastDamage = nowMs;
+      applyDamageAuthoritative(sid, ZONE_DAMAGE_AMOUNT, null);
+    }
+  }
+
+  function applyRadioactiveContactDamageAuthority(nowMs) {
+    if (!isWorldAuthority()) return;
+    const sources = Array.from(players.values()).filter(p => p && !isDead(p) && (Number(p.radioactiveUntil) || 0) > nowMs);
+    if (!sources.length) return;
+    for (const src of sources) {
+      const srcSid = String(src.sid || src.id || "");
+      if (!srcSid) continue;
+      const sx = Number(src.x) || 0;
+      const sy = Number(src.y) || 0;
+      const cloudR = RAD_CLOUD_RADIUS * scaleFor(src);
+      for (const tgt of players.values()) {
+        if (!tgt || tgt === src || isDead(tgt)) continue;
+        const tgtSid = String(tgt.sid || tgt.id || "");
+        if (!tgtSid) continue;
+        const dx = (Number(tgt.x) || 0) - sx;
+        const dy = (Number(tgt.y) || 0) - sy;
+        const reach = cloudR + playerRadius(tgt);
+        if (Math.hypot(dx, dy) > reach) continue;
+        const key = `${srcSid}|${tgtSid}`;
+        const last = Number(radDamageTouches.get(key)) || 0;
+        if (nowMs - last < RAD_DAMAGE_COOLDOWN_MS) continue;
+        radDamageTouches.set(key, nowMs);
+        applyDamageAuthoritative(tgtSid, RAD_DAMAGE_AMOUNT, null);
+      }
+    }
+  }
+
+  const biomeNoisePatterns = new Map(); // biome -> CanvasPattern
+  const BIOME_NOISE_TILE = 512;
+  function getBiomeNoisePattern(biome) {
+    if (!biome) return null;
+    const cached = biomeNoisePatterns.get(biome);
+    if (cached) return cached;
+    const tile = document.createElement("canvas");
+    tile.width = BIOME_NOISE_TILE;
+    tile.height = BIOME_NOISE_TILE;
+    const tctx = tile.getContext("2d");
+    if (!tctx) return null;
+    const rng = mulberry32(hashStringToSeed(`biome-noise:${biome}`));
+    tctx.clearRect(0, 0, tile.width, tile.height);
+
+    function smoothstep(t) { return t * t * (3 - 2 * t); }
+    function mix(a, b, t) { return a + (b - a) * t; }
+
+    // Ruído orgânico e tileável (value noise + fBm) para virar máscara do ground.
+    // Tile grande + wrap evita “seams” e repetição óbvia do padrão.
+    const img = tctx.createImageData(tile.width, tile.height);
+    const d = img.data;
+
+    function octaveNoise(step) {
+      const gw = Math.max(1, Math.floor(tile.width / step));
+      const gh = Math.max(1, Math.floor(tile.height / step));
+      const grid = new Float32Array(gw * gh);
+      for (let i = 0; i < grid.length; i++) grid[i] = rng();
+      return { step, gw, gh, grid };
+    }
+
+    const octaves = [
+      octaveNoise(128),
+      octaveNoise(64),
+      octaveNoise(32),
+      octaveNoise(16),
+      octaveNoise(8),
+      octaveNoise(4)
+    ];
+
+    function sampleOct(o, x, y) {
+      const fx = x / o.step;
+      const fy = y / o.step;
+      const x0 = Math.floor(fx);
+      const y0 = Math.floor(fy);
+      const x1 = x0 + 1;
+      const y1 = y0 + 1;
+      const tx = smoothstep(fx - x0);
+      const ty = smoothstep(fy - y0);
+      const idx = (xx, yy) => {
+        const mx = ((xx % o.gw) + o.gw) % o.gw;
+        const my = ((yy % o.gh) + o.gh) % o.gh;
+        return mx + my * o.gw;
+      };
+      const v00 = o.grid[idx(x0, y0)];
+      const v10 = o.grid[idx(x1, y0)];
+      const v01 = o.grid[idx(x0, y1)];
+      const v11 = o.grid[idx(x1, y1)];
+      return mix(mix(v00, v10, tx), mix(v01, v11, tx), ty);
+    }
+
+    for (let y = 0; y < tile.height; y++) {
+      for (let x = 0; x < tile.width; x++) {
+        // fBm
+        let n = 0;
+        let amp = 0.62;
+        let sumAmp = 0;
+        for (const o of octaves) {
+          n += sampleOct(o, x, y) * amp;
+          sumAmp += amp;
+          amp *= 0.55;
+        }
+        n = n / Math.max(1e-6, sumAmp); // 0..1
+
+        // máscara com contraste moderado (evita “recortar”/bordas duras)
+        const a = Math.max(0.32, Math.min(1, 0.76 + (n - 0.5) * 0.72));
+        const alpha = Math.round(a * 255);
+        const i = (y * tile.width + x) * 4;
+        d[i] = 255; d[i + 1] = 255; d[i + 2] = 255; d[i + 3] = alpha;
+      }
+    }
+    tctx.putImageData(img, 0, 0);
+
+    const pattern = ctx.createPattern(tile, "repeat");
+    if (pattern) biomeNoisePatterns.set(biome, pattern);
+    return pattern || null;
+  }
+
+  function ensureFauna() {
+    if (!isWorldAuthority()) return;
+    const desired = 4;
+    if (fauna.length >= desired) return;
+    const margin = 60;
+    const now = Date.now();
+    while (fauna.length < desired) {
+      const seed = Math.floor(Math.random() * 2**31) ^ (now & 0x7fffffff) ^ fauna.length;
+      const rng = mulberry32(seed);
+      const x = rng() * (WORLD_W - margin * 2) + margin;
+      const y = rng() * (WORLD_H - margin * 2) + margin;
+      fauna.push({
+        id: `fa-${now}-${Math.random().toString(36).slice(2)}`,
+        type: "fly-heart",
+        x, y,
+        rx: x, ry: y,
+        vx: 0, vy: 0,
+        tvx: (rng() * 2 - 1) * 140,
+        tvy: (rng() * 2 - 1) * 140,
+        nextTurn: now + 600 + rng() * 1200,
+        seed
+      });
+    }
+  }
+
+  function updateFauna(dt) {
+    if (!isWorldAuthority()) return;
+    const now = Date.now();
+    for (const f of fauna) {
+      if (!f) continue;
+      if (now >= (f.nextTurn || 0)) {
+        const rng = mulberry32((f.seed ^ now) >>> 0);
+        f.tvx = (rng() * 2 - 1) * 180;
+        f.tvy = (rng() * 2 - 1) * 180;
+        f.nextTurn = now + 500 + rng() * 1500;
+      }
+      const accel = 7;
+      f.vx = lerp(f.vx || 0, f.tvx || 0, Math.min(1, dt * accel));
+      f.vy = lerp(f.vy || 0, f.tvy || 0, Math.min(1, dt * accel));
+      f.x += (f.vx || 0) * dt;
+      f.y += (f.vy || 0) * dt;
+      const pad = 26;
+      if (f.x < pad) { f.x = pad; f.vx = Math.abs(f.vx || 0); f.tvx = Math.abs(f.tvx || 0); }
+      if (f.x > WORLD_W - pad) { f.x = WORLD_W - pad; f.vx = -Math.abs(f.vx || 0); f.tvx = -Math.abs(f.tvx || 0); }
+      if (f.y < pad) { f.y = pad; f.vy = Math.abs(f.vy || 0); f.tvy = Math.abs(f.tvy || 0); }
+      if (f.y > WORLD_H - pad) { f.y = WORLD_H - pad; f.vy = -Math.abs(f.vy || 0); f.tvy = -Math.abs(f.tvy || 0); }
+      f.rx = f.x;
+      f.ry = f.y;
+    }
+  }
+
+  function drawFauna(view = null) {
+    if (!fauna.length) return;
+    const t = performance.now();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    fauna.forEach(f => {
+      if (!f) return;
+      const fx = f.rx ?? f.x;
+      const fy = f.ry ?? f.y;
+      if (view && !inView(view, fx, fy, 120)) return;
+      const em = FAUNA_EMOJI[f.type] || FAUNA_EMOJI["fly-heart"];
+      const flap = Math.sin(t / 120 + (f.seed || 0)) * 5;
+      const beat = 1 + 0.1 * Math.sin(t / 210 + (f.seed || 0));
+      const midSize = Math.round(24 * beat);
+      const wingSize = Math.round(22 * (1 + 0.05 * Math.sin(t / 260 + (f.seed || 0))));
+      ctx.save();
+      ctx.shadowColor = "rgba(255, 215, 0, 0.55)";
+      ctx.shadowBlur = 12;
+      ctx.font = `${midSize}px sans-serif`;
+      ctx.fillText(em.mid, fx, fy);
+      ctx.shadowBlur = 0;
+      ctx.restore();
+      ctx.font = `${wingSize}px sans-serif`;
+      // asa esquerda espelhada
+      ctx.save();
+      ctx.translate(fx - 20, fy + flap);
+      ctx.scale(-1, 1);
+      ctx.fillText(em.left, 0, 0);
+      ctx.restore();
+      ctx.fillText(em.right, fx + 20, fy - flap);
+    });
+  }
+
+  function tickRemoteFauna(dt) {
+    if (!fauna.length || isWorldAuthority()) return;
+    const pad = 26;
+    for (const f of fauna) {
+      if (!f) continue;
+      const vx = Number(f.vx) || 0;
+      const vy = Number(f.vy) || 0;
+      f.x = (Number(f.x) || 0) + vx * dt;
+      f.y = (Number(f.y) || 0) + vy * dt;
+      if (f.x < pad) { f.x = pad; f.vx = Math.abs(vx); }
+      if (f.x > WORLD_W - pad) { f.x = WORLD_W - pad; f.vx = -Math.abs(vx); }
+      if (f.y < pad) { f.y = pad; f.vy = Math.abs(vy); }
+      if (f.y > WORLD_H - pad) { f.y = WORLD_H - pad; f.vy = -Math.abs(vy); }
+      const smooth = 1 - Math.exp(-dt * 18);
+      f.rx = lerp(f.rx ?? f.x, f.x, smooth);
+      f.ry = lerp(f.ry ?? f.y, f.y, smooth);
+    }
+  }
+
+  function removeFaunaById(id) {
+    if (!id) return false;
+    const idx = fauna.findIndex(f => f && f.id === id);
+    if (idx === -1) return false;
+    fauna.splice(idx, 1);
+    return true;
+  }
+
+  function drawGraves(view = null) {
+    if (!graves.length) return;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    graves.forEach(g => {
+      if (!g) return;
+      const x = Number(g.x) || 0;
+      const y = Number(g.y) || 0;
+      if (view && !inView(view, x, y, 180)) return;
+      const coffinPx = Math.round(26 * COFFIN_SCALE);
+      ctx.font = `${coffinPx}px sans-serif`;
+      ctx.fillText(COFFIN_EMOJI, x, y);
+      const label = String(g.name || "").trim();
+      const labelY = y + coffinPx * 0.55;
+      drawNameTooltip(ctx, "in memoriam", x, labelY, { host: false, scale: 0.92, italic: true, opacity: 0.85 });
+      if (label) drawNameTooltip(ctx, label, x, labelY + 18, { host: false, scale: 0.95 });
+    });
+  }
+
+  function playerRadius(p) {
+    return isDead(p) ? 0 : (HIT_RADIUS * scaleFor(p));
+  }
+
+  function clampPlayerXY(x, y) {
+    const cx = Math.max(20, Math.min(WORLD_W - 20, x));
+    const cy = Math.max(24, Math.min(WORLD_H - 12, y));
+    return { x: cx, y: cy };
+  }
+
+  function resolvePlayerObstacleOverlap(p, maxPasses = 6) {
+    if (!p || !obstacles.length || isDead(p)) return false;
+    let changed = false;
+    for (let pass = 0; pass < maxPasses; pass++) {
+      let any = false;
+      const pr = playerRadius(p);
+      for (const ob of obstacles) {
+        const r = Number(ob.r) || OBSTACLE_RADIUS;
+        const ox = Number(ob.x) || 0;
+        const oy = Number(ob.y) || 0;
+        let dx = (p.x - ox);
+        let dy = (p.y - oy);
+        let d = Math.hypot(dx, dy);
+        const minD = pr + r;
+        if (d >= minD) continue;
+        any = true;
+        if (d < 1e-4) {
+          const a = (Math.random() * Math.PI * 2);
+          dx = Math.cos(a);
+          dy = Math.sin(a);
+          d = 1;
+        }
+        const nx = dx / d;
+        const ny = dy / d;
+        const push = (minD - d) + 0.5;
+        const next = clampPlayerXY(p.x + nx * push, p.y + ny * push);
+        p.x = next.x;
+        p.y = next.y;
+        changed = true;
+      }
+      if (!any) break;
+    }
+    return changed;
+  }
+
+  function collidesWithObstacleAt(px, py, p) {
+    if (!obstacles.length || isDead(p)) return false;
+    const pr = playerRadius(p);
+    for (const ob of obstacles) {
+      const r = Number(ob.r) || OBSTACLE_RADIUS;
+      const dx = (Number(ob.x) || 0) - px;
+      const dy = (Number(ob.y) || 0) - py;
+      if (Math.hypot(dx, dy) <= (pr + r)) return true;
+    }
+    if (graves.length) {
+      for (const g of graves) {
+        const r = graveColliderRadius(g);
+        const dx = (Number(g.x) || 0) - px;
+        const dy = (Number(g.y) || 0) - py;
+        if (Math.hypot(dx, dy) <= (pr + r)) return true;
+      }
+    }
+    return false;
+  }
+
+  function resizeCanvas() {
+    const { width } = canvas.getBoundingClientRect();
+    canvas.width = Math.floor(width);
+    canvas.height = 520;
+  }
+  resizeCanvas();
+  window.addEventListener("resize", resizeCanvas);
+
+  function resizePreviewCanvas() {
+    if (!previewCanvas || !previewEl) return;
+    const r = previewCanvas.getBoundingClientRect();
+    previewCanvas.width = Math.max(1, Math.floor(r.width));
+    previewCanvas.height = Math.max(1, Math.floor(r.height));
+  }
+  resizePreviewCanvas();
+  window.addEventListener("resize", resizePreviewCanvas);
+
+  function getUsername(){
+    const trInput = document.getElementById('tr-username');
+    const fromTrInput = (trInput && trInput.value || "").trim();
+    if (fromTrInput) return fromTrInput;
+    try {
+      const u = new URL(location.href);
+      const fromUrl = (u.searchParams.get('name') || '').trim();
+      if (fromUrl) return fromUrl;
+    } catch {}
+    try {
+      const st = JSON.parse(localStorage.getItem('trystero_widget_state_v5') || '{}') || {};
+      const name = (st.name || '').trim();
+      if (name) return name;
+    } catch {}
+    const fromInput = (nameInput && nameInput.value || "").trim();
+    if (fromInput) return fromInput;
+    return 'visitante';
+  }
+
+  function applyTone(base, tone){
+    if (!tone) return base;
+    if (!base || !base.includes("\u200d")) return `${base}${tone}`;
+    const parts = base.split("\u200d");
+    const first = parts.shift() || "";
+    return [first + tone, ...parts].join("\u200d");
+  }
+
+  function extractTone(emoji) {
+    if (!emoji) return "";
+    for (const t of SKINS) {
+      if (!t) continue;
+      if (String(emoji).includes(t)) return t;
+    }
+    return "";
+  }
+
+  function shoeWithTone(shoe, avatarWithTone, toneOverride = "") {
+    if (!shoe) return "";
+    if (shoe === "🦶" || shoe === "🦵") {
+      const tone = toneOverride || extractTone(avatarWithTone || "");
+      return applyTone(shoe, tone);
+    }
+    return shoe;
+  }
+
+  function handsWithTone(toneOverride = "") {
+    const tone = toneOverride || "";
+    return {
+      left: applyTone(HAND_LEFT_EMOJI, tone),
+      right: applyTone(HAND_RIGHT_EMOJI, tone)
+    };
+  }
+
+  function getAvatar(g, t) {
+    const base = g || EMOJI_MAP.base;
+    const skin = (SKINS.includes(t) && SKIN_COMPATIBLE.has(base)) ? t : "";
+    return applyTone(base, skin);
+  }
+
+  function renderPreview() {
+    // preview agora é desenhado via canvas a cada frame (espelha o canvas principal)
+    resizePreviewCanvas();
+  }
+
+  function drawPreview(nowMs, dt) {
+    if (!previewCtx || !previewCanvas) return;
+    const w = previewCanvas.width || 1;
+    const h = previewCanvas.height || 1;
+    previewCtx.clearRect(0, 0, w, h);
+
+    const me = players.get(SELF_ID) || upsertSelfPosition();
+    if (!me) return;
+    const anim = me._anim || {};
+
+    // usa o mesmo estado visual do player, mas renderiza no centro do chip
+    const pv = { ...me };
+    const px = w / 2;
+    const pyBase = h * 0.62;
+    const scl = (anim.scl ?? scaleFor(pv)) * 1.55;
+    const aimDir = anim.aimDir ?? ((typeof pv.aimX === "number" && typeof pv.aimY === "number")
+      ? (() => { const len = Math.hypot(pv.aimX, pv.aimY) || 1; return { x: pv.aimX / len, y: pv.aimY / len }; })()
+      : { x: -1, y: 0 });
+    const footBob = anim.footBob ?? null;
+    const accAngle = (typeof anim.accAngle === "number") ? anim.accAngle : (pv.accAngle || 0);
+
+    renderPlayer(previewCtx, pv, SELF_ID, nowMs, dt, {
+      px,
+      pyBase,
+      scl,
+      aimDir,
+      footBob,
+      accAngle,
+      isHost: pv.host || isLocalHost(),
+      showName: false,
+      showHearts: false
+    });
+  }
+
+  function getAudioCtx(){
+    if (audioCtx) return audioCtx;
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    } catch {}
+    return audioCtx;
+  }
+  function playTone(freq=220, duration=0.1, type="sine", volume=0.12){
+    const ctx = getAudioCtx();
+    if (!ctx) return;
+    if (ctx.state === "suspended") { try { ctx.resume(); } catch {} }
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.value = volume;
+    osc.connect(gain).connect(ctx.destination);
+    const now = ctx.currentTime;
+    osc.start(now);
+    osc.stop(now + duration);
+  }
+  const playHitSound = () => playTone(120, 0.16, "triangle", 0.2);
+
+  function isTiny(p){ return (p.tinyUntil || 0) > Date.now(); }
+  function isSpeed(p){ return (p.speedUntil || 0) > Date.now(); }
+  function isBig(p){ return (p.bigUntil || 0) > Date.now(); }
+  function isButter(p){ return (p.butterUntil || 0) > Date.now(); }
+  // escala usada para render e colisões (mantém tudo proporcional)
+  function scaleFor(p){
+    const base = (isTiny(p) ? 0.55 : 1) * 1.12;
+    return base * (isBig(p) ? 3 : 1);
+  }
+  function moveSpeedFor(p){
+    const base = isDead(p) ? GHOST_SPEED : MOVE_SPEED;
+    return base * (isSpeed(p) ? SPEED_MULT : 1);
+  }
+  function bulletRadiusFor(ownerId){
+    const p = players.get(ownerId);
+    return isBig(p || {}) ? BULLET_RADIUS * 3 : BULLET_RADIUS;
+  }
+  function itemFontSizeFor(type){
+    // itens maiores para ficarem legíveis no mapa grande
+    switch (String(type || "")) {
+      case "car": return 34;
+      case "cocktail": return 32; // drink/copo
+      case "milk": return 32; // drink
+      case "butter": return 32;
+      case "coco": return 34;
+      case "radioactive": return 34;
+      default: return 30;
+    }
+  }
+  function findPlayerBySid(sid){
+    if (!sid) return null;
+    for (const p of players.values()) {
+      if ((p.sid || p.id) === sid) return p;
+    }
+    return null;
+  }
+  function applyEffectToSid(sid, effect, meta = null){
+    const target = findPlayerBySid(sid) || (sid === SELF_ID ? players.get(SELF_ID) : null);
+    if (!target) return;
+    applyEffect(target, effect, meta);
+    target.ts = Date.now();
+    if (sid === SELF_ID) broadcastState(true, true);
+  }
+
+  function isLocalHost() {
+    try {
+      const tags = (window.__TRYSTERO_PEER__ && typeof window.__TRYSTERO_PEER__.getLocalTags === "function")
+        ? window.__TRYSTERO_PEER__.getLocalTags()
+        : [];
+      return Array.isArray(tags) && tags.some(t => String(t).toLowerCase() === "host");
+    } catch {
+      return false;
+    }
+  }
+
+  function computeWorldAuthorityCandidate() {
+    const selfSid = String(SELF_ID);
+    let minAll = selfSid;
+    let minHost = isLocalHost() ? selfSid : null;
+    for (const p of players.values()) {
+      if (isBotPlayer(p)) continue;
+      const sid = p?.sid || p?.id;
+      if (!sid) continue;
+      const s = String(sid);
+      if (s < minAll) minAll = s;
+      if (p.host) {
+        if (minHost == null || s < minHost) minHost = s;
+      }
+    }
+    return minHost || minAll;
+  }
+
+  function refreshWorldAuthority() {
+    worldAuthoritySid = computeWorldAuthorityCandidate();
+  }
+
+  function isWorldAuthority() {
+    refreshWorldAuthority();
+    return String(worldAuthoritySid) === String(SELF_ID);
+  }
+
+  function savePrefs(data) {
+    const cur = loadPrefs();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...cur, ...data }));
+  }
+  function loadPrefs() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") || {}; }
+    catch { return {}; }
+  }
+
+  function setToneValue(val) {
+    if (!toneGroup) return;
+    const target = val || "";
+    toneGroup.dataset.value = target;
+    toneButtons.forEach(btn => {
+      const isActive = btn.dataset.tone === target;
+      btn.classList.toggle("active", isActive);
+      btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+    });
+  }
+
+  function getToneValue() {
+    return toneGroup ? (toneGroup.dataset.value || "") : "";
+  }
+
+  function setToneDisabled(disabled) {
+    if (!toneGroup) return;
+    toneGroup.dataset.disabled = disabled ? "1" : "0";
+    toneButtons.forEach(btn => {
+      btn.disabled = !!disabled;
+      btn.classList.toggle("disabled", !!disabled);
+    });
+  }
+
+  function setAvatarControlsFromPrefs() {
+    const prefs = loadPrefs();
+    const gender = prefs.gender || EMOJI_MAP.base;
+    const tone = (prefs.tone != null) ? String(prefs.tone || "") : "";
+    const head = prefs.head || "";
+    const acc = prefs.acc || "";
+    const shoe = prefs.shoe || "";
+    if (prefs.tone != null) preferredTone = tone;
+    genderSel.value = gender;
+    setToneValue(tone);
+    if (headSel) {
+      headSel.value = head;
+      const w = headSel.closest && headSel.closest(".emoji-select");
+      if (w) syncEmojiSelectUI(w, headSel);
+    }
+    if (accSel) {
+      accSel.value = acc;
+      const w = accSel.closest && accSel.closest(".emoji-select");
+      if (w) syncEmojiSelectUI(w, accSel);
+    }
+    if (shoeSel) {
+      shoeSel.value = shoe;
+      const w = shoeSel.closest && shoeSel.closest(".emoji-select");
+      if (w) syncEmojiSelectUI(w, shoeSel);
+    }
+    if (nameInput) {
+      const trInput = document.getElementById('tr-username');
+      const trVal = (trInput && trInput.value || "").trim();
+      if (trVal) {
+        nameInput.value = trVal;
+      } else {
+        try {
+          const st = JSON.parse(localStorage.getItem('trystero_widget_state_v5') || '{}') || {};
+          nameInput.value = (st.name || '').trim();
+        } catch {}
+      }
+    }
+    renderPreview();
+  }
+
+  function parseOptionLabel(optionText) {
+    const txt = String(optionText || "").trim();
+    if (!txt) return { emoji: "", text: "" };
+    const firstSpace = txt.indexOf(" ");
+    if (firstSpace === -1) {
+      // Ex.: "Nenhum" (não é emoji)
+      const hasLetters = /[A-Za-zÀ-ÿ0-9]/.test(txt);
+      return hasLetters ? { emoji: "", text: txt } : { emoji: txt, text: "" };
+    }
+    return { emoji: txt.slice(0, firstSpace).trim(), text: txt.slice(firstSpace + 1).trim() };
+  }
+
+  function closeAllEmojiSelects(exceptEl = null) {
+    document.querySelectorAll(".emoji-select.open").forEach(el => {
+      if (exceptEl && el === exceptEl) return;
+      el.classList.remove("open");
+      const btn = el.querySelector(".emoji-select-btn");
+      if (btn) btn.setAttribute("aria-expanded", "false");
+    });
+  }
+
+  function syncEmojiSelectUI(wrapper, selectEl) {
+    const btn = wrapper.querySelector(".emoji-select-btn");
+    const labelEmoji = btn?.querySelector(".emoji-select-emoji");
+    const labelText = btn?.querySelector(".emoji-select-text");
+    const menu = wrapper.querySelector(".emoji-select-menu");
+    const opt = selectEl.options[selectEl.selectedIndex] || null;
+    const parsed = parseOptionLabel(opt ? opt.textContent : "");
+    if (labelEmoji) labelEmoji.textContent = parsed.emoji || (opt?.value ? opt.value : EMOJI_SMILEY);
+    if (labelText) labelText.textContent = parsed.text || (opt?.value ? "" : "Nenhum");
+    if (menu) {
+      menu.querySelectorAll(".emoji-select-item").forEach(it => {
+        it.classList.toggle("active", String(it.dataset.value || "") === String(selectEl.value || ""));
+      });
+    }
+  }
+
+  function enhanceEmojiSelect(selectEl) {
+    if (!selectEl) return;
+    const wrapper = selectEl.closest(".emoji-select");
+    if (!wrapper || wrapper.dataset.enhanced === "1") return;
+    wrapper.dataset.enhanced = "1";
+    const btn = wrapper.querySelector(".emoji-select-btn");
+    const menu = wrapper.querySelector(".emoji-select-menu");
+    if (!btn || !menu) return;
+
+    // build menu
+    menu.innerHTML = "";
+    Array.from(selectEl.options).forEach(opt => {
+      const value = String(opt.value || "");
+      const { emoji, text } = parseOptionLabel(opt.textContent);
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "emoji-select-item";
+      item.dataset.value = value;
+      item.setAttribute("role", "option");
+      const e = document.createElement("div");
+      e.className = "emoji";
+      e.textContent = emoji || (value ? value : EMOJI_NO_ENTRY);
+      const t = document.createElement("div");
+      t.className = "text";
+      t.textContent = text || (value ? "" : "Nenhum");
+      item.appendChild(e);
+      item.appendChild(t);
+      item.addEventListener("click", () => {
+        selectEl.value = value;
+        selectEl.dispatchEvent(new Event("change", { bubbles: true }));
+        syncEmojiSelectUI(wrapper, selectEl);
+        closeAllEmojiSelects();
+      });
+      menu.appendChild(item);
+    });
+
+    btn.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      const willOpen = !wrapper.classList.contains("open");
+      closeAllEmojiSelects(wrapper);
+      wrapper.classList.toggle("open", willOpen);
+      btn.setAttribute("aria-expanded", willOpen ? "true" : "false");
+      if (willOpen) syncEmojiSelectUI(wrapper, selectEl);
+    });
+
+    selectEl.addEventListener("change", () => syncEmojiSelectUI(wrapper, selectEl));
+    syncEmojiSelectUI(wrapper, selectEl);
+  }
+
+  function upsertSelfPosition(dx = 0, dy = 0) {
+    const isNew = !players.has(SELF_ID);
+    // O preview agora é um canvas (não guarda mais estado em dataset).
+    // A fonte de verdade do player é sempre os controles atuais.
+    const gender = (genderSel && genderSel.value) ? genderSel.value : EMOJI_MAP.base;
+    const baseAvatar = getAvatar(gender, preferredTone || "");
+    const baseHead = headSel ? (headSel.value || "") : "";
+    const baseAcc = accSel ? (accSel.value || "") : "";
+    const baseShoe = shoeSel ? (shoeSel.value || "") : "";
+    const self = players.get(SELF_ID) || {
+      id: SELF_ID,
+      name: getUsername(),
+      avatar: baseAvatar,
+      head: baseHead,
+      acc: baseAcc,
+      shoe: baseShoe,
+      x: Math.random() * (WORLD_W - 40) + 20,
+      y: Math.random() * (WORLD_H - 40) + 20,
+      ghostVx: 0,
+      ghostVy: 0,
+      rx: null,
+      ry: null,
+      ts: Date.now(),
+      host: isLocalHost(),
+      hp: MAX_HP,
+      dead: false,
+      tone: preferredTone || "",
+      tinyUntil: 0,
+      speedUntil: 0,
+      bigUntil: 0,
+      butterUntil: 0,
+      butterVx: 0,
+      butterVy: 0,
+      extraHp: 0,
+      sid: SELF_ID,
+      ready: !!selfReady
+    };
+    self.avatar = baseAvatar;
+    self.head = baseHead;
+    self.acc = baseAcc;
+    self.shoe = baseShoe;
+    self.name = getUsername();
+    // `preferredTone` pode ser "", que representa o tom padrão (amarelo).
+    // Não pode usar `||` aqui, senão nunca dá para “limpar” um tom anterior.
+    self.tone = preferredTone || "";
+    self.ready = !!selfReady;
+    if (typeof self.hp !== "number") self.hp = MAX_HP;
+    if (typeof self.dead !== "boolean") self.dead = false;
+    if (typeof self.ghostVx !== "number") self.ghostVx = 0;
+    if (typeof self.ghostVy !== "number") self.ghostVy = 0;
+    if (typeof self.butterVx !== "number") self.butterVx = 0;
+    if (typeof self.butterVy !== "number") self.butterVy = 0;
+    if (typeof self.butterUntil !== "number") self.butterUntil = 0;
+    if ((dx !== 0 || dy !== 0) && !isDead(self)) self.lastMoveAt = Date.now();
+    const x0 = self.x;
+    const y0 = self.y;
+    if (isDead(self)) {
+      self.dead = true;
+      const next = clampPlayerXY(x0 + dx, y0 + dy);
+      self.x = next.x;
+      self.y = next.y;
+    } else {
+      const clamped = clampPlayerXY(x0 + dx, y0 + dy);
+      const nx = clamped.x;
+      const ny = clamped.y;
+      if (!collidesWithObstacleAt(nx, ny, self)) {
+        self.x = nx;
+        self.y = ny;
+      } else {
+        const nxOnly = clampPlayerXY(x0 + dx, y0).x;
+        const nyOnly = clampPlayerXY(x0, y0 + dy).y;
+        if (!collidesWithObstacleAt(nxOnly, y0, self)) {
+          self.x = nxOnly;
+          self.y = y0;
+        } else if (!collidesWithObstacleAt(x0, nyOnly, self)) {
+          self.x = x0;
+          self.y = nyOnly;
+        } else {
+          self.x = x0;
+          self.y = y0;
+        }
+      }
+    }
+    if (isNew && collidesWithObstacleAt(self.x, self.y, self)) {
+      for (let tries = 0; tries < 30; tries++) {
+        const rx = Math.random() * (WORLD_W - 40) + 20;
+        const ry = Math.random() * (WORLD_H - 40) + 20;
+        if (!collidesWithObstacleAt(rx, ry, self)) {
+          self.x = rx;
+          self.y = ry;
+          break;
+        }
+      }
+    }
+    // Se os obstáculos chegarem depois do spawn, o player pode ficar “dentro” de um collider.
+    // Empurra para fora para não travar o movimento.
+    if (!isDead(self)) resolvePlayerObstacleOverlap(self);
+    self.rx = self.x;
+    self.ry = self.y;
+    self.ts = Date.now();
+    players.set(SELF_ID, self);
+    return self;
+  }
+
+  function broadcastState(force = false, moving = false) {
+    const now = Date.now();
+    if (!sendState) return;
+    const interval = moving ? MOVE_SEND_MS : IDLE_PING_MS;
+    if (!force && now - lastBroadcast < interval) return;
+    const me = players.get(SELF_ID) || upsertSelfPosition();
+    const authority = isWorldAuthority();
+    me.host = isLocalHost();
+    lastBroadcast = now;
+    const includeFauna = authority && (now - lastFaunaBroadcast > FAUNA_SNAPSHOT_MS);
+    if (includeFauna) lastFaunaBroadcast = now;
+    const includeZone = authority && (force || (now - lastZoneBroadcast > ZONE_SNAPSHOT_MS));
+    if (includeZone) lastZoneBroadcast = now;
+    try {
+      sendState({
+        type: "state",
+        id: SELF_ID,
+        name: me.name,
+        avatar: me.avatar,
+        tone: preferredTone || "",
+        head: me.head || "",
+        acc: me.acc || "",
+        shoe: me.shoe || "",
+        poopCharges: me.poopCharges || 0,
+        hp: Math.max(0, Math.min(MAX_HP, Math.round(me.hp || MAX_HP))),
+        extraHp: Math.max(0, Math.min(BONUS_HP_MAX, Math.round(me.extraHp || 0))),
+        dead: !!me.dead,
+        x: me.x,
+        y: me.y,
+        t: now,
+        host: !!me.host,
+        worldAuthoritySid,
+        tinyUntil: me.tinyUntil || 0,
+        speedUntil: me.speedUntil || 0,
+        bigUntil: me.bigUntil || 0,
+        butterUntil: me.butterUntil || 0,
+        radioactiveUntil: me.radioactiveUntil || 0,
+        sid: SELF_ID,
+        ready: !!selfReady,
+        phase: gamePhase,
+        countdownEndsAt: countdownEndsAt || 0,
+        bullets: bullets
+          .filter(b => b.owner === SELF_ID)
+          .map(b => ({ id: b.id, owner: b.owner, x: b.x, y: b.y, vx: b.vx, vy: b.vy, cmd: b.cmd, r: b.r })),
+        items: authority ? items : undefined,
+        obstacles: authority ? obstacles : undefined,
+        graves: authority ? graves : undefined,
+        dangerZone: includeZone ? dangerZone : undefined,
+        fauna: includeFauna ? fauna.map(f => ({
+          id: f.id,
+          type: f.type,
+          x: Number(f.x) || 0,
+          y: Number(f.y) || 0,
+          vx: Number(f.vx) || 0,
+          vy: Number(f.vy) || 0,
+          seed: Number(f.seed) || 0
+        })) : undefined
+      });
+    } catch(e) { console.warn("peer-arena send failed", e); }
+  }
+
+  function handleRemoteState(data, peerId) {
+    if (!data || data.type !== "state") return;
+    if (data.dangerZone && typeof data.dangerZone === "object") {
+      const incomingSeq = Number(data.dangerZone.seq) || 0;
+      const curSeq = Number(dangerZone?.seq) || 0;
+      if (incomingSeq >= curSeq) dangerZone = data.dangerZone;
+    }
+    const declaredId = data.id || data.sid || "";
+    const id = declaredId ? String(declaredId) : (peerId || `peer-${Math.random().toString(36).slice(2)}`);
+    if (!peerId && id === SELF_ID) return; // ignora somente eco local sem peerId
+    const senderSid = String(data.sid || id || "");
+    const authoritySid = String(data.worldAuthoritySid || worldAuthoritySid || "");
+    if (authoritySid) worldAuthoritySid = authoritySid;
+    const senderIsAuthority = authoritySid && senderSid && senderSid === authoritySid;
+    if (senderIsAuthority) applyPhaseFromRemote(data);
+    const avatar = data.avatar || EMOJI_MAP.base;
+    const prev = players.get(id);
+    const x = Math.max(12, Math.min(WORLD_W - 12, Number(data.x) || 20));
+    const y = Math.max(12, Math.min(WORLD_H - 12, Number(data.y) || 20));
+    const prevAnim = prev || {};
+    const incomingHp = (data.hp != null) ? Math.max(0, Math.min(MAX_HP, Number(data.hp) || 0)) : Math.max(0, Math.min(MAX_HP, Number(prevAnim.hp) || 0));
+    const incomingExtra = (data.extraHp != null) ? Math.max(0, Math.min(BONUS_HP_MAX, Number(data.extraHp) || 0)) : Math.max(0, Math.min(BONUS_HP_MAX, Number(prevAnim.extraHp) || 0));
+    const incomingTotal = incomingHp + incomingExtra;
+    const incomingDead = (data.dead != null) ? !!data.dead : !!prevAnim.dead;
+    const dead = incomingDead || incomingTotal <= 0;
+    const incomingTone = (data.tone != null) ? String(data.tone || "") : (prevAnim.tone || "");
+    const incomingRadio = (data.radioactiveUntil != null) ? (Number(data.radioactiveUntil) || 0) : (Number(prevAnim.radioactiveUntil) || 0);
+    const incomingButter = (data.butterUntil != null) ? (Number(data.butterUntil) || 0) : (Number(prevAnim.butterUntil) || 0);
+    const isBot = (data.bot === true) || (data.bot === 1) || (data.bot === "1");
+    const dx = x - (Number(prev?.x) || x);
+    const dy = y - (Number(prev?.y) || y);
+    const dl = Math.hypot(dx, dy);
+    const aimFromMove = dl > 0.1 ? { x: dx / dl, y: dy / dl } : null;
+    players.set(id, {
+      id,
+      sid: data.sid || id,
+      name: data.name || `peer-${String(id).slice(0,4)}`,
+      avatar,
+      head: data.head || "",
+      acc: data.acc || "",
+      shoe: data.shoe || "",
+      zoneLastDamage: prevAnim.zoneLastDamage,
+      radioactiveUntil: incomingRadio,
+      butterUntil: incomingButter,
+      poopCharges: (data.poopCharges != null) ? (Number(data.poopCharges) || 0) : (prevAnim.poopCharges || 0),
+      hp: incomingHp,
+      extraHp: incomingExtra,
+      dead,
+      tone: incomingTone,
+      lastMoveAt: (dl > 0.1) ? Date.now() : (prevAnim.lastMoveAt || 0),
+      x,
+      y,
+      rx: prev?.rx ?? x,
+      ry: prev?.ry ?? y,
+      ghostVx: typeof prevAnim.ghostVx === "number" ? prevAnim.ghostVx : 0,
+      ghostVy: typeof prevAnim.ghostVy === "number" ? prevAnim.ghostVy : 0,
+      butterVx: typeof prevAnim.butterVx === "number" ? prevAnim.butterVx : 0,
+      butterVy: typeof prevAnim.butterVy === "number" ? prevAnim.butterVy : 0,
+      footPhase: prevAnim.footPhase || 0,
+      lastFootX: prevAnim.lastFootX,
+      lastFootY: prevAnim.lastFootY,
+      accAngle: prevAnim.accAngle || 0,
+      accVel: prevAnim.accVel || 0,
+      lastAccX: prevAnim.lastAccX,
+      lastPoopX: prevAnim.lastPoopX,
+      lastPoopY: prevAnim.lastPoopY,
+      poopLastDrop: prevAnim.poopLastDrop,
+      aimX: aimFromMove ? aimFromMove.x : (typeof prevAnim.aimX === "number" ? prevAnim.aimX : -1),
+      aimY: aimFromMove ? aimFromMove.y : (typeof prevAnim.aimY === "number" ? prevAnim.aimY : 0),
+      ts: Date.now(),
+      host: !!data.host,
+      tinyUntil: Number(data.tinyUntil) || 0,
+      speedUntil: Number(data.speedUntil) || 0,
+      bigUntil: Number(data.bigUntil) || 0,
+      ready: !!data.ready,
+      bot: isBot
+    });
+  }
+
+  function sweep() {
+    const now = Date.now();
+    for (const [id, p] of players.entries()) {
+      if (id === SELF_ID) continue;
+      if (now - p.ts > EXP_MS) players.delete(id);
+    }
+  }
+
+  function handleMovement(dt){
+  if (!isPhasePlaying()) { isMoving = false; return; }
+  let dx = 0, dy = 0;
+  if (keysDown.has("ArrowUp")) dy -= 1;
+  if (keysDown.has("ArrowDown")) dy += 1;
+  if (keysDown.has("ArrowLeft")) dx -= 1;
+  if (keysDown.has("ArrowRight")) dx += 1;
+  isMoving = (dx !== 0 || dy !== 0);
+  const self = players.get(SELF_ID) || upsertSelfPosition();
+  self.lastMoveAt = Date.now();
+    if (!isButter(self)) {
+      self.butterVx = 0;
+      self.butterVy = 0;
+    }
+  if (isDead(self)) {
+      const len = Math.hypot(dx, dy);
+      const dir = len > 0.0001 ? { x: dx / len, y: dy / len } : { x: 0, y: 0 };
+      if (!Number.isFinite(self.ghostVx)) self.ghostVx = 0;
+      if (!Number.isFinite(self.ghostVy)) self.ghostVy = 0;
+      if (len > 0) {
+        const accel = GHOST_ACCEL * dt;
+        self.ghostVx += dir.x * accel;
+        self.ghostVy += dir.y * accel;
+      } else {
+        const friction = Math.exp(-GHOST_FRICTION * dt);
+        self.ghostVx *= friction;
+        self.ghostVy *= friction;
+        if (Math.hypot(self.ghostVx, self.ghostVy) < 4) {
+          self.ghostVx = 0;
+          self.ghostVy = 0;
+        }
+      }
+      const speed = Math.hypot(self.ghostVx, self.ghostVy);
+      if (speed > GHOST_MAX_SPEED) {
+        const f = GHOST_MAX_SPEED / speed;
+        self.ghostVx *= f;
+        self.ghostVy *= f;
+      }
+      const moveX = self.ghostVx * dt;
+      const moveY = self.ghostVy * dt;
+      if (moveX !== 0 || moveY !== 0) {
+        upsertSelfPosition(moveX, moveY);
+        broadcastState(false, true);
+      }
+      return;
+    }
+    if (isButter(self)) {
+      const len = Math.hypot(dx, dy);
+      const dir = len > 0.0001 ? { x: dx / len, y: dy / len } : { x: 0, y: 0 };
+      if (!Number.isFinite(self.butterVx)) self.butterVx = 0;
+      if (!Number.isFinite(self.butterVy)) self.butterVy = 0;
+      if (len > 0) {
+        const accel = BUTTER_ACCEL * dt;
+        self.butterVx += dir.x * accel;
+        self.butterVy += dir.y * accel;
+      } else {
+        const friction = Math.exp(-BUTTER_FRICTION * dt);
+        self.butterVx *= friction;
+        self.butterVy *= friction;
+        if (Math.hypot(self.butterVx, self.butterVy) < 4) {
+          self.butterVx = 0;
+          self.butterVy = 0;
+        }
+      }
+      const speed = Math.hypot(self.butterVx, self.butterVy);
+      if (speed > BUTTER_MAX_SPEED) {
+        const f = BUTTER_MAX_SPEED / speed;
+        self.butterVx *= f;
+        self.butterVy *= f;
+      }
+      const moveX = self.butterVx * dt;
+      const moveY = self.butterVy * dt;
+      if (moveX !== 0 || moveY !== 0) {
+        upsertSelfPosition(moveX, moveY);
+        broadcastState(false, true);
+      }
+      return;
+    }
+    if (!isMoving) return;
+    self.ghostVx = 0;
+    self.ghostVy = 0;
+    self.butterVx = 0;
+    self.butterVy = 0;
+    const len = Math.hypot(dx, dy) || 1;
+    const scale = moveSpeedFor(self) * dt / len;
+    upsertSelfPosition(dx * scale, dy * scale);
+    broadcastState(false, true); // throttle curto para movimento
+  }
+
+  function randomBotLook() {
+    const genderVal = pickRandomSelectValue(genderSel) || EMOJI_MAP.base;
+    const tone = SKINS[Math.floor(Math.random() * SKINS.length)] || "";
+    return {
+      avatar: getAvatar(genderVal, tone),
+      tone,
+      head: pickRandomSelectValue(headSel) || "",
+      acc: pickRandomSelectValue(accSel) || "",
+      shoe: pickRandomSelectValue(shoeSel) || ""
+    };
+  }
+
+  function spawnBotBullet(bot, aimDir) {
+    if (!bot || !isPhasePlaying()) return;
+    const now = Date.now();
+    const last = Number(bot.lastFireAt) || 0;
+    if (now - last < BOT_FIRE_INTERVAL) return;
+    if (!aimDir || (!aimDir.x && !aimDir.y)) return;
+    const activeFromOwner = bullets.filter(b => b.owner === (bot.sid || bot.id)).length;
+    if (activeFromOwner >= BOT_MAX_OWNER_BULLETS) return;
+    const len = Math.hypot(aimDir.x, aimDir.y) || 1;
+    const dir = { x: aimDir.x / len, y: aimDir.y / len };
+    bot.lastFireAt = now;
+    const scl = scaleFor(bot);
+    const gunOffset = 32 * scl;
+    const originX = bot.x + dir.x * gunOffset;
+    const originY = (bot.y - (2 * scl)) + dir.y * gunOffset;
+    const owner = bot.sid || bot.id;
+    const bullet = {
+      id: `bb-${now}-${Math.random().toString(36).slice(2)}`,
+      owner,
+      x: originX,
+      y: originY,
+      vx: dir.x * BULLET_SPEED,
+      vy: dir.y * BULLET_SPEED,
+      cmd: "BEEP,0,1",
+      r: bulletRadiusFor(owner)
+    };
+    bullets.push(bullet);
+    bulletIndex.set(bullet.id, bullet);
+    trySendBullet(bullet);
+  }
+
+  function botMoveStep(bot, dir, dt) {
+    if (!bot || isDead(bot)) return false;
+    const len = Math.hypot(dir.x, dir.y);
+    if (len < 1e-4) return false;
+    const step = moveSpeedFor(bot) * dt / len;
+    const x0 = bot.x;
+    const y0 = bot.y;
+    const main = clampPlayerXY(x0 + dir.x * step, y0 + dir.y * step);
+    const now = Date.now();
+    const tryApply = (nx, ny) => {
+      if (collidesWithObstacleAt(nx, ny, bot)) return false;
+      bot.x = nx;
+      bot.y = ny;
+      bot.lastMoveAt = now;
+      return true;
+    };
+    if (tryApply(main.x, main.y)) return true;
+    const nxOnly = clampPlayerXY(x0 + dir.x * step, y0).x;
+    if (tryApply(nxOnly, y0)) return true;
+    const nyOnly = clampPlayerXY(x0, y0 + dir.y * step).y;
+    if (tryApply(x0, nyOnly)) return true;
+    return false;
+  }
+
+  function pickBotItem(bot, vision = null) {
+    let best = null;
+    let bestDist = Infinity;
+    items.forEach(it => {
+      if (!it) return;
+      if (it.type === "radioactive") return; // evitar item punitivo
+      if (vision && !inView(vision, Number(it.x) || 0, Number(it.y) || 0, 0)) return;
+      const dx = (Number(it.x) || 0) - (bot.x || 0);
+      const dy = (Number(it.y) || 0) - (bot.y || 0);
+      const dist = Math.hypot(dx, dy);
+      if (dist < bestDist) { best = it; bestDist = dist; }
+    });
+    return best;
+  }
+
+  function pickBotTarget(bot, vision = null) {
+    const candidates = [];
+    players.forEach((p, pid) => {
+      if (!p || pid === bot.id) return;
+      if (isDead(p)) return;
+      const px = Number(p.rx ?? p.x) || 0;
+      const py = Number(p.ry ?? p.y) || 0;
+      if (vision && !inView(vision, px, py, 0)) return;
+      const dx = px - (bot.x || 0);
+      const dy = py - (bot.y || 0);
+      const dist = Math.hypot(dx, dy);
+      candidates.push({ p, dist });
+    });
+    if (!candidates.length) return null;
+    candidates.sort((a, b) => a.dist - b.dist);
+    // escolhe entre os 3 mais próximos para espalhar foco entre bots
+    const pool = candidates.slice(0, Math.min(3, candidates.length));
+    const idx = hashStringToSeed(String(bot.id || bot.sid || Math.random())) % pool.length;
+    return pool[idx].p;
+  }
+
+  function computeBulletDodge(bot) {
+    return null; // simplificado: sem desvio de projéteis para aliviar CPU
+    const now = Date.now();
+    const lookahead = BOT_DODGE_LOOKAHEAD_MS;
+    let dodge = null;
+    bullets.forEach(b => {
+      if (!b || b.owner === bot.id || b.owner === bot.sid) return;
+      const vx = Number(b.vx) || 0;
+      const vy = Number(b.vy) || 0;
+      const speed = Math.hypot(vx, vy) || 1;
+      const dx = (bot.x || 0) - (Number(b.x) || 0);
+      const dy = (bot.y || 0) - (Number(b.y) || 0);
+      const dirX = vx / speed;
+      const dirY = vy / speed;
+      const proj = dx * dirX + dy * dirY; // adiante do projétil?
+      if (proj < -20 || proj > (speed * (lookahead / 1000))) return;
+      const lateral = Math.abs(dx * dirY - dy * dirX);
+      if (lateral > BOT_DODGE_RADIUS) return;
+      // perpendicular (escolhe lado para afastar do trilho do projétil)
+      const perpSign = (dx * dirY - dy * dirX) >= 0 ? 1 : -1;
+      const perp = { x: -dirY * perpSign, y: dirX * perpSign };
+      dodge = dodge
+        ? { x: dodge.x + perp.x, y: dodge.y + perp.y }
+        : perp;
+    });
+    return dodge;
+  }
+
+  function broadcastBotState(bot, opts = {}) {
+    if (!bot || !sendState) return;
+    const moving = !!opts.moving;
+    const force = !!opts.force;
+    const now = Date.now();
+    const key = bot.id || bot.sid;
+    const interval = moving ? BOT_MOVE_SEND_MS : BOT_IDLE_SEND_MS;
+    const last = botBroadcastAt.get(key) || 0;
+    if (!force && now - last < interval) return;
+    botBroadcastAt.set(key, now);
+    const owner = bot.sid || bot.id;
+    const payload = {
+      type: "state",
+      id: bot.id,
+      name: bot.name,
+      avatar: bot.avatar,
+      tone: bot.tone || "",
+      head: bot.head || "",
+      acc: bot.acc || "",
+      shoe: bot.shoe || "",
+      poopCharges: bot.poopCharges || 0,
+      hp: Math.max(0, Math.min(MAX_HP, Math.round(bot.hp || MAX_HP))),
+      extraHp: Math.max(0, Math.min(BONUS_HP_MAX, Math.round(bot.extraHp || 0))),
+      dead: !!bot.dead,
+      x: bot.x,
+      y: bot.y,
+      t: now,
+      host: !!bot.host,
+      worldAuthoritySid,
+      tinyUntil: bot.tinyUntil || 0,
+      speedUntil: bot.speedUntil || 0,
+      bigUntil: bot.bigUntil || 0,
+      butterUntil: bot.butterUntil || 0,
+      radioactiveUntil: bot.radioactiveUntil || 0,
+      sid: owner,
+      ready: !!bot.ready,
+      phase: gamePhase,
+      countdownEndsAt: countdownEndsAt || 0,
+      bot: true,
+      bullets: bullets
+        .filter(b => b.owner === owner)
+        .map(b => ({ id: b.id, owner: b.owner, x: b.x, y: b.y, vx: b.vx, vy: b.vy, cmd: b.cmd, r: b.r }))
+    };
+    try { sendState(payload); } catch(e) { console.warn("peer-arena bot send failed", e); }
+  }
+
+  function tickBots(dt){
+    if (!bots.size) return;
+    botAiAcc += dt;
+    if (botAiAcc < botAiStep) return;
+    const stepDt = botAiAcc;
+    botAiAcc = 0;
+    botAiStep = BOT_AI_MIN_STEP + Math.random() * (BOT_AI_MAX_STEP - BOT_AI_MIN_STEP);
+    dt = stepDt;
+    const now = Date.now();
+    const playing = isPhasePlaying();
+    const authority = isWorldAuthority();
+    bots.forEach((brain, id) => {
+      const bot = players.get(id);
+      if (!bot) { bots.delete(id); botBroadcastAt.delete(id); return; }
+      bot.bot = true;
+      bot.ready = true;
+      bot.ts = now;
+      if (!authority) return;
+      if (!playing) { broadcastBotState(bot); return; }
+      if (isDead(bot)) { broadcastBotState(bot, { force: true }); return; }
+      if (!brain) { brain = {}; bots.set(id, brain); }
+      const zone = getDangerZoneAt(now);
+      let escapeDir = null;
+      if (zone) {
+        const cx = Number(zone.cx) || 0;
+        const cy = Number(zone.cy) || 0;
+        const r = Math.max(0, Number(zone.r) || 0);
+        const dist = Math.hypot((bot.x || 0) - cx, (bot.y || 0) - cy);
+        const margin = Math.max(0, r - BOT_ZONE_BUFFER);
+        if (dist > margin) {
+          escapeDir = { x: cx - (bot.x || 0), y: cy - (bot.y || 0) };
+        }
+      }
+      const vision = botVisionRect(bot);
+      const needRetarget = (!brain.goal || (brain.retargetAt || 0) <= now);
+      let target = null;
+      if (!needRetarget && brain.goal) {
+        if (brain.goal.kind === "player") {
+          target = findPlayerBySid(brain.goal.id) || players.get(brain.goal.id);
+          if (!target || isDead(target)) target = null;
+        }
+      }
+      if (needRetarget || !target) {
+        const picked = pickBotTarget(bot, vision);
+        brain.goal = picked ? { kind: "player", id: picked.sid || picked.id } : null;
+        target = picked || null;
+        brain.retargetAt = now + BOT_RETARGET_MS + Math.random() * 400;
+      }
+      const dx = target ? ((Number(target.rx ?? target.x) || 0) - bot.x) : 0;
+      const dy = target ? ((Number(target.ry ?? target.y) || 0) - bot.y) : 0;
+      const dist = target ? Math.hypot(dx, dy) : Infinity;
+      let aimDir = { x: -1, y: 0 };
+      let moveDir = { x: 0, y: 0 };
+      if (target && dist > 1e-3) {
+        aimDir = { x: dx / dist, y: dy / dist };
+        const tooClose = dist < (BOT_MIN_RANGE * 0.85);
+        const keepDistance = dist < BOT_MIN_RANGE;
+        const jitter = (Math.random() - 0.5) * BOT_STRAFE;
+        const c = Math.cos(jitter);
+        const s = Math.sin(jitter);
+        if (tooClose && target && !isDead(target)) {
+          // recua mantendo pequeno strafe
+          const away = { x: -aimDir.x, y: -aimDir.y };
+          moveDir = { x: away.x * c - away.y * s, y: away.x * s + away.y * c };
+        } else if (keepDistance && target && !isDead(target)) {
+          // orbita/strafe para não grudar
+          moveDir = { x: -aimDir.y, y: aimDir.x };
+        } else {
+          moveDir = { x: aimDir.x * c - aimDir.y * s, y: aimDir.x * s + aimDir.y * c };
+        }
+      } else {
+        if (!brain.wanderDir || (brain.wanderUntil || 0) < now) {
+          const a = Math.random() * Math.PI * 2;
+          brain.wanderDir = { x: Math.cos(a), y: Math.sin(a) };
+          brain.wanderUntil = now + BOT_WANDER_MS + Math.random() * 1200;
+        }
+        moveDir = brain.wanderDir || { x: 0, y: 0 };
+      }
+      const dodge = computeBulletDodge(bot);
+      if (dodge) {
+        const mx = moveDir.x + dodge.x * BOT_DODGE_WEIGHT;
+        const my = moveDir.y + dodge.y * BOT_DODGE_WEIGHT;
+        const len = Math.hypot(mx, my);
+        if (len > 1e-4) moveDir = { x: mx / len, y: my / len };
+      }
+      if (escapeDir) {
+        const len = Math.hypot(escapeDir.x, escapeDir.y);
+        if (len > 1e-4) moveDir = { x: escapeDir.x / len, y: escapeDir.y / len };
+      }
+      const moved = botMoveStep(bot, moveDir, dt);
+      bot.aimX = aimDir.x;
+      bot.aimY = aimDir.y;
+      bot.rx = bot.x;
+      bot.ry = bot.y;
+      if (target && !isDead(target) && dist < BOT_RANGE) {
+        spawnBotBullet(bot, aimDir);
+      }
+      broadcastBotState(bot, { moving: moved });
+    });
+  }
+
+  function spawnBot() {
+    if (!isWorldAuthority()) return null;
+    const look = randomBotLook();
+    const id = `bot-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const name = `Bot ${botSeq++}`;
+    const bot = {
+      id,
+      sid: id,
+      name,
+      avatar: look.avatar,
+      head: look.head,
+      acc: look.acc,
+      shoe: look.shoe,
+      tone: look.tone || "",
+      x: Math.random() * (WORLD_W - 40) + 20,
+      y: Math.random() * (WORLD_H - 40) + 20,
+      rx: null,
+      ry: null,
+      ts: Date.now(),
+      host: false,
+      hp: MAX_HP,
+      extraHp: 0,
+      dead: false,
+      ready: true,
+      bot: true,
+      butterUntil: 0,
+      butterVx: 0,
+      butterVy: 0,
+      lastFireAt: 0
+    };
+    for (let tries = 0; tries < 40; tries++) {
+      const rx = Math.random() * (WORLD_W - 40) + 20;
+      const ry = Math.random() * (WORLD_H - 40) + 20;
+      if (!collidesWithObstacleAt(rx, ry, bot)) {
+        bot.x = rx;
+        bot.y = ry;
+        break;
+      }
+    }
+    bot.rx = bot.x;
+    bot.ry = bot.y;
+    players.set(id, bot);
+    bots.set(id, { targetId: null, retargetAt: 0, wanderDir: null, wanderUntil: 0 });
+    broadcastBotState(bot, { force: true });
+    refreshLobbyUI();
+    refreshBotButtons();
+    return bot;
+  }
+
+  function clearBots() {
+    const botIds = [];
+    bots.forEach((_, id) => botIds.push(id));
+    players.forEach((p, id) => { if (isBotPlayer(p)) botIds.push(id); });
+    const owners = new Set(botIds);
+    botIds.forEach(id => {
+      const bot = players.get(id);
+      if (bot) {
+        bot.dead = true;
+        bot.hp = 0;
+        broadcastBotState(bot, { force: true });
+      }
+    });
+    bots.clear();
+    botBroadcastAt.clear();
+    botIds.forEach(id => players.delete(id));
+    for (let i = bullets.length - 1; i >= 0; i--) {
+      const b = bullets[i];
+      if (b && owners.has(b.owner)) {
+        if (b.id) bulletIndex.delete(b.id);
+        bullets.splice(i, 1);
+      }
+    }
+    refreshLobbyUI();
+    refreshBotButtons();
+  }
+
+  function spawnBullet(fromRemote=null) {
+    if (!isPhasePlaying()) {
+      if (!fromRemote) return;
+      return;
+    }
+    if (fromRemote) {
+      if (removedBullets.has(fromRemote.id)) return;
+      if (!fromRemote.r) fromRemote.r = bulletRadiusFor(fromRemote.owner);
+      const existing = bulletIndex.get(fromRemote.id);
+      if (existing) {
+        existing.x = fromRemote.x;
+        existing.y = fromRemote.y;
+        existing.vx = fromRemote.vx;
+        existing.vy = fromRemote.vy;
+        existing.cmd = fromRemote.cmd;
+      } else {
+        bullets.push(fromRemote);
+        bulletIndex.set(fromRemote.id, fromRemote);
+      }
+      return;
+    }
+    const now = Date.now();
+    if (now - lastFireAt < FIRE_COOLDOWN) return;
+    const me = players.get(SELF_ID) || upsertSelfPosition();
+    if (isDead(me)) return;
+    lastFireAt = now;
+    const kd = { x: 0, y: 0 };
+    if (keysDown.has("ArrowUp")) kd.y -= 1;
+    if (keysDown.has("ArrowDown")) kd.y += 1;
+    if (keysDown.has("ArrowLeft")) kd.x -= 1;
+    if (keysDown.has("ArrowRight")) kd.x += 1;
+    let dir = (kd.x !== 0 || kd.y !== 0)
+      ? kd
+      : (typeof me.aimX === "number" && typeof me.aimY === "number")
+      ? { x: me.aimX, y: me.aimY }
+      : { x: lastDir.x, y: lastDir.y };
+    if (dir.x === 0 && dir.y === 0) dir.x = -1; // default esquerda
+    const len = Math.hypot(dir.x, dir.y) || 1;
+    dir = { x: dir.x / len, y: dir.y / len };
+    lastDir = { x: dir.x, y: dir.y };
+    me.aimX = dir.x;
+    me.aimY = dir.y;
+    const vx = dir.x * BULLET_SPEED;
+    const vy = dir.y * BULLET_SPEED;
+    const cmd = getCurrentCommand();
+    const scl = scaleFor(me);
+    const gunOffset = 32 * scl;
+    const gunBaseY = me.y - (2 * scl);
+    const originX = me.x + dir.x * gunOffset;
+    const originY = gunBaseY + dir.y * gunOffset;
+    const bullet = {
+      id: `b-${now}-${Math.random().toString(36).slice(2)}`,
+      owner: SELF_ID,
+      x: originX,
+      y: originY,
+      vx,
+      vy,
+      cmd,
+      r: bulletRadiusFor(SELF_ID)
+    };
+    bullets.push(bullet);
+    bulletIndex.set(bullet.id, bullet);
+    trySendBullet(bullet);
+    broadcastState(true, true); // update our state when firing
+  }
+
+  function getCurrentCommand(){
+    try {
+      const mode = window.currentMode || "BEEP";
+      const lvl = (mode === "SHOCK" || mode === "VIBRATION") ? (Number(window.level) || 0) : 0;
+      const ch = Number(window.channel) || 1;
+      return `${mode},${lvl},${ch}`;
+    } catch {
+      return "BEEP,0,1";
+    }
+  }
+
+  function trySendHit(targetId, cmd){
+    if (!sendState) return;
+    try {
+      sendState({
+        type: "hit",
+        target: targetId,
+        cmd,
+        from: SELF_ID,
+        name: getUsername()
+      });
+    } catch(e) { console.warn("peer-arena hit send failed", e); }
+  }
+
+  function trySendBullet(b){
+    if (!b) return;
+    const payload = {
+      type: "bullet",
+      owner: b.owner,
+      id: b.id,
+      x: b.x,
+      y: b.y,
+      vx: b.vx,
+      vy: b.vy,
+      cmd: b.cmd
+    };
+    const senders = [sendBulletAction, sendState].filter(Boolean);
+    senders.forEach((sender) => {
+      try { sender(payload); } catch(e) { console.warn("peer-arena bullet send failed", e); }
+    });
+  }
+
+  function trySendItemPick(itemId, pickerSid){
+    const sender = sendItemAction || sendState;
+    if (!sender) return;
+    try {
+      sender({ type: "item-pick", id: itemId, sid: pickerSid });
+    } catch(e) { console.warn("peer-arena item send failed", e); }
+  }
+
+  function trySendBulletRemove(bulletId) {
+    const sender = sendBulletAction || sendState;
+    if (!sender || !bulletId) return;
+    try {
+      sender({ type: "bullet-remove", id: String(bulletId) });
+    } catch(e) { console.warn("peer-arena bullet-remove send failed", e); }
+  }
+
+  function upsertGrave(grave) {
+    if (!grave) return null;
+    const sid = String(grave.sid || "");
+    if (!sid) return null;
+    const existing = graves.find(g => String(g.sid || "") === sid);
+    if (existing) return existing;
+    const g = {
+      id: grave.id || `grave-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      sid,
+      name: String(grave.name || "peer"),
+      x: Number(grave.x) || 0,
+      y: Number(grave.y) || 0,
+      r: Number(grave.r) || graveColliderRadius(grave)
+    };
+    graves.push(g);
+    return g;
+  }
+
+  function applyDamageAuthoritative(targetSid, amount, bullet) {
+    if (!isWorldAuthority()) return;
+    const sid = String(targetSid || "");
+    if (!sid) return;
+    const target = findPlayerBySid(sid) || (sid === SELF_ID ? players.get(SELF_ID) : null);
+    if (!target || isDead(target)) return;
+    const prevTotal = hpFor(target);
+    const nextTotal = Math.max(0, prevTotal - (Number(amount) || 1));
+    const parts = clampHpParts(nextTotal, nextTotal - MAX_HP);
+    target.hp = parts.base;
+    target.extraHp = parts.extra;
+    if (nextTotal <= 0) {
+      target.dead = true;
+      target.poopCharges = 0;
+      target.tinyUntil = 0;
+      target.speedUntil = 0;
+      target.bigUntil = 0;
+      target.radioactiveUntil = 0;
+      target.butterUntil = 0;
+      target.butterVx = 0;
+      target.butterVy = 0;
+    }
+    target.ts = Date.now();
+    // host local: aplica comando físico para qualquer dano que não seja de bala
+    if (sid === SELF_ID && isLocalHost() && !bullet) {
+      try { execCommandLocal(getCurrentCommand(), bullet?.owner || ""); } catch(_) {}
+    }
+    const grave = (nextTotal <= 0) ? upsertGrave({ sid, name: target.name || "peer", x: target.x, y: target.y }) : null;
+
+    // authority não recebe sua própria mensagem: aplica localmente e notifica os outros
+    if (sendState) {
+      try {
+        sendState({
+          type: "damage",
+          sid,
+          hp: parts.base,
+          extraHp: parts.extra,
+          dead: nextTotal <= 0,
+          amount: Number(amount) || 1,
+          bulletId: bullet?.id || "",
+          from: bullet?.owner || "",
+          grave
+        });
+      } catch(e) { console.warn("peer-arena damage send failed", e); }
+    }
+  }
+
+  function applyHealAuthoritative(targetSid, amount = 1) {
+    if (!isWorldAuthority()) return;
+    const sid = String(targetSid || "");
+    if (!sid) return;
+    const target = findPlayerBySid(sid) || (sid === SELF_ID ? players.get(SELF_ID) : null);
+    if (!target || isDead(target)) return;
+    const prevTotal = hpFor(target);
+    const nextTotal = Math.min(MAX_HP + BONUS_HP_MAX, prevTotal + Math.max(1, Number(amount) || 1));
+    const parts = clampHpParts(nextTotal, nextTotal - MAX_HP);
+    target.hp = parts.base;
+    target.extraHp = parts.extra;
+    target.dead = false;
+    target.ts = Date.now();
+    if (sendState) {
+      try {
+        sendState({
+          type: "heal",
+          sid,
+          hp: parts.base,
+          extraHp: parts.extra,
+          amount: Number(amount) || 1
+        });
+      } catch(e) { console.warn("peer-arena heal send failed", e); }
+    }
+    if (sid === SELF_ID) broadcastState(true, true);
+  }
+
+  function applyDamageSnapshot(data) {
+    if (!data) return;
+    const sid = String(data.sid || "");
+    if (!sid) return;
+    const hp = Math.max(0, Math.min(MAX_HP, Number(data.hp) || 0));
+    const extraHp = Math.max(0, Math.min(BONUS_HP_MAX, Number(data.extraHp) || 0));
+    const dead = !!data.dead || (hp + extraHp) <= 0;
+    const target = findPlayerBySid(sid) || (sid === SELF_ID ? (players.get(SELF_ID) || upsertSelfPosition()) : null);
+    if (target) {
+      target.hp = hp;
+      target.extraHp = extraHp;
+      target.dead = dead;
+      if (dead) {
+        target.poopCharges = 0;
+        target.tinyUntil = 0;
+        target.speedUntil = 0;
+        target.bigUntil = 0;
+        target.radioactiveUntil = 0;
+        target.butterUntil = 0;
+        target.butterVx = 0;
+        target.butterVy = 0;
+      }
+      target.ts = Date.now();
+      // host local: aplicar comando físico em qualquer dano recebido (evita duplicar em bala)
+      if ((target.sid || target.id) === SELF_ID && isLocalHost() && !data.bulletId) {
+        try { execCommandLocal(getCurrentCommand(), data.from || ""); } catch(_) {}
+      }
+      if ((target.sid || target.id) === SELF_ID) broadcastState(true, true);
+    }
+    if (data.grave) upsertGrave(data.grave);
+  }
+
+  function applyHealSnapshot(data) {
+    if (!data) return;
+    const sid = String(data.sid || "");
+    if (!sid) return;
+    const hp = Math.max(0, Math.min(MAX_HP, Number(data.hp) || 0));
+    const extraHp = Math.max(0, Math.min(BONUS_HP_MAX, Number(data.extraHp) || 0));
+    const target = findPlayerBySid(sid) || (sid === SELF_ID ? (players.get(SELF_ID) || upsertSelfPosition()) : null);
+    if (!target) return;
+    target.hp = hp;
+    target.extraHp = extraHp;
+    const total = hp + extraHp;
+    target.dead = total <= 0 ? true : false;
+    target.ts = Date.now();
+    if ((target.sid || target.id) === SELF_ID) broadcastState(true, true);
+  }
+
+  function execCommandLocal(cmd, from){
+    const text = cmd || "BEEP,0,1";
+    const now = Date.now();
+    const id = `peer-hit:${now}:${Math.random().toString(36).slice(2)}`;
+    try {
+      window.dispatchEvent(new CustomEvent('chat:message', {
+        detail: {
+          id,
+          key: id,
+          text,
+          raw: { text, origin: "peer-arena-hit", from },
+          ts: now,
+          origin: "peer-arena-hit",
+          peerId: from || "",
+          username: from || "peer"
+        }
+      }));
+    } catch(e) {
+      console.warn("peer-arena local exec failed", e);
+    }
+  }
+
+  function removeBulletById(bulletId) {
+    if (!bulletId) return;
+    const id = String(bulletId);
+    removedBullets.set(id, Date.now());
+    if (bulletIndex.has(id)) bulletIndex.delete(id);
+    const idx = bullets.findIndex(b => b && b.id === id);
+    if (idx !== -1) bullets.splice(idx, 1);
+  }
+
+  function sweepEphemeralMaps() {
+    const now = Date.now();
+    for (const [id, ts] of removedBullets.entries()) {
+      if (now - ts > 8000) removedBullets.delete(id);
+    }
+    for (const [k, ts] of processedHits.entries()) {
+      if (now - ts > 8000) processedHits.delete(k);
+    }
+    for (const [k, ts] of radDamageTouches.entries()) {
+      if (now - ts > 8000) radDamageTouches.delete(k);
+    }
+  }
+
+  function tickBullets(dt){
+    const toRemove = new Set();
+    bullets.forEach((b, idx) => {
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+      if (b.x < -40 || b.x > WORLD_W + 40 || b.y < -40 || b.y > WORLD_H + 40) {
+        toRemove.add(idx);
+        return;
+      }
+      // obstacles block bullets
+      for (const ob of obstacles) {
+        const r = Number(ob.r) || OBSTACLE_RADIUS;
+        const dxo = (Number(ob.x) || 0) - b.x;
+        const dyo = (Number(ob.y) || 0) - b.y;
+        const br = b.r || BULLET_RADIUS;
+        if (Math.hypot(dxo, dyo) <= (r + br)) {
+          toRemove.add(idx);
+          return;
+        }
+      }
+      // graves block bullets too
+      for (const g of graves) {
+        const r = graveColliderRadius(g);
+        const dxg = (Number(g.x) || 0) - b.x;
+        const dyg = (Number(g.y) || 0) - b.y;
+        const br = b.r || BULLET_RADIUS;
+        if (Math.hypot(dxg, dyg) <= (r + br)) {
+          toRemove.add(idx);
+          return;
+        }
+      }
+      // fauna hearts: bullet collects and heals owner
+      for (const f of fauna) {
+        if (!f) continue;
+        const dxh = (Number(f.x) || 0) - b.x;
+        const dyh = (Number(f.y) || 0) - b.y;
+        const br = b.r || BULLET_RADIUS;
+        if (Math.hypot(dxh, dyh) <= (FAUNA_RADIUS + br)) {
+          toRemove.add(idx);
+          if (isWorldAuthority()) {
+            const ownerSid = String(b.owner || "");
+            removeFaunaById(f.id);
+            applyHealAuthoritative(ownerSid, 1);
+            lastFaunaBroadcast = 0; // força snapshot cedo
+            trySendBulletRemove(b.id);
+          }
+          return;
+        }
+      }
+      players.forEach((p, pid) => {
+        if (pid === b.owner) return;
+        if (p.sid && b.owner && p.sid === b.owner) return; // não colide com o próprio
+        if (isDead(p)) return;
+        const dx = p.x - b.x;
+        const dy = p.y - b.y;
+        const radius = HIT_RADIUS * scaleFor(p);
+        const bRadius = b.r || BULLET_RADIUS;
+        if (Math.hypot(dx, dy) <= (radius + bRadius)) {
+          if (isWorldAuthority()) {
+            const targetSid = String(p.sid || pid || "");
+            const hitKey = `${b.id}:${targetSid}`;
+            if (targetSid && !processedHits.has(hitKey)) {
+              processedHits.set(hitKey, Date.now());
+              applyDamageAuthoritative(targetSid, 1, b);
+              trySendBulletRemove(b.id);
+            }
+          }
+          if (p.host) {
+            const target = p.sid || pid;
+            trySendHit(target, b.cmd);
+          }
+          playHitSound();
+          toRemove.add(idx);
+        }
+      });
+    });
+    const arr = bullets;
+    const rm = Array.from(toRemove).sort((a,b)=>b-a);
+    rm.forEach(i => {
+      const removed = arr[i];
+      if (removed) {
+        removedBullets.set(String(removed.id), Date.now());
+        bulletIndex.delete(removed.id);
+      }
+      arr.splice(i,1);
+    });
+  }
+
+  function handleIncoming(data, peerId){
+    if (!data || typeof data !== "object") return;
+    if (data.type !== "state" && !isPhasePlaying()) return;
+    if (data.type === "state") {
+      handleRemoteState(data, peerId);
+      refreshWorldAuthority();
+      const senderSid = String(data.sid || peerId || data.id || "");
+      const isSenderAuthority = senderSid && (senderSid === String(worldAuthoritySid));
+      if (Array.isArray(data.bullets)) {
+        data.bullets.forEach(b => {
+          if (!b || !b.id) return;
+          spawnBullet({
+            id: b.id,
+            owner: b.owner,
+            x: Number(b.x) || 0,
+            y: Number(b.y) || 0,
+            vx: Number(b.vx) || 0,
+            vy: Number(b.vy) || 0,
+            cmd: b.cmd || "BEEP,0,1"
+          });
+        });
+      }
+      if (!isWorldAuthority() && isSenderAuthority && Array.isArray(data.items)) {
+        items = data.items.map(it => ({
+          id: it.id,
+          type: it.type,
+          x: Number(it.x) || 0,
+          y: Number(it.y) || 0,
+          expires: (it.expires == null) ? null : (Number(it.expires) || (Date.now() + ITEM_TTL)),
+          owner: it.owner || "",
+          born: Number(it.born) || 0
+        }));
+      }
+      if (!isWorldAuthority() && isSenderAuthority && Array.isArray(data.obstacles)) {
+        obstacles = data.obstacles.map(ob => ({
+          id: ob.id,
+          type: OBSTACLE_TYPES.includes(ob.type) ? ob.type : "rock",
+          biome: String(ob.biome || OBSTACLE_BIOME[ob.type] || "desert"),
+          x: Number(ob.x) || 0,
+          y: Number(ob.y) || 0,
+          r: Number(ob.r) || OBSTACLE_RADIUS,
+          s: Number(ob.s) || 1
+        }));
+        const me = players.get(SELF_ID);
+        if (me) {
+          const beforeX = me.x;
+          const beforeY = me.y;
+          const moved = resolvePlayerObstacleOverlap(me);
+          if (moved && (Math.hypot((me.x - beforeX), (me.y - beforeY)) > 0.1)) {
+            me.rx = me.x;
+            me.ry = me.y;
+            broadcastState(true, true);
+          }
+        }
+      }
+      if (!isWorldAuthority() && isSenderAuthority && Array.isArray(data.graves)) {
+        graves = data.graves.map(g => ({
+          id: g.id || `grave-${Math.random().toString(36).slice(2)}`,
+          sid: String(g.sid || ""),
+          name: String(g.name || "peer"),
+          x: Number(g.x) || 0,
+          y: Number(g.y) || 0,
+          r: Number(g.r) || graveColliderRadius(g)
+        }));
+      }
+      if (!isWorldAuthority() && isSenderAuthority && Array.isArray(data.fauna)) {
+        const prevById = new Map(fauna.map(f => [String(f.id || ""), f]));
+        const next = [];
+        data.fauna.forEach(f => {
+          if (!f) return;
+          const id = String(f.id || `fa-${Math.random().toString(36).slice(2)}`);
+          const x = Number(f.x) || 0;
+          const y = Number(f.y) || 0;
+          const prev = prevById.get(id);
+          if (prev) {
+             prev.type = FAUNA_TYPES.includes(f.type) ? f.type : "fly-heart";
+            prev.x = x;
+            prev.y = y;
+            prev.vx = Number(f.vx) || 0;
+            prev.vy = Number(f.vy) || 0;
+            prev.seed = Number(f.seed) || prev.seed || 0;
+            next.push(prev);
+          } else {
+            next.push({
+              id,
+               type: FAUNA_TYPES.includes(f.type) ? f.type : "fly-heart",
+              x, y,
+              rx: x,
+              ry: y,
+              vx: Number(f.vx) || 0,
+              vy: Number(f.vy) || 0,
+              seed: Number(f.seed) || 0
+            });
+          }
+        });
+        fauna = next;
+      }
+    } else if (data.type === "hit") {
+      const target = data.target || "";
+      if (target && (target === SELF_ID) && isLocalHost()) {
+        execCommandLocal(data.cmd, data.from || peerId || "");
+      }
+    } else if (data.type === "damage") {
+      applyDamageSnapshot(data);
+    } else if (data.type === "heal") {
+      applyHealSnapshot(data);
+    } else if (data.type === "bullet") {
+      if (!data.id || !data.owner) return;
+      spawnBullet({
+        id: data.id,
+        owner: data.owner,
+        x: Number(data.x) || 0,
+        y: Number(data.y) || 0,
+        vx: Number(data.vx) || 0,
+        vy: Number(data.vy) || 0,
+        cmd: data.cmd || "BEEP,0,1"
+      });
+    } else if (data.type === "bullet-remove") {
+      removeBulletById(data.id);
+    } else if (data.type === "item-pick" && isWorldAuthority()) {
+      handleItemPickup(data.id, data.sid);
+    } else if (data.type === "item-apply") {
+      applyEffectToSid(data.sid, data.effect, data);
+    }
+  }
+
+  function drawRoundedRect(ctx, x, y, w, h, r) {
+    const radius = Math.max(2, Math.min(r, Math.min(w, h) / 2));
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + w - radius, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+    ctx.lineTo(x + w, y + h - radius);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+    ctx.lineTo(x + radius, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.closePath();
+  }
+
+  function drawNameTooltip(ctx2, text, x, y, { host = false, scale = 1, italic = false, opacity = null } = {}) {
+    const padX = 7 * scale;
+    const padY = 4 * scale;
+    const baseAlpha = ctx2.globalAlpha;
+    if (opacity != null) ctx2.globalAlpha = baseAlpha * Math.max(0, Math.min(1, Number(opacity) || 0));
+    ctx2.font = `${italic ? "italic " : ""}${13 * scale}px "Helvetica Neue", Arial, sans-serif`;
+    ctx2.textAlign = "center";
+    ctx2.textBaseline = "middle";
+    const metrics = ctx2.measureText(text);
+    const textHeight = (metrics.actualBoundingBoxAscent || 9) + (metrics.actualBoundingBoxDescent || 3);
+    const boxW = metrics.width + padX * 2;
+    const boxH = textHeight + padY * 2;
+    const bx = x - boxW / 2;
+    const by = y - boxH / 2;
+    ctx2.fillStyle = "rgba(33,37,41,0.92)";
+    drawRoundedRect(ctx2, bx, by, boxW, boxH, 6 * scale);
+    ctx2.fill();
+    ctx2.fillStyle = host ? "#f5c542" : "#fff";
+    ctx2.fillText(text, x, by + boxH / 2);
+    ctx2.globalAlpha = baseAlpha;
+  }
+
+  function drawHearts(ctx2, p, x, y, scale = 1) {
+    const parts = clampHpParts(p?.hp, p?.extraHp);
+    const baseHp = parts.base;
+    const extraHp = parts.extra;
+    const totalHp = parts.total;
+    if (totalHp <= 0) return;
+    ctx2.save();
+    const size = 12 * scale;
+    ctx2.font = `${size}px sans-serif`;
+    ctx2.textAlign = "left";
+    ctx2.textBaseline = "middle";
+    const heartW = Math.max(6, ctx2.measureText(HEART_EMOJI).width || size);
+    const gap = Math.max(1, heartW * 0.12);
+    const totalSlots = MAX_HP + extraHp;
+    const totalW = totalSlots * heartW + Math.max(0, totalSlots - 1) * gap;
+    let sx = x - totalW / 2;
+    const baseAlpha = ctx2.globalAlpha;
+    for (let i = 0; i < totalSlots; i++) {
+      const isBase = i < MAX_HP;
+      const filled = isBase ? (i < baseHp) : (i < MAX_HP + extraHp);
+      const emoji = isBase ? HEART_EMOJI : BONUS_HEART_EMOJI;
+      ctx2.globalAlpha = baseAlpha * (filled ? 1 : (isBase ? 0.12 : 0.12));
+      ctx2.fillText(emoji, sx, y);
+      sx += heartW + gap;
+    }
+    ctx2.restore();
+  }
+
+  function drawAliveCountdown(aliveCount, totalCount) {
+    if (!canvas || !ctx) return;
+    const bigSize = Math.max(56, Math.min(132, canvas.width * 0.12));
+    const pad = 28;
+    const x = canvas.width - pad;
+    const y = 30;
+    const safeAlive = Math.max(0, Math.round(Number(aliveCount) || 0));
+    ctx.save();
+    ctx.textAlign = "right";
+    ctx.textBaseline = "top";
+    ctx.fillStyle = "rgba(255,255,255,0.4)";
+    ctx.shadowColor = "rgba(0,0,0,0.55)";
+    ctx.shadowBlur = 26;
+    ctx.shadowOffsetY = 10;
+    ctx.font = `900 ${Math.round(bigSize)}px 'Anton', sans-serif`;
+    ctx.fillText(String(safeAlive), x, y);
+    ctx.restore();
+  }
+
+  function idleBobFor(p, nowMs, scl = 1) {
+    if (!p || isDead(p)) return 0;
+    const lastMoveAt = Number(p.lastMoveAt) || 0;
+    // considera idle após um pequeno tempo sem movimento
+    if (nowMs - lastMoveAt < 280) return 0;
+    const sid = String(p.sid || p.id || "");
+    const phase = (hashStringToSeed(`idle:${sid}`) % 997) / 997 * Math.PI * 2;
+    const amp = 2.3 * scl;
+    return Math.sin((nowMs / 420) + phase) * amp;
+  }
+
+  function drawBiomeGround(biome, x, y, r) {
+    if (!biome) return;
+    if (biome === "desert") {
+      const radius = Math.max(84, r * 6.9);
+      const g = ctx.createRadialGradient(x, y, 0, x, y, radius);
+      // stops mais “puxados” para o centro para sumir a borda externa
+      g.addColorStop(0, "rgba(236, 210, 162, 0.82)");
+      g.addColorStop(0.30, "rgba(226, 196, 142, 0.62)");
+      g.addColorStop(0.48, "rgba(207, 170, 112, 0.36)");
+      g.addColorStop(0.65, "rgba(207, 170, 112, 0.10)");
+      g.addColorStop(1, "rgba(207, 170, 112, 0)");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      const pat = getBiomeNoisePattern(biome);
+      if (pat) {
+        ctx.save();
+        // ruído como máscara do ground (modula alpha)
+        ctx.globalCompositeOperation = "destination-in";
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.clip();
+        // muda a fase por ground para esconder repetição de tiles (sem rotação para não deslocar a máscara)
+        const h = hash2i((x * 10) | 0, (y * 10) | 0, 0x5bd1e995);
+        const ox = (h & 4095) % BIOME_NOISE_TILE;
+        const oy = ((h >>> 12) & 4095) % BIOME_NOISE_TILE;
+        ctx.fillStyle = pat;
+        // preenche com folga para garantir cobertura mesmo com offset
+        const pad = BIOME_NOISE_TILE;
+        ctx.fillRect(x - radius - pad - ox, y - radius - pad - oy, radius * 2 + pad * 2, radius * 2 + pad * 2);
+        ctx.restore();
+      }
+    }
+  }
+
+  function updateFootAnimation(p, dt, scl = 1) {
+    if (typeof p.footPhase !== "number") p.footPhase = 0;
+    const curX = (p.rx ?? p.x) ?? 0;
+    const curY = (p.ry ?? p.y) ?? 0;
+    if (typeof p.lastFootX !== "number") { p.lastFootX = curX; p.lastFootY = curY; }
+    const moved = Math.hypot(curX - p.lastFootX, curY - p.lastFootY) > 0.35;
+    if (moved) {
+      const speed = 14; // rad/s for a lively walk cycle
+      p.footPhase = (p.footPhase + dt * speed) % (Math.PI * 2);
+    }
+    const amp = moved ? 4 * scl : 0;
+    p.lastFootX = curX;
+    p.lastFootY = curY;
+    return {
+      left: Math.sin(p.footPhase + Math.PI) * amp,
+      right: Math.sin(p.footPhase) * amp
+    };
+  }
+
+  function maybeDropPoop(p) {
+    if (!isWorldAuthority()) return;
+    if (isDead(p)) return;
+    if (!p || !p.poopCharges || p.poopCharges <= 0) return;
+    const px = (p.rx ?? p.x) ?? 0;
+    const py = (p.ry ?? p.y) ?? 0;
+    const now = Date.now();
+    const lastX = typeof p.lastPoopX === "number" ? p.lastPoopX : px;
+    const lastY = typeof p.lastPoopY === "number" ? p.lastPoopY : py;
+    const dist = Math.hypot(px - lastX, py - lastY);
+    const minDt = 320;
+    if (dist < 18 && now - (p.poopLastDrop || 0) < minDt) return;
+    if (now - (p.poopLastDrop || 0) < minDt) return;
+    const drop = {
+      id: `poop-${now}-${Math.random().toString(36).slice(2)}`,
+      type: "coco",
+      x: px,
+      y: py,
+      expires: null,
+      owner: p.sid || p.id || SELF_ID,
+      born: now
+    };
+    items.push(drop);
+    p.poopCharges -= 1;
+    p.lastPoopX = px;
+    p.lastPoopY = py;
+    p.poopLastDrop = now;
+  }
+
+  function updateAccessoryPendulum(p, dt) {
+    if (!p) return 0;
+    if (typeof p.accAngle !== "number") p.accAngle = 0;
+    if (typeof p.accVel !== "number") p.accVel = 0;
+    if (typeof p.lastAccX !== "number") p.lastAccX = p.rx ?? p.x ?? 0;
+    const vx = ((p.rx ?? p.x ?? 0) - p.lastAccX) / Math.max(dt || 0.016, 0.008);
+    p.lastAccX = p.rx ?? p.x ?? 0;
+    const target = Math.max(-1.0, Math.min(1.0, vx * 0.18));
+    const stiffness = 32;
+    const damping = 0.12;
+    const accel = (target - p.accAngle) * stiffness - p.accVel * damping;
+    p.accVel += accel * dt;
+    p.accAngle += p.accVel * dt;
+    p.accAngle = Math.max(-1.2, Math.min(1.2, p.accAngle));
+    p.accVel = Math.max(-4, Math.min(4, p.accVel));
+    return p.accAngle;
+  }
+
+  function renderPlayer(ctx2, p, id, nowMs, dt, {
+    px,
+    pyBase,
+    scl,
+    aimDir = null,
+    footBob = null,
+    accAngle = 0,
+    isHost = false,
+    showName = true,
+    showHearts = true
+  } = {}) {
+    const dead = isDead(p);
+    const x = (typeof px === "number") ? px : (p.rx ?? p.x);
+    const yBase = (typeof pyBase === "number") ? pyBase : (p.ry ?? p.y);
+    const scale = (typeof scl === "number") ? scl : scaleFor(p);
+
+    ctx2.textAlign = "center";
+    ctx2.textBaseline = "middle";
+
+    const headBob = dead ? 0 : idleBobFor(p, nowMs, scale);
+    const headY = yBase + headBob;
+
+    if (dead) {
+      const phase = (hashStringToSeed(String(p.sid || p.id || "")) % 997) / 997 * Math.PI * 2;
+      const bob = Math.sin((performance.now() / 320) + phase) * (6 * scale);
+      const dir = (aimDir && isFinite(aimDir.x) && isFinite(aimDir.y))
+        ? aimDir
+        : (typeof p.aimX === "number" && typeof p.aimY === "number" ? { x: p.aimX, y: p.aimY } : { x: 0, y: -1 });
+      const targetAng = normalizeAngle(Math.atan2(dir.y || 0, dir.x || 0) - Math.PI / 2);
+      const baseAng = normalizeAngle((typeof p._ghostAngle === "number") ? p._ghostAngle : targetAng);
+      const smooth = 1 - Math.exp(-Math.max(0.01, (dt || 0.016)) * 10);
+      const ang = normalizeAngle(lerpAngle(baseAng, targetAng, smooth));
+      p._ghostAngle = ang;
+      ctx2.save();
+      ctx2.translate(x, yBase + bob);
+      ctx2.rotate(ang);
+      ctx2.font = `${42 * scale}px sans-serif`;
+      ctx2.fillText(GHOST_EMOJI, 0, 0);
+      ctx2.restore();
+      return;
+    }
+
+    // nuvem radioativa (atrás do player)
+    if ((Number(p.radioactiveUntil) || 0) > nowMs) {
+      const r0 = RAD_CLOUD_RADIUS * scale;
+      const pulse = 0.82 + 0.18 * Math.sin(nowMs / 120);
+      ctx2.save();
+      ctx2.globalCompositeOperation = "lighter";
+      const g = ctx2.createRadialGradient(x, yBase, 0, x, yBase, r0);
+      g.addColorStop(0, `rgba(90, 255, 120, ${0.18 * pulse})`);
+      g.addColorStop(0.55, `rgba(40, 255, 110, ${0.14 * pulse})`);
+      g.addColorStop(1, "rgba(20, 255, 80, 0)");
+      ctx2.fillStyle = g;
+      ctx2.beginPath();
+      ctx2.arc(x, yBase, r0, 0, Math.PI * 2);
+      ctx2.fill();
+      ctx2.strokeStyle = `rgba(120, 255, 140, ${0.65 * pulse})`;
+      ctx2.lineWidth = Math.max(2, 2.2 * scale);
+      ctx2.beginPath();
+      ctx2.arc(x, yBase, r0 * 0.9, 0, Math.PI * 2);
+      ctx2.stroke();
+      ctx2.restore();
+    }
+
+    // shoes/legs (atrás das mãos)
+    const shoeOffsetX = 12 * scale;
+    const shoeOffsetY = 16 * scale;
+    if (p.shoe) {
+      const shoeEmoji = shoeWithTone(p.shoe, p.avatar, p.tone || "");
+      const isFootEmoji = String(shoeEmoji || "").startsWith("🦶");
+      const bob = footBob || { left: 0, right: 0 };
+      ctx2.font = `${22 * scale}px sans-serif`;
+      const rightX = x + shoeOffsetX;
+      const leftX = x - shoeOffsetX;
+      const yFoot = yBase + shoeOffsetY;
+      if (isFootEmoji) {
+        // 🦶: inverte no pé direito; esquerdo fica normal
+        ctx2.save();
+        ctx2.translate(rightX * 2, 0);
+        ctx2.scale(-1, 1);
+        ctx2.fillText(shoeEmoji, rightX, yFoot + bob.right);
+        ctx2.restore();
+        ctx2.fillText(shoeEmoji, leftX, yFoot + bob.left);
+      } else {
+        ctx2.fillText(shoeEmoji, rightX, yFoot + bob.right);
+        ctx2.save();
+        ctx2.translate(leftX * 2, 0);
+        ctx2.scale(-1, 1);
+        ctx2.fillText(shoeEmoji, leftX, yFoot + bob.left);
+        ctx2.restore();
+      }
+    }
+
+    // aim / gun / left hand (mãos atrás do avatar, arma na frente; head acima de tudo)
+    const gunOffset = 32 * scale;
+    const gunBaseY = yBase - (2 * scale);
+    const hands = handsWithTone(p.tone || "");
+    const handFontPx = 22 * scale;
+    const handsBaseY = yBase - (3 * scale);
+
+    const ad = aimDir || (
+      (typeof p.aimX === "number" && typeof p.aimY === "number")
+        ? (() => {
+            const len = Math.hypot(p.aimX, p.aimY) || 1;
+            return { x: p.aimX / len, y: p.aimY / len };
+          })()
+        : { x: -1, y: 0 }
+    );
+    const aimAngle = Math.atan2(ad.y, ad.x);
+    const aimLeft = ad.x < 0;
+    const aimAngleUpright = aimLeft ? (aimAngle + Math.PI) : aimAngle;
+    const aimFlipX = aimLeft ? -1 : 1;
+
+    // right hand + accessory (acessório na frente da mão direita e atrás da mão esquerda)
+    if (p.acc) {
+      const handRightX = (x + 18 * scale) + (5 * scale);
+      const handRightY = handsBaseY;
+      const handBox = handFontPx;
+      const accPivotX = handRightX + (handBox * 0.36);
+      const accPivotY = handRightY - (handBox * 0.55);
+
+      ctx2.save();
+      ctx2.font = `${handFontPx}px sans-serif`;
+      ctx2.textAlign = "center";
+      ctx2.textBaseline = "middle";
+      ctx2.fillText(hands.right, handRightX, handRightY);
+      ctx2.restore();
+
+      ctx2.save();
+      ctx2.translate(accPivotX, accPivotY);
+      ctx2.rotate(Number(accAngle) || 0);
+      ctx2.font = `${24 * scale}px sans-serif`;
+      ctx2.textAlign = "center";
+      ctx2.textBaseline = "top";
+      ctx2.fillText(p.acc, 0, 0);
+      ctx2.restore();
+    }
+
+    // left hand follows aim rotation (but not gun flip) — desenha por último para ficar na frente do acessório
+    {
+      const localX = gunOffset - (12 * scale);
+      ctx2.save();
+      ctx2.translate(x, handsBaseY);
+      ctx2.rotate(aimAngleUpright);
+      ctx2.scale(aimFlipX, 1);
+      ctx2.font = `${handFontPx}px sans-serif`;
+      ctx2.textAlign = "center";
+      ctx2.textBaseline = "middle";
+      ctx2.fillText(hands.left, localX, 0);
+      ctx2.restore();
+    }
+
+    // avatar (na frente das mãos/pernas)
+    ctx2.font = `${30 * scale}px sans-serif`;
+    ctx2.fillText(p.avatar || AVATAR_PLACEHOLDER_EMOJI, x, headY);
+
+    // gun in front of avatar
+    ctx2.save();
+    ctx2.translate(x, gunBaseY);
+    ctx2.rotate(aimAngleUpright);
+    ctx2.scale(aimFlipX, 1);
+    ctx2.font = `${22 * scale}px sans-serif`;
+    ctx2.textAlign = "center";
+    ctx2.textBaseline = "middle";
+    ctx2.save();
+    ctx2.scale(-1, 1);
+    ctx2.fillText(GUN_EMOJI, -gunOffset, 0);
+    ctx2.restore();
+    ctx2.restore();
+
+    // head skin in front of everything (including gun)
+    if (p.head) {
+      ctx2.font = `${30 * scale}px sans-serif`;
+      ctx2.fillText(p.head, x, headY - 26 * scale);
+    }
+
+    const nameY = yBase + 38 * scale;
+    if (showName) {
+      const label = isHost ? HOST_CROWN_EMOJI + " " + (p.name || "host") : (p.name || "peer");
+      drawNameTooltip(ctx2, label, x, nameY, { host: isHost, scale });
+    }
+    // barra de vida (corações) abaixo do nome
+    if (showHearts) {
+      const anchorY = showName ? nameY : (yBase + 38 * scale);
+      drawHearts(ctx2, p, x, anchorY + 22 * scale, scale);
+    }
+  }
+
+  function draw() {
+    const now = performance.now();
+    const dt = Math.min(0.05, (now - lastFrame) / 1000);
+    const nowMs = Date.now();
+    lastFrame = now;
+    const playing = isPhasePlaying();
+    const lobbyState = ensureLobbyFlow(nowMs);
+    const activePlayers = (lobbyState && Array.isArray(lobbyState.active))
+      ? lobbyState.active
+      : getActivePlayers();
+    sweepEphemeralMaps();
+    if (playing && isWorldAuthority()) {
+      ensureDangerZoneAuthority(nowMs);
+      applyDangerZoneDamageAuthority(nowMs);
+      applyRadioactiveContactDamageAuthority(nowMs);
+    }
+    if (playing) {
+      ensureFauna();
+      updateFauna(dt);
+      tickRemoteFauna(dt);
+      handleMovement(dt);
+      tickBots(dt);
+      tickBullets(dt);
+      checkItemCollisions();
+    } else {
+      tickBots(0);
+      tickRemoteFauna(dt);
+    }
+    ctx.clearRect(0,0,canvas.width, canvas.height);
+    const view = getViewRect();
+    ctx.save();
+    ctx.translate(-view.left, -view.top);
+
+    // grid
+    ctx.strokeStyle = "rgba(255,255,255,0.05)";
+    ctx.lineWidth = 1;
+    const gridStep = 40;
+    const startX = Math.floor(view.left / gridStep) * gridStep;
+    const endX = Math.min(WORLD_W, view.right + gridStep);
+    for (let x = startX; x < endX; x += gridStep) {
+      ctx.beginPath(); ctx.moveTo(x, view.top); ctx.lineTo(x, view.bottom); ctx.stroke();
+    }
+    const startY = Math.floor(view.top / gridStep) * gridStep;
+    const endY = Math.min(WORLD_H, view.bottom + gridStep);
+    for (let y = startY; y < endY; y += gridStep) {
+      ctx.beginPath(); ctx.moveTo(view.left, y); ctx.lineTo(view.right, y); ctx.stroke();
+    }
+
+    // biome ground (under desert props)
+    if (obstacles.length) {
+      obstacles.forEach(ob => {
+        if (!inView(view, Number(ob.x) || 0, Number(ob.y) || 0, 260)) return;
+        const biome = ob.biome || OBSTACLE_BIOME[ob.type] || "";
+        const r = Number(ob.r) || OBSTACLE_RADIUS;
+        drawBiomeGround(biome, Number(ob.x) || 0, Number(ob.y) || 0, r);
+      });
+    }
+
+    // danger zone overlay/border
+    if (playing) drawDangerZone(view, nowMs);
+
+    // bullets (behind players)
+    ctx.fillStyle = "#ffb347";
+    bullets.forEach(b => {
+      if (!inView(view, b.x, b.y, 80)) return;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.r || BULLET_RADIUS, 0, Math.PI*2);
+      ctx.fill();
+    });
+
+    // obstacles (block bullets + player)
+    if (obstacles.length) {
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      obstacles.forEach(ob => {
+        if (!inView(view, Number(ob.x) || 0, Number(ob.y) || 0, 140)) return;
+        const s = (typeof ob.s === "number" && ob.s > 0) ? ob.s : ((Number(ob.r) || OBSTACLE_RADIUS) / OBSTACLE_RADIUS);
+        ctx.font = `${Math.round(44 * s)}px sans-serif`;
+        const emoji = OBSTACLE_EMOJI[ob.type] || "🪨";
+        ctx.fillText(emoji, ob.x, ob.y);
+      });
+    }
+
+    // graves (onde o player morreu)
+    drawGraves(view);
+
+    // fauna (flies above props)
+    drawFauna(view);
+
+    players.forEach((p, id) => {
+      const smooth = 1 - Math.exp(-dt * 14); // suave sem atrasar demais
+      p.rx = lerp(p.rx ?? p.x, p.x, smooth);
+      p.ry = lerp(p.ry ?? p.y, p.y, smooth);
+      if (playing) maybeDropPoop(p);
+      if (id !== SELF_ID && !inView(view, p.rx ?? p.x, p.ry ?? p.y, 260)) return;
+
+      const age = nowMs - p.ts;
+      const alpha = id === SELF_ID ? 1 : (age > 7000 ? lerp(1, 0.25, Math.min(1, (age-7000)/2000)) : 1);
+      const dead = isDead(p);
+      ctx.globalAlpha = dead ? (alpha * 0.35) : alpha;
+      const isHost = p.host || (id === SELF_ID && isLocalHost());
+
+      const scl = scaleFor(p);
+      // aim direction + animation state computed once (usado também no preview)
+      let aimDir = { x: -1, y: 0 };
+      if (id === SELF_ID) {
+        const kdx = (keysDown.has("ArrowRight") ? 1 : 0) - (keysDown.has("ArrowLeft") ? 1 : 0);
+        const kdy = (keysDown.has("ArrowDown") ? 1 : 0) - (keysDown.has("ArrowUp") ? 1 : 0);
+        if (kdx !== 0 || kdy !== 0) {
+          const len = Math.hypot(kdx, kdy) || 1;
+          aimDir = { x: kdx / len, y: kdy / len };
+        } else if (typeof p.aimX === "number" && typeof p.aimY === "number") {
+          const len = Math.hypot(p.aimX, p.aimY) || 1;
+          aimDir = { x: p.aimX / len, y: p.aimY / len };
+        } else {
+          const len = Math.hypot(lastDir.x, lastDir.y) || 1;
+          aimDir = { x: lastDir.x / len, y: lastDir.y / len };
+        }
+        p.aimX = aimDir.x;
+        p.aimY = aimDir.y;
+      } else if (typeof p.aimX === "number" && typeof p.aimY === "number") {
+        const len = Math.hypot(p.aimX, p.aimY) || 1;
+        aimDir = { x: p.aimX / len, y: p.aimY / len };
+      }
+
+      const footBob = p.shoe ? updateFootAnimation(p, dt, scl) : null;
+      const accAngle = p.acc ? updateAccessoryPendulum(p, dt) : 0;
+      p._anim = { aimDir, footBob, accAngle, scl };
+
+      renderPlayer(ctx, p, id, nowMs, dt, {
+        px: p.rx,
+        pyBase: p.ry,
+        scl,
+        aimDir,
+        footBob,
+        accAngle,
+        isHost,
+        showName: !dead,
+        showHearts: true
+      });
+
+      ctx.globalAlpha = 1;
+    });
+
+    if (playing) {
+      // items
+      items = items.filter(it => {
+        if (it.expires == null) return true;
+        return (it.expires || 0) > Date.now();
+      });
+      items.forEach(it => {
+        if (!inView(view, it.x, it.y, 120)) return;
+        ctx.font = `${itemFontSizeFor(it.type)}px sans-serif`;
+        const emoji = it.type === "milk"
+        ? MILK_EMOJI
+        : it.type === "cocktail"
+        ? COCKTAIL_EMOJI
+        : it.type === "car"
+        ? COFFEE_EMOJI
+        : it.type === "radioactive"
+        ? RADIOACTIVE_EMOJI
+        : it.type === "butter"
+        ? BUTTER_EMOJI
+        : POOP_EMOJI;
+        ctx.fillText(emoji, it.x, it.y);
+      });
+    }
+
+    ctx.restore();
+    if (playing) {
+      const aliveCount = activePlayers.filter(p => !isDead(p)).length;
+      drawAliveCountdown(aliveCount, activePlayers.length);
+    }
+    drawPreview(nowMs, dt);
+    requestAnimationFrame(draw);
+  }
+
+  function shouldIgnoreKey(e) {
+    const el = e.target;
+    if (!el) return false;
+    if (el.isContentEditable) return true;
+    if (el.closest && el.closest(".emoji-select")) return true;
+    if (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT") return true;
+    if (el.tagName === "BUTTON") return true;
+    return false;
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (shouldIgnoreKey(e)) return;
+    if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)) {
+      e.preventDefault();
+      keysDown.add(e.key);
+      const dirMap = {
+        ArrowUp: { x: 0, y: -1 },
+        ArrowDown: { x: 0, y: 1 },
+        ArrowLeft: { x: -1, y: 0 },
+        ArrowRight: { x: 1, y: 0 }
+      };
+      lastDir = dirMap[e.key] || lastDir;
+    } else if (e.key === "z" || e.key === "Z") {
+      e.preventDefault();
+      spawnBullet();
+    }
+  });
+
+  document.addEventListener("keyup", (e) => {
+    if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)) {
+      e.preventDefault();
+      keysDown.delete(e.key);
+    }
+  });
+
+  // emoji grid dropdowns (skins)
+  [headSel, accSel, shoeSel].forEach(enhanceEmojiSelect);
+  document.addEventListener("click", (e) => {
+    const t = e.target;
+    if (t && t.closest && t.closest(".emoji-select")) return;
+    closeAllEmojiSelects();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeAllEmojiSelects();
+  });
+
+  // itens
+  function spawnItemLocal(type){
+    // evita spawn sobreposto (obstáculos, players e outros itens)
+    let x = Math.random() * (WORLD_W - 60) + 30;
+    let y = Math.random() * (WORLD_H - 60) + 30;
+    for (let tries = 0; tries < 60; tries++) {
+      const okObstacle = !obstacles.some(ob => {
+        const r = Number(ob.r) || OBSTACLE_RADIUS;
+        return Math.hypot((Number(ob.x) || 0) - x, (Number(ob.y) || 0) - y) < (r + ITEM_RADIUS + 10);
+      });
+      const okGraves = !graves.some(g => {
+        const r = graveColliderRadius(g);
+        return Math.hypot((Number(g.x) || 0) - x, (Number(g.y) || 0) - y) < (r + ITEM_RADIUS + 12);
+      });
+      const okPlayers = Array.from(players.values()).every(p => {
+        const pr = playerRadius(p);
+        return Math.hypot((p.x || 0) - x, (p.y || 0) - y) > (pr + ITEM_RADIUS + 14);
+      });
+      const okItems = items.every(it => Math.hypot((it.x || 0) - x, (it.y || 0) - y) > (ITEM_RADIUS * 2 + 8));
+      if (okObstacle && okGraves && okPlayers && okItems) break;
+      x = Math.random() * (WORLD_W - 60) + 30;
+      y = Math.random() * (WORLD_H - 60) + 30;
+    }
+    const id = `item-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const expires = type === "coco" ? null : Date.now() + ITEM_TTL;
+    items.push({ id, type, x, y, expires });
+  }
+
+  function ensureObstacles(){
+    if (!isWorldAuthority()) return;
+    const desired = 10;
+    if (obstacles.length >= desired) return;
+    const margin = 60;
+    const maxAttempts = 260;
+    let attempts = 0;
+    while (obstacles.length < desired && attempts < maxAttempts) {
+      attempts++;
+      const type = OBSTACLE_TYPES[Math.floor(Math.random() * OBSTACLE_TYPES.length)];
+      const x = Math.random() * (WORLD_W - margin * 2) + margin;
+      const y = Math.random() * (WORLD_H - margin * 2) + margin;
+      const s = type === "cactus"
+        ? (0.85 + Math.random() * 0.65)
+        : (0.8 + Math.random() * 0.75);
+      const r = OBSTACLE_RADIUS * s;
+      const ok = obstacles.every(o => Math.hypot(o.x - x, o.y - y) > ((o.r || OBSTACLE_RADIUS) + r + 20));
+      if (!ok) continue;
+      const okPlayers = Array.from(players.values()).every(p => {
+        const pr = playerRadius(p);
+        return Math.hypot((p.x || 0) - x, (p.y || 0) - y) > (pr + r + 16);
+      });
+      if (!okPlayers) continue;
+      obstacles.push({
+        id: `ob-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        type,
+        biome: OBSTACLE_BIOME[type] || "desert",
+        x,
+        y,
+        r,
+        s
+      });
+    }
+  }
+
+  function trySpawnItemsHost(){
+    if (!isWorldAuthority()) return;
+    ensureObstacles();
+    const baseArea = 1100 * 520;
+    const worldArea = WORLD_W * WORLD_H;
+    // spawn muito mais denso em mapas grandes (alvo por área)
+    // Ex.: 6000x3200 ~= 19.2M => ~43 itens simultâneos (fora cocos permanentes)
+    const desiredTimed = clamp(Math.round(worldArea / 450000), 10, 90);
+    const desiredCoco = clamp(Math.round(desiredTimed / 12), 2, 10);
+
+    const cocoCount = items.filter(it => it.type === "coco").length;
+    const now = Date.now();
+    const cocoInterval = clamp(Math.round(9000 / desiredCoco), 2500, 9000);
+    if (cocoCount < desiredCoco && (now - lastCocoSpawn > cocoInterval)) {
+      spawnItemLocal("coco");
+      lastCocoSpawn = now;
+    }
+    const timedCount = items.filter(it => it.type !== "coco" && it.expires != null).length;
+    const deficit = desiredTimed - timedCount;
+    if (deficit <= 0) return;
+    const pool = ITEM_TYPES.filter(t => t !== "coco");
+    // repõe vários por tick para chegar no alvo mesmo com TTL curto
+    const perTick = Math.min(4, deficit);
+    for (let i = 0; i < perTick; i++) {
+      const picked = pool[Math.floor(Math.random() * pool.length)];
+      spawnItemLocal(picked);
+    }
+  }
+
+  function applyEffect(p, type, meta = null){
+    const now = Date.now();
+    if (type === "milk") p.tinyUntil = now + (ITEM_EFFECTS.milk.tinyMs);
+    if (type === "cocktail") p.bigUntil = now + (ITEM_EFFECTS.cocktail.bigMs);
+    if (type === "car") p.speedUntil = now + (ITEM_EFFECTS.car.speedMs);
+    if (type === "butter") {
+      p.butterUntil = now + (ITEM_EFFECTS.butter.slideMs || 10000);
+      p.butterVx = 0;
+      p.butterVy = 0;
+    }
+    if (type === "butter") p.butterUntil = now + (ITEM_EFFECTS.butter.slideMs || 10000);
+    if (type === "coco") {
+      const charges = ITEM_EFFECTS.coco.poopCharges || 5;
+      p.poopCharges = (p.poopCharges || 0) + charges;
+      p.lastPoopX = p.rx ?? p.x ?? 0;
+      p.lastPoopY = p.ry ?? p.y ?? 0;
+      p.poopLastDrop = Date.now();
+    }
+    if (type === "radioactive") {
+      const until = (meta && meta.until != null) ? (Number(meta.until) || 0) : (now + (ITEM_EFFECTS.radioactive.ms || 15000));
+      p.radioactiveUntil = Math.max(Number(p.radioactiveUntil) || 0, until);
+    }
+  }
+
+  function handleItemPickup(itemId, pickerSid){
+    const idx = items.findIndex(it => it.id === itemId);
+    if (idx === -1) return;
+    const item = items[idx];
+    items.splice(idx,1);
+    const target = findPlayerBySid(pickerSid) || players.get(pickerSid) || players.get(SELF_ID);
+    let extra = {};
+    if (target) {
+      if (item.type === "radioactive") {
+        // ao pegar: consome 1 vida imediatamente; se sobreviver, ganha nuvem por 15s
+        applyDamageAuthoritative(String(pickerSid || ""), 1, null);
+        const t = findPlayerBySid(pickerSid) || players.get(pickerSid) || players.get(SELF_ID);
+        extra.until = 0;
+        if (t && !isDead(t)) {
+          const until = Date.now() + (ITEM_EFFECTS.radioactive.ms || 15000);
+          t.radioactiveUntil = Math.max(Number(t.radioactiveUntil) || 0, until);
+          extra.until = until;
+        }
+      } else {
+        applyEffect(target, item.type);
+      }
+    }
+    // World authority notifies others
+    if (isWorldAuthority()) {
+      const payload = { type: "item-apply", id: item.id, effect: item.type, sid: pickerSid, ...extra };
+      if (sendItemAction) {
+        try { sendItemAction(payload); } catch(e) { console.warn("peer-arena item apply send failed", e); }
+      }
+      try { sendState && sendState(payload); } catch(_) {}
+      broadcastState(true, true);
+    }
+  }
+
+  function checkItemCollisions(){
+    if (!isPhasePlaying()) return;
+    const me = players.get(SELF_ID) || upsertSelfPosition();
+    if (isDead(me)) return;
+    items.forEach(it => {
+      const dx = me.x - it.x;
+      const dy = me.y - it.y;
+      const reach = ITEM_RADIUS * 2 * scaleFor(me);
+      if (Math.hypot(dx, dy) <= reach) {
+        const mySid = SELF_ID;
+        if (it.type === "coco" && it.owner && it.owner === mySid) return;
+        if (isWorldAuthority()) {
+          handleItemPickup(it.id, SELF_ID);
+        } else {
+          trySendItemPick(it.id, SELF_ID);
+        }
+      }
+    });
+  }
+
+  // selectors
+  let isRollingLook = false;
+  function updateAvatarFromControls(arg = null) {
+    const opts = (arg && typeof arg === "object" && !("target" in arg))
+      ? arg
+      : {};
+    const shouldBroadcast = opts.broadcast !== false;
+    const shouldSave = opts.save !== false;
+    const gender = genderSel.value || EMOJI_MAP.base;
+    // Tom de pele agora nunca é desabilitado: mesmo que o avatar não suporte,
+    // ele pode ser usado para 🦶/🦵 (pé/perna) e fica persistido como preferência.
+    setToneDisabled(false);
+    preferredTone = getToneValue();
+    const tone = preferredTone || "";
+    const head = headSel ? (headSel.value || "") : "";
+    const acc = accSel ? (accSel.value || "") : "";
+    const shoe = shoeSel ? (shoeSel.value || "") : "";
+    renderPreview();
+    if (shouldSave) savePrefs({ gender, tone: preferredTone, head, shoe, acc });
+    upsertSelfPosition(0,0);
+    const me = players.get(SELF_ID);
+    if (me) me.tone = tone;
+    if (shouldBroadcast) broadcastState(true);
+    refreshLobbyUI();
+  }
+  genderSel.addEventListener("change", updateAvatarFromControls);
+  if (toneButtons.length) {
+    toneButtons.forEach(btn => {
+      btn.addEventListener("click", () => {
+        const toneVal = btn.dataset.tone || "";
+        preferredTone = toneVal;
+        setToneValue(toneVal);
+        updateAvatarFromControls();
+      });
+    });
+  }
+  if (headSel) headSel.addEventListener("change", updateAvatarFromControls);
+  if (accSel) accSel.addEventListener("change", updateAvatarFromControls);
+  if (shoeSel) shoeSel.addEventListener("change", updateAvatarFromControls);
+  if (nameInput) {
+    nameInput.addEventListener("change", updateAvatarFromControls);
+    nameInput.addEventListener("input", () => {
+      const self = players.get(SELF_ID);
+      const nm = (nameInput.value || "").trim();
+      const trInput = document.getElementById('tr-username');
+      if (trInput) {
+        trInput.value = nm;
+        trInput.dispatchEvent(new Event('input', { bubbles: true }));
+        trInput.dispatchEvent(new Event('change', { bubbles: true }));
+        try {
+          const st = JSON.parse(localStorage.getItem('trystero_widget_state_v5') || '{}') || {};
+          st.name = nm;
+          localStorage.setItem('trystero_widget_state_v5', JSON.stringify(st));
+        } catch {}
+      }
+      if (self) { self.name = getUsername(); self.ts = Date.now(); }
+      broadcastState(true);
+    });
+  }
+
+  if (readyBtn) {
+    readyBtn.addEventListener("click", () => {
+      setReady(!selfReady);
+    });
+  }
+  if (addBotBtn) {
+    addBotBtn.addEventListener("click", () => {
+      spawnBot();
+    });
+  }
+  if (clearBotsBtn) {
+    clearBotsBtn.addEventListener("click", () => {
+      clearBots();
+    });
+  }
+  window.addEventListener("peer-arena:bot-control", (ev) => {
+    const action = String(ev?.detail?.action || "").toLowerCase();
+    if (action === "add") spawnBot();
+    if (action === "clear") clearBots();
+    if (action === "self-kill" && isWorldAuthority()) {
+      const self = players.get(SELF_ID) || upsertSelfPosition();
+      if (self && !isDead(self)) {
+        applyDamageAuthoritative(String(self.sid || SELF_ID), MAX_HP + BONUS_HP_MAX, null);
+      }
+    }
+    if (action === "force-start" && isWorldAuthority()) {
+      setGamePhase(PHASE_PLAYING, 0);
+      broadcastState(true, true);
+    }
+    if (action === "respawn" && isWorldAuthority()) {
+      const self = players.get(SELF_ID) || upsertSelfPosition();
+      if (self) applyHealAuthoritative(String(self.sid || SELF_ID), MAX_HP + BONUS_HP_MAX);
+    }
+    if (action === "heal" && isWorldAuthority()) {
+      const self = players.get(SELF_ID) || upsertSelfPosition();
+      if (self) applyHealAuthoritative(String(self.sid || SELF_ID), 1);
+    }
+    if (action === "damage" && isWorldAuthority()) {
+      const self = players.get(SELF_ID) || upsertSelfPosition();
+      if (self) applyDamageAuthoritative(String(self.sid || SELF_ID), 1, null);
+    }
+  });
+
+  function pickRandomSelectValue(selectEl) {
+    if (!selectEl || !selectEl.options || !selectEl.options.length) return "";
+    const idx = Math.floor(Math.random() * selectEl.options.length);
+    return String(selectEl.options[idx].value || "");
+  }
+
+  function syncEmojiSelectIfPresent(selectEl) {
+    if (!selectEl || !selectEl.closest) return;
+    const wrapper = selectEl.closest(".emoji-select");
+    if (wrapper) syncEmojiSelectUI(wrapper, selectEl);
+  }
+
+  function randomizeLookControls() {
+    if (genderSel) genderSel.value = pickRandomSelectValue(genderSel);
+    if (toneButtons.length) {
+      const idx = Math.floor(Math.random() * toneButtons.length);
+      const toneVal = String(toneButtons[idx].dataset.tone || "");
+      setToneValue(toneVal);
+    }
+    if (headSel) { headSel.value = pickRandomSelectValue(headSel); syncEmojiSelectIfPresent(headSel); }
+    if (accSel) { accSel.value = pickRandomSelectValue(accSel); syncEmojiSelectIfPresent(accSel); }
+    if (shoeSel) { shoeSel.value = pickRandomSelectValue(shoeSel); syncEmojiSelectIfPresent(shoeSel); }
+  }
+
+  let rollRaf = 0;
+  let rollStartMs = 0;
+  let rollLastMs = 0;
+
+  function stopRoll(finalize = true) {
+    if (!isRollingLook) return;
+    isRollingLook = false;
+    if (rollRaf) cancelAnimationFrame(rollRaf);
+    rollRaf = 0;
+    if (finalize) updateAvatarFromControls({ broadcast: true, save: true });
+  }
+
+  function rollStep(now) {
+    if (!isRollingLook) return;
+    const elapsed = now - rollStartMs;
+    const delay = Math.max(28, 180 * Math.exp(-elapsed / 520)); // acelera ao segurar
+    if (now - rollLastMs >= delay) {
+      rollLastMs = now;
+      randomizeLookControls();
+      updateAvatarFromControls({ broadcast: false, save: false });
+    }
+    rollRaf = requestAnimationFrame(rollStep);
+  }
+
+  if (randomizeBtn) {
+    randomizeBtn.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      try { randomizeBtn.setPointerCapture(e.pointerId); } catch {}
+      if (isRollingLook) return;
+      isRollingLook = true;
+      const now = performance.now();
+      rollStartMs = now;
+      rollLastMs = now - 9999;
+      randomizeLookControls();
+      updateAvatarFromControls({ broadcast: false, save: false });
+      rollRaf = requestAnimationFrame(rollStep);
+    });
+    randomizeBtn.addEventListener("pointerup", () => stopRoll(true));
+    randomizeBtn.addEventListener("pointercancel", () => stopRoll(true));
+    randomizeBtn.addEventListener("pointerleave", () => stopRoll(true));
+  }
+  window.addEventListener("blur", () => stopRoll(true));
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") stopRoll(true);
+  });
+  setAvatarControlsFromPrefs();
+  upsertSelfPosition(0,0);
+  refreshLobbyUI();
+  ensureObstacles();
+  broadcastState(true);
+
+  function bindRoom(room) {
+    if (!room || room === boundRoom) return;
+    boundRoom = room;
+    try {
+      const pair = room.makeAction("pa");
+      sendState = pair && pair[0] ? pair[0] : null;
+      const onState = pair && pair[1] ? pair[1] : null;
+      if (typeof onState === "function") {
+        onState((data, peerId) => handleIncoming(data, peerId));
+      }
+      const bulletPair = room.makeAction("pa-b");
+      sendBulletAction = bulletPair && bulletPair[0] ? bulletPair[0] : null;
+      const onBullet = bulletPair && bulletPair[1] ? bulletPair[1] : null;
+      if (typeof onBullet === "function") {
+        onBullet((data, peerId) => {
+          if (data && data.type === "bullet") handleIncoming(data, peerId);
+        });
+      }
+      const itemPair = room.makeAction("pa-i");
+      sendItemAction = itemPair && itemPair[0] ? itemPair[0] : null;
+      const onItem = itemPair && itemPair[1] ? itemPair[1] : null;
+      if (typeof onItem === "function") {
+        onItem((data) => {
+          if (!data || typeof data !== "object") return;
+          if (data.type === "item-pick" && isWorldAuthority()) {
+            handleItemPickup(data.id, data.sid);
+          } else if (data.type === "item-apply") {
+            const tgt = findPlayerBySid(data.sid) || players.get(data.sid) || (data.sid === SELF_ID ? players.get(SELF_ID) : null);
+            if (tgt) {
+              applyEffect(tgt, data.effect);
+              tgt.ts = Date.now();
+            }
+            if (data.sid === SELF_ID) broadcastState(true, true);
+          }
+        });
+      }
+      broadcastState(true);
+    } catch(e) {
+      console.warn("peer-arena bind error", e);
+    }
+  }
+
+  function unbindRoom() {
+    boundRoom = null;
+    sendState = null;
+    sendBulletAction = null;
+    sendItemAction = null;
+  }
+
+  window.addEventListener("trystero:room", (evt) => {
+    const room = evt?.detail?.room || null;
+    if (room) bindRoom(room);
+    else unbindRoom();
+  });
+
+  if (window.__TRYSTERO_ROOM__) {
+    bindRoom(window.__TRYSTERO_ROOM__);
+  }
+
+  setInterval(() => {
+    if (isMoving) return;
+    upsertSelfPosition(0,0);
+    broadcastState(false, false);
+  }, IDLE_PING_MS);
+
+  setInterval(() => sweep(), SWEEP_MS);
+
+  requestAnimationFrame(draw);
+
+  setInterval(() => {
+    if (isWorldAuthority() && isPhasePlaying()) trySpawnItemsHost();
+  }, 1200);
+
+  setInterval(() => {
+    if (isWorldAuthority() && isPhasePlaying()) {
+      items = items.filter(it => {
+        if (it.expires == null) return true;
+        return (it.expires || 0) > Date.now();
+      });
+    }
+  }, 1200);
+})();
+</script>

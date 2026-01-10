@@ -83,6 +83,37 @@
     portOpening: null
   };
 
+  const SERIAL_BUS_KEY = "__SERIAL_RX_LISTENERS__";
+  window[SERIAL_BUS_KEY] = window[SERIAL_BUS_KEY] || [];
+
+  function ensureSerialBusHelpers() {
+    if (typeof window.addSerialRxListener !== "function") {
+      window.addSerialRxListener = function(listener) {
+        if (typeof listener !== "function") return () => {};
+        const list = window[SERIAL_BUS_KEY];
+        if (!list.includes(listener)) list.push(listener);
+        return () => {
+          const idx = list.indexOf(listener);
+          if (idx >= 0) list.splice(idx, 1);
+        };
+      };
+    }
+
+    if (typeof window.removeSerialRxListener !== "function") {
+      window.removeSerialRxListener = function(listener) {
+        if (typeof listener !== "function") return;
+        const list = window[SERIAL_BUS_KEY];
+        const idx = list.indexOf(listener);
+        if (idx >= 0) list.splice(idx, 1);
+      };
+    }
+  }
+
+  ensureSerialBusHelpers();
+  try {
+    window.dispatchEvent(new Event("serial-bus-ready"));
+  } catch(_) {}
+
   function log(msg, level = "info") {
     try {
       if (window.appLog) window.appLog(msg, level);
@@ -204,6 +235,13 @@
 
   function dispatchSerialLine(line) {
     try {
+      const listeners = window[SERIAL_BUS_KEY];
+      if (Array.isArray(listeners) && listeners.length) {
+        listeners.slice().forEach((cb) => {
+          try { cb(line); } catch(_) {}
+        });
+      }
+
       if (typeof window.logSerialLine === "function") {
         // Log module already formats/prints; avoid duplicar aqui
         window.logSerialLine(line);
@@ -1041,5 +1079,191 @@
   window.addEventListener?.("serial-disconnected", () => appendLine("Porta desconectada.", "in"));
 
   view.style.whiteSpace = cbWrap.checked ? "pre-wrap" : "pre";
+})();
+</script>
+<div class="host-only">
+  <div class="card p-3">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <h5 class="m-0"><i class="fa-solid fa-clipboard-list me-2"></i>Log</h5>
+      <div class="d-flex flex-wrap gap-2 align-items-center">
+        <div class="form-check form-switch m-0">
+          <input class="form-check-input" type="checkbox" id="lmTimestamps" checked />
+          <label class="form-check-label small" for="lmTimestamps">Timestamps</label>
+        </div>
+        <div class="form-check form-switch m-0 ms-2">
+          <input class="form-check-input" type="checkbox" id="lmWrap" checked />
+          <label class="form-check-label small" for="lmWrap">Quebra</label>
+        </div>
+        <div class="ms-2 d-flex align-items-center gap-1">
+          <label class="small">N├¡vel</label>
+          <select id="lmLevel" class="form-select form-select-sm" style="width:auto;">
+            <option value="all" selected />Tudo
+            <option value="info" />Info
+            <option value="warn" />Warn
+            <option value="error" />Error
+          </select>
+        </div>
+        <button id="lmPause" class="btn btn-sm btn-outline-light">Pausar</button>
+        <button id="lmClear" class="btn btn-sm btn-outline-light">Limpar</button>
+        <button id="lmCopy" class="btn btn-sm btn-outline-light">Copiar</button>
+        <button id="lmSave" class="btn btn-sm btn-outline-light">Salvar .txt</button>
+      </div>
+    </div>
+
+    <div id="lmView" class="border rounded p-2 bg-black text-monospace"
+         style="height: 260px; overflow:auto; white-space: pre-wrap;"></div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const view = $("#lmView");
+  const btnPause = $("#lmPause");
+  const btnClear = $("#lmClear");
+  const btnCopy  = $("#lmCopy");
+  const btnSave  = $("#lmSave");
+  const cbTs   = $("#lmTimestamps");
+  const cbWrap = $("#lmWrap");
+  const selLvl = $("#lmLevel");
+
+  let paused = false;
+  let autoscroll = true;
+  let filterLevel = "all";
+  const buffer = []; // mant├®m texto para copiar/salvar
+
+  function nowTs() {
+    const d = new Date();
+    const pad = n => String(n).padStart(2, "0");
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+
+  function levelAllows(level) {
+    if (filterLevel === "all") return true;
+    return level === filterLevel;
+  }
+
+  function colorFor(level) {
+    if (level === "error") return "#ff6b6b";
+    if (level === "warn")  return "#ffd166";
+    return "#9ad1ff";
+  }
+
+  function appendLine(text, level="info") {
+    if (!levelAllows(level)) return;
+    if (paused) return;
+
+    const line = document.createElement("div");
+    line.className = "lm-line";
+    const ts = cbTs.checked ? `[${nowTs()}] ` : "";
+    line.textContent = `${ts}${level.toUpperCase()}: ${text}`;
+    line.style.color = colorFor(level);
+    view.appendChild(line);
+
+    // guarda vers├úo ÔÇ£cruaÔÇØ (sem cor) para export/copy
+    buffer.push(`${ts}${level.toUpperCase()}: ${text}`);
+
+    if (autoscroll) view.scrollTop = view.scrollHeight;
+  }
+
+  // Controles UI
+  btnPause.addEventListener("click", () => {
+    paused = !paused;
+    btnPause.textContent = paused ? "Continuar" : "Pausar";
+  });
+  btnClear.addEventListener("click", () => { view.innerHTML = ""; buffer.length = 0; });
+  btnCopy.addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(buffer.join("\n")); btnCopy.textContent = "Copiado!"; setTimeout(()=>btnCopy.textContent="Copiar",1200); }
+    catch { /* ignore */ }
+  });
+  btnSave.addEventListener("click", () => {
+    const blob = new Blob([buffer.join("\n")], {type:"text/plain"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `log_${new Date().toISOString().replace(/[:.]/g,"-")}.txt`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+  });
+  cbWrap.addEventListener("change", () => {
+    view.style.whiteSpace = cbWrap.checked ? "pre-wrap" : "pre";
+  });
+  selLvl.addEventListener("change", () => {
+    filterLevel = selLvl.value;
+    // Re-render simples (limpa e repopula do buffer conforme filtro)
+    const snapshot = buffer.slice();
+    view.innerHTML = "";
+    for (const line of snapshot) {
+      const level = line.includes("ERROR:") ? "error" : line.includes("WARN:") ? "warn" : "info";
+      if (levelAllows(level)) {
+        const div = document.createElement("div");
+        div.className = "lm-line";
+        div.textContent = line;
+        div.style.color = colorFor(level);
+        view.appendChild(div);
+      }
+    }
+    view.scrollTop = view.scrollHeight;
+  });
+
+  // Autoscroll on/off baseado na rolagem
+  view.addEventListener("scroll", () => {
+    const nearBottom = view.scrollHeight - view.scrollTop - view.clientHeight < 8;
+    autoscroll = nearBottom;
+  });
+
+  // ===== API Global =====
+  // appLog(msg, level="info") ÔÇö n├¡vel: "info"|"warn"|"error"
+  // Tamb├®m aceita CustomEvent('app-log', {detail:{msg, level}})
+  const originalConsole = {
+    log:   console.log.bind(console),
+    warn:  console.warn.bind(console),
+    error: console.error.bind(console),
+  };
+
+  function appLog(msg, level="info") {
+    try {
+      let text = "";
+      if (msg instanceof Error) {
+        text = `${msg.name || "Error"}: ${msg.message}`;
+      } else if (typeof msg === "object") {
+        text = JSON.stringify(msg);
+      } else {
+        text = String(msg);
+      }
+      appendLine(text, level);
+    } catch(_) {}
+  }
+
+  // exp├Áe global
+  window.appLog = appLog;
+
+  // escuta eventos personalizados
+  window.addEventListener("app-log", (ev) => {
+    const d = ev?.detail || {};
+    appLog(d.msg, d.level || "info");
+  });
+
+  // espelha console.* no painel, preservando comportamento original
+  console.log = (...args) => { originalConsole.log(...args); appLog(args.map(String).join(" "), "info"); };
+  console.warn = (...args) => { originalConsole.warn(...args); appLog(args.map(String).join(" "), "warn"); };
+  console.error = (...args) => { originalConsole.error(...args); appLog(args.map(String).join(" "), "error"); };
+
+  // Integra├º├úo opcional: tamb├®m mostra linhas vindas do Serial (se existir)
+  const prevLogSerialLine = window.logSerialLine;
+  window.logSerialLine = function(line){
+    try {
+      if (line != null && line !== "") {
+        const parts = String(line).replace(/\r\n/g,"\n").replace(/\r/g,"\n").split("\n");
+        for (const p of parts) if (p.length) appLog(`SERIAL: ${p}`, "info");
+      }
+    } catch(_) {}
+    if (typeof prevLogSerialLine === "function") prevLogSerialLine(line);
+  };
+
+  // Estado inicial
+  view.style.whiteSpace = cbWrap.checked ? "pre-wrap" : "pre";
+
+  // Mensagem inicial
+  appLog("Monitor de LOG iniciado.", "info");
 })();
 </script>

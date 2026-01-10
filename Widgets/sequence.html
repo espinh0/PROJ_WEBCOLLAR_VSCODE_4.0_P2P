@@ -1,5 +1,179 @@
 <!-- SEQUENCIADOR DE PULSOS v1.3 — UI com emojis grandes e sem &#8226; -->
 <style>
+  .pulse-card {
+    display:flex;
+    align-items:stretch;
+    border: 1px solid #2a2a2e;
+    border-radius: 12px;
+    overflow:hidden;
+    background:#17171b;
+    --pc-color:#60a5fa;
+    transition: border-color .2s ease, transform .2s ease, box-shadow .2s ease;
+    user-select:none;
+    cursor:grab;
+    color:#e9edf7;
+    font-size:1rem;
+  }
+
+  .pulse-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 18px rgba(0,0,0,.25);
+  }
+
+  .pulse-card.selected {
+    box-shadow: 0 0 0 2px rgba(96,165,250,0.4), 0 8px 18px rgba(0,0,0,.35);
+  }
+
+  .pulse-card.is-active {
+    border-width:2px;
+    border-color:#ef4444;
+    box-shadow: 0 0 0 3px rgba(239,68,68,0.55), 0 15px 28px rgba(0,0,0,0.45);
+  }
+
+  .pulse-card .pc-btn-content {
+    display:flex;
+    align-items:center;
+    gap:14px;
+    padding:8px 12px;
+    background:transparent;
+    flex:1;
+  }
+
+  .pulse-card .pc-details {
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+    align-items:flex-start;
+  }
+
+  .pulse-card .pc-level {
+    font-size:2.6rem;
+    font-weight:700;
+    line-height:1;
+    color: var(--pc-color, #fcd34d);
+    min-width:70px;
+    text-align:center;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:.45em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .pulse-card .pc-level-value {
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    line-height:1;
+    font-size:inherit;
+  }
+
+  .pulse-card .pc-level-icon,
+  .pulse-card .pc-icon-only {
+    min-width:70px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+
+  .pulse-card .pc-mode {
+    display:flex;
+    align-items:center;
+    justify-content:flex-start;
+    line-height:1;
+    gap:6px;
+    width:100%;
+  }
+
+  .pulse-card .pc-mode-icon {
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:1.3rem;
+    color: var(--pc-color, #fcd34d);
+    line-height:1;
+  }
+
+  .pulse-card .pc-level-icon .pc-mode-icon,
+  .pulse-card .pc-icon-only .pc-mode-icon {
+    width:52px;
+    height:52px;
+    border-radius:50%;
+    background: rgba(5,5,7,0.9);
+    border:2px solid var(--pc-color, #fcd34d);
+    font-size:1.4rem;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    box-shadow:0 0 12px rgba(0,0,0,0.35);
+  }
+
+  .pulse-card .pc-level-icon .pc-mode-icon {
+    font-size:1.1rem;
+  }
+
+  .pulse-card .pc-mode-icon i {
+    line-height:1;
+    display:block;
+  }
+
+  .pulse-card .pc-channel {
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    font-size:.72rem;
+    color: rgba(229,231,235,.85);
+    margin-top:2px;
+  }
+
+  .pulse-card .pc-channel.pc-channel-plain {
+    font-family:inherit;
+    letter-spacing:.02em;
+    text-transform:none;
+    gap:4px;
+    font-size:.85rem;
+    color:rgba(229,231,235,.9);
+  }
+
+  .pulse-card .pc-channel-value {
+    width:30px;
+    height:30px;
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:.9rem;
+    font-weight:700;
+    letter-spacing:.04em;
+    background: rgba(5,5,7,0.9);
+    color: var(--pc-color, #fcd34d);
+    border:2px solid var(--pc-color, #fcd34d);
+    box-shadow: 0 0 10px rgba(0,0,0,0.35);
+  }
+
+  .pulse-card .pc-meta {
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:0 14px;
+    border-left:1px solid rgba(255,255,255,0.08);
+    background: rgba(0,0,0,0.3);
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size:.85rem;
+  }
+
+  .pulse-card .pc-duration {
+    color:#e5e7eb;
+    letter-spacing:.04em;
+  }
+
+  .pulse-card .pc-btn-content.pc-no-level {
+    justify-content:flex-start;
+  }
+
   /* Escopo só dentro do widget */
   #pulseSequencer .ps-emoji-lg {
     font-size: 1.25rem;
@@ -21,10 +195,6 @@
     gap: 4px;
   }
 
-  /* Slider "apagado" quando desativado */
-  #pulseSequencer #edLevelGroup.opacity-50 {
-    opacity: 0.45;
-  }
 </style>
 
 <div class="card shadow-sm mt-3" id="pulseSequencer" style="background:#111;border:1px solid #333;border-radius:.75rem;color:#e5e7eb;">
@@ -39,6 +209,9 @@
       </button>
       <button id="btnAddPause" class="btn btn-sm btn-outline-secondary">
         <span class="ps-emoji-lg me-1">⏸️</span> Pausa
+      </button>
+      <button id="btnAddRoulette" class="btn btn-sm btn-outline-warning">
+        <span class="ps-emoji-lg me-1">🎲</span> Roleta
       </button>
     </div>
   </div>
@@ -73,7 +246,7 @@
 
     <div class="row g-3">
       <!-- Tipo: Pulso / Pausa -->
-      <div class="col-12 col-md-3">
+      <div class="col-12 col-md-4">
         <label class="form-label small d-block mb-1">Tipo</label>
         <div class="btn-group w-100" role="group" aria-label="Tipo do bloco">
           <input type="radio" class="btn-check" name="edTypeRadio" id="edTypePulse" value="PULSE" autocomplete="off">
@@ -85,62 +258,30 @@
           <label class="btn btn-sm btn-outline-light" for="edTypePause">
             <span class="ps-emoji-lg">⏸️</span> Pausa
           </label>
-        </div>
-      </div>
 
-      <!-- Modo: BEEP / VIBRATION / SHOCK / LIGHT -->
-      <div class="col-12 col-md-5">
-        <label class="form-label small d-block mb-1">Modo</label>
-        <div id="edModeGroup" class="btn-group w-100" role="group" aria-label="Modo de pulso">
-          <input type="radio" class="btn-check" name="edModeRadio" id="edModeBeep" value="BEEP" autocomplete="off">
-          <label class="btn btn-sm btn-outline-light" for="edModeBeep" title="Som">
-            <span class="ps-emoji-lg">🔊</span> BEEP
+          <input type="radio" class="btn-check" name="edTypeRadio" id="edTypeRoulette" value="ROULETTE" autocomplete="off">
+          <label class="btn btn-sm btn-outline-light" for="edTypeRoulette">
+            <span class="ps-emoji-lg">🎲</span> Roleta
           </label>
-
-          <input type="radio" class="btn-check" name="edModeRadio" id="edModeVib" value="VIBRATION" autocomplete="off">
-          <label class="btn btn-sm btn-outline-light" for="edModeVib" title="Vibração">
-            <span class="ps-emoji-lg">📳</span> VIBRA
-          </label>
-
-          <input type="radio" class="btn-check" name="edModeRadio" id="edModeShock" value="SHOCK" autocomplete="off">
-          <label class="btn btn-sm btn-outline-light" for="edModeShock" title="Choque">
-            <span class="ps-emoji-lg">⚡</span> SHOCK
-          </label>
-
-          <input type="radio" class="btn-check" name="edModeRadio" id="edModeLight" value="LIGHT" autocomplete="off">
-          <label class="btn btn-sm btn-outline-light" for="edModeLight" title="Luz">
-            <span class="ps-emoji-lg">💡</span> LIGHT
-          </label>
-        </div>
-      </div>
-
-      <!-- Canal: 1 / 2 -->
-      <div class="col-12 col-md-2">
-        <label class="form-label small d-block mb-1">Canal</label>
-        <div class="btn-group w-100" role="group" aria-label="Canal">
-          <input type="radio" class="btn-check" name="edChannelRadio" id="edChannel1" value="1" autocomplete="off">
-          <label class="btn btn-sm btn-outline-light" for="edChannel1">CH1</label>
-
-          <input type="radio" class="btn-check" name="edChannelRadio" id="edChannel2" value="2" autocomplete="off">
-          <label class="btn btn-sm btn-outline-light" for="edChannel2">CH2</label>
         </div>
       </div>
 
       <!-- Duração -->
-      <div class="col-6 col-md-2">
+      <div class="col-6 col-md-3">
         <label class="form-label small">Duração (s)</label>
         <input id="edDuration" type="number" min="0.05" step="0.05" class="form-control form-control-sm" value="0.5" />
       </div>
 
-      <!-- Nível (slider) -->
-      <div class="col-12" id="edLevelGroup">
-        <label class="form-label small d-flex justify-content-between align-items-center mb-1">
-          <span>Nível (para <span class="ps-emoji-lg">📳</span> / <span class="ps-emoji-lg">⚡</span>)</span>
-          <span class="text-secondary">
-            <span id="edLevelValue">0</span>%
-          </span>
-        </label>
-        <input id="edLevel" type="range" min="0" max="100" step="1" class="form-range" value="0" />
+      <!-- Configuração trazida do Main Control -->
+      <div class="col-12 col-md-5">
+        <label class="form-label small d-block mb-1">Modo/Nível/Canal</label>
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+          <div class="text-secondary small" id="edControlPreview">Selecione um bloco.</div>
+          <button id="btnSyncControl" type="button" class="btn btn-sm btn-outline-light">
+            <i class="fa-solid fa-arrows-rotate"></i> Aplicar do controle
+          </button>
+        </div>
+        <small class="text-muted d-block mt-1">Use o Main Control para definir o modo, nível e canal e clique para sincronizar.</small>
       </div>
     </div>
     </div>
@@ -153,39 +294,53 @@
   const PATH_MESSAGES = "livechat_v1/messages";
   const $  = s => document.querySelector(s);
   const $$ = s => document.querySelectorAll(s);
-  const log = (m,l="info") => { try{ window.appLog ? window.appLog(m,l) : console.log(m);}catch{} };
+  const log = (m, l = "info") => {
+        try {
+          window.appLog ? window.appLog(m, l) : console.log(m);
+        } catch {}
+      };
 
-  function getRoomRef(){
-    if (!window.firebase || !firebase.apps || !firebase.apps.length) {
-      throw new Error("Firebase não inicializado (carregue o chat antes).");
-    }
-    return firebase.database().ref(PATH_MESSAGES);
-  }
+  function getRoomRef() {
+        if (!window.firebase || !firebase.apps || !firebase.apps.length) {
+          throw new Error("Firebase não inicializado (carregue o chat antes).");
+        }
+        return firebase.database().ref(PATH_MESSAGES);
+      }
   const CID_KEY = "lc_cid";
   const cid = sessionStorage.getItem(CID_KEY) || ("c_" + Math.random().toString(36).slice(2));
   sessionStorage.setItem(CID_KEY, cid);
 
-  async function pushToChat(text){
-    if (!text || !text.trim()) return;
-    const roomRef = getRoomRef();
-    const msgRef = roomRef.push();
-    try { msgRef.onDisconnect().remove(); } catch(_) {}
-    await msgRef.set({
-      text: text.slice(0,400),
-      ts: firebase.database.ServerValue.TIMESTAMP,
-      cid: cid
-    });
-    log(`CHAT ⇢ ${text}`);
-  }
+  async function pushToChat(text) {
+        if (!text || !text.trim()) return;
+        const roomRef = getRoomRef();
+        const msgRef = roomRef.push();
+        try {
+          msgRef.onDisconnect().remove();
+        } catch (_) {}
+        await msgRef.set({
+          text: text.slice(0, 400),
+          ts: firebase.database.ServerValue.TIMESTAMP,
+          cid: cid
+        });
+        log(`CHAT ⇢ ${text}`);
+      }
 
   // ====== Integração com o controle (valores default) ======
-  const readMode    = () => window.currentMode || "BEEP";
-  const readLevel   = () => Number.isFinite(window.level) ? window.level : 0;
-  const readChannel = () => Number.isFinite(window.channel) ? window.channel : 1;
+  const readMode    = () => (window.currentMode || "BEEP").toUpperCase();
+  const readLevel   = () => {
+        const n = Number(window.level);
+        return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 0;
+      };
+  const readChannel = () => {
+        const n = Number(window.channel);
+        return Number.isFinite(n) ? Math.max(1, Math.min(99, n)) : 1;
+      };
 
   // ====== Estado do sequenciador ======
-  let blocks = []; // {id, type: 'PULSE'|'PAUSE', mode, level, channel, duration}
+  let blocks = []; // {id, type: 'PULSE'|'PAUSE'|'ROULETTE', mode, level, channel, duration}
   let selectedId = null;
+  let activeBlockId = null;
+  let activeRouletteRun = null;
 
   // Execução
   let isPlaying = false, isPaused = false, loop = false;
@@ -195,6 +350,7 @@
   const timeline  = $("#timeline");
   const btnAddPulse = $("#btnAddPulse");
   const btnAddPause = $("#btnAddPause");
+  const btnAddRoulette = $("#btnAddRoulette");
   const btnPlay   = $("#btnPlay");
   const btnPause  = $("#btnPause");
   const btnResume = $("#btnResume");
@@ -205,361 +361,615 @@
   // Editor
   const editor = $("#blockEditor");
   const edDuration = $("#edDuration");
-  const edLevel = $("#edLevel");
-  const edLevelValue = $("#edLevelValue");
-  const edLevelGroup = $("#edLevelGroup");
   const btnDeleteBlock = $("#btnDeleteBlock");
+  const btnSyncControl = $("#btnSyncControl");
+  const edControlPreview = $("#edControlPreview");
+
+  function setActiveBlock(id) {
+        activeBlockId = id || null;
+        const cards = timeline.querySelectorAll(".pulse-card");
+        cards.forEach((card) => {
+          const isCurrent = !!activeBlockId && card.dataset.id === activeBlockId;
+          card.classList.toggle("is-active", isCurrent);
+        });
+      }
+
+  function updateControlPreview(block) {
+        if (!edControlPreview) return;
+        if (!block) {
+          edControlPreview.textContent = "Selecione um bloco para sincronizar com o controle.";
+          if (btnSyncControl) btnSyncControl.disabled = true;
+          return;
+        }
+
+        const isPause = block.type === "PAUSE";
+        const isRoulette = block.type === "ROULETTE";
+        if (btnSyncControl) btnSyncControl.disabled = isPause || isRoulette;
+
+        if (isPause) {
+          edControlPreview.textContent = `Intervalo · ${fmtDuration(block.duration)}s`;
+          return;
+        }
+
+        if (isRoulette) {
+          edControlPreview.textContent = `Roleta · segurar ${fmtDuration(block.duration)}s`;
+          return;
+        }
+
+        const modeKey = String(block.mode || "").toUpperCase();
+        const modeLabel = MODE_STYLES[modeKey]?.label || modeKey || "Modo";
+        const levelText = ["VIBRATION", "SHOCK"].includes(modeKey) ? `${block.level}%` : "Nível —";
+        edControlPreview.textContent = `${modeLabel} · ${levelText} · CH${block.channel}`;
+      }
 
   // Helpers para radios
   const getEdType = () => {
-    const r = document.querySelector('input[name="edTypeRadio"]:checked');
-    return r ? r.value : "PULSE";
-  };
+        const r = document.querySelector('input[name="edTypeRadio"]:checked');
+        return r ? r.value : "PULSE";
+      };
   const setEdType = (val) => {
-    const r = document.querySelector(`input[name="edTypeRadio"][value="${val}"]`);
-    if (r) r.checked = true;
-  };
-
-  const getEdMode = () => {
-    const r = document.querySelector('input[name="edModeRadio"]:checked');
-    return r ? r.value : "BEEP";
-  };
-  const setEdMode = (val) => {
-    const r = document.querySelector(`input[name="edModeRadio"][value="${val}"]`);
-    if (r) r.checked = true;
-  };
-
-  const getEdChannel = () => {
-    const r = document.querySelector('input[name="edChannelRadio"]:checked');
-    return r ? parseInt(r.value,10) || 1 : 1;
-  };
-  const setEdChannel = (ch) => {
-    const r = document.querySelector(`input[name="edChannelRadio"][value="${ch}"]`);
-    if (r) r.checked = true;
-  };
-
-  function refreshLevelUI(){
-    const type = getEdType();
-    const mode = getEdMode();
-    const active = type === "PULSE" && (mode === "VIBRATION" || mode === "SHOCK");
-    edLevel.disabled = !active;
-    if (edLevelGroup) {
-      edLevelGroup.classList.toggle("opacity-50", !active);
-    }
-  }
+        const r = document.querySelector(`input[name="edTypeRadio"][value="${val}"]`);
+        if (r) r.checked = true;
+      };
 
   const MODE_EMOJI = {
     BEEP: "🔊",
     VIBRATION: "📳",
     SHOCK: "⚡",
-    LIGHT: "💡"
+    LIGHT: "💡",
+    ROULETTE: "🎲"
   };
 
-  const newId = () => "b_" + Math.random().toString(36).slice(2,9);
+  const MODE_STYLES = {
+    SHOCK:     { color: "#f97316", tint: "rgba(249,115,22,0.14)", icon: "fa-bolt-lightning", label: "Choque" },
+    VIBRATION: { color: "#10b981", tint: "rgba(16,185,129,0.14)", icon: "fa-mobile-screen-button", label: "Vibração" },
+    LIGHT:     { color: "#facc15", tint: "rgba(250,204,21,0.16)", icon: "fa-lightbulb", label: "Luz" },
+    BEEP:      { color: "#60a5fa", tint: "rgba(96,165,250,0.16)", icon: "fa-volume-high", label: "Bip" },
+    ROULETTE:  { color: "#f472b6", tint: "rgba(244,114,182,0.18)", icon: "fa-dice", label: "Roleta" },
+    PAUSE:     { color: "#9ca3af", tint: "rgba(156,163,175,0.18)", icon: "fa-pause", label: "Pausa" },
+    DEFAULT:   { color: "#a855f7", tint: "rgba(168,85,247,0.16)", icon: "fa-wave-square", label: "Modo" }
+  };
 
-  function fmtDuration(d){
-    const v = Math.round(d * 100) / 100;
-    return String(v).replace(".", ",");
-  }
+  const newId = () => "b_" + Math.random().toString(36).slice(2, 9);
+
+  const STORE_KEY = "pulseSequencer_blocks_v1";
+
+  function normalizeBlock(raw) {
+        if (!raw || typeof raw !== "object") return null;
+        const type = raw.type === "PAUSE" ? "PAUSE" : (raw.type === "ROULETTE" ? "ROULETTE" : "PULSE");
+        const mode = type === "ROULETTE" ? "ROULETTE" : String(raw.mode || "BEEP").toUpperCase();
+        const levelNum = Number(raw.level);
+        const channelNum = Number(raw.channel);
+        const durationNum = Number(raw.duration);
+        return {
+          id: typeof raw.id === "string" ? raw.id : newId(),
+          type,
+          mode,
+          level: type === "PULSE" ? (Number.isFinite(levelNum) ? Math.max(0, Math.min(100, levelNum)) : 0) : 0,
+          channel: type === "PULSE" ? (Number.isFinite(channelNum) ? Math.max(1, Math.min(99, channelNum)) : 1) : 0,
+          duration: Number.isFinite(durationNum) ? Math.max(0.05, durationNum) : 0.5
+        };
+      }
+
+  function loadBlocksFromStorage() {
+        if (typeof localStorage === "undefined") return;
+        try {
+          const raw = localStorage.getItem(STORE_KEY);
+          if (!raw) return;
+          const parsed = JSON.parse(raw);
+          if (!Array.isArray(parsed)) return;
+          const restored = parsed.map(normalizeBlock).filter(Boolean);
+          blocks = restored;
+        } catch (_) {
+          blocks = [];
+        }
+      }
+
+  function persistBlocks() {
+        if (typeof localStorage === "undefined") return;
+        try {
+          const payload = JSON.stringify(blocks.map(normalizeBlock).filter(Boolean));
+          localStorage.setItem(STORE_KEY, payload);
+        } catch (_) {}
+      }
+
+  function fmtDuration(d) {
+        const v = Math.round(d * 100) / 100;
+        return String(v).replace(".", ",");
+      }
 
   // Texto simples (para status, sem HTML)
-  function formatLabelPlain(b){
-    if (b.type === "PAUSE") {
-      return `Pausa · ${fmtDuration(b.duration)}s`;
-    }
-    const icon = MODE_EMOJI[b.mode] || "🔘";
-    const lvl = (b.mode === "VIBRATION" || b.mode === "SHOCK") ? ` · ${b.level}%` : "";
-    return `${icon} ${b.mode}${lvl} · ch${b.channel} · ${fmtDuration(b.duration)}s`;
-  }
-
-  // HTML para aparecer na timeline (com emoji grande)
-  function formatLabelHtml(b){
-    if (b.type === "PAUSE") {
-      return `<span class="ps-emoji-lg">⏸️</span> Pausa · ${fmtDuration(b.duration)}s`;
-    }
-    const icon = MODE_EMOJI[b.mode] || "🔘";
-    const lvl = (b.mode === "VIBRATION" || b.mode === "SHOCK") ? ` · ${b.level}%` : "";
-    return `<span class="ps-emoji-lg">${icon}</span> ${b.mode}${lvl} · ch${b.channel} · ${fmtDuration(b.duration)}s`;
-  }
-
-  function buildCmdLine(b){
-    const lvl = (b.mode==="VIBRATION"||b.mode==="SHOCK") ? b.level : 0;
-    return `${b.mode},${lvl},${b.channel}`;
-  }
-
-  function render(){
-    timeline.innerHTML = "";
-    blocks.forEach((b) => {
-      const el = document.createElement("div");
-      el.className = "border rounded px-2 py-1 d-flex align-items-center gap-2";
-      el.style.userSelect = "none";
-      el.style.cursor = "grab";
-      el.draggable = true;
-      el.dataset.id = b.id;
-
-      const minw = 80, scale = 40;
-      el.style.minWidth = Math.min(minw + b.duration*scale, 360) + "px";
-
-      const badge = document.createElement("span");
-      badge.className = "badge " + (b.type === "PAUSE" ? "bg-secondary" : "bg-primary");
-      badge.innerHTML = b.type === "PAUSE"
-        ? `<span class="ps-emoji-lg">⏸️</span> Pausa`
-        : `<span class="ps-emoji-lg">⚡</span> Pulso`;
-
-      const label = document.createElement("span");
-      label.className = "small";
-      label.innerHTML = formatLabelHtml(b);   // <-- sem &#8226;, só texto e emoji
-
-      const btnX = document.createElement("button");
-      btnX.className = "btn btn-sm btn-outline-danger ms-auto";
-      btnX.innerHTML = '<i class="fa-solid fa-xmark"></i>';
-      btnX.addEventListener("click", (e) => {
-        e.stopPropagation();
-        removeBlock(b.id);
-      });
-
-      el.appendChild(badge);
-      el.appendChild(label);
-      el.appendChild(btnX);
-
-      el.addEventListener("click", () => selectBlock(b.id));
-
-      el.addEventListener("dragstart", (ev) => {
-        ev.dataTransfer.setData("text/plain", b.id);
-        el.classList.add("opacity-50");
-      });
-      el.addEventListener("dragend", () => el.classList.remove("opacity-50"));
-      el.addEventListener("dragover", (ev) => ev.preventDefault());
-      el.addEventListener("drop", (ev) => {
-        ev.preventDefault();
-        const draggedId = ev.dataTransfer.getData("text/plain");
-        if (!draggedId || draggedId === b.id) return;
-        reorderBlock(draggedId, b.id);
-      });
-
-      if (selectedId === b.id) {
-        el.classList.add("border-2");
-        el.style.borderColor = "var(--bs-info)";
-        el.style.boxShadow = "0 0 0 0.2rem rgba(13,110,253,.15)";
+  function formatLabelPlain(b) {
+        if (b.type === "PAUSE") {
+          return `Pausa · ${fmtDuration(b.duration)}s`;
+        }
+        if (b.type === "ROULETTE") {
+          return `Roleta 🎲 · segurar ${fmtDuration(b.duration)}s`;
+        }
+        const modeKey = String(b.mode || "").toUpperCase();
+        const icon = MODE_EMOJI[modeKey] || "🔘";
+        const modeLabel = MODE_STYLES[modeKey]?.label || modeKey;
+        const lvl = (["VIBRATION", "SHOCK"].includes(modeKey)) ? ` · ${b.level}%` : "";
+        return `${icon} ${modeLabel}${lvl} · ch${b.channel} · ${fmtDuration(b.duration)}s`;
       }
 
-      timeline.appendChild(el);
-    });
+  function buildCmdLine(b) {
+        const lvl = (b.mode === "VIBRATION" || b.mode === "SHOCK") ? b.level : 0;
+        return `${b.mode},${lvl},${b.channel}`;
+      }
 
-    btnPlay.disabled   = isPlaying && !isPaused;
-    btnPause.disabled  = !(isPlaying && !isPaused);
-    btnResume.disabled = !(isPlaying && isPaused);
-    btnStop.disabled   = !isPlaying;
-  }
+  function render() {
+        timeline.innerHTML = "";
+        blocks.forEach((b) => {
+          const el = document.createElement("div");
+          el.className = "pulse-card";
+          el.draggable = true;
+          el.dataset.id = b.id;
 
-  function addPulseFromControl(){
-    const b = {
-      id: newId(),
-      type: "PULSE",
-      mode: readMode(),
-      level: readLevel(),
-      channel: readChannel(),
-      duration: 0.5
-    };
-    blocks.push(b);
-    render();
-    selectBlock(b.id);
-  }
+          const minw = 80,
+            scale = 40;
+          el.style.minWidth = Math.min(minw + b.duration * scale, 360) + "px";
 
-  function addPause(){
-    const b = {
-      id: newId(),
-      type: "PAUSE",
-      mode: "BEEP",
-      level: 0,
-      channel: readChannel(),
-      duration: 0.3
-    };
-    blocks.push(b);
-    render();
-    selectBlock(b.id);
-  }
+           const isRoulette = b.type === "ROULETTE";
+           const modeKey = b.type === "PAUSE" ? "PAUSE" : (isRoulette ? "ROULETTE" : String(b.mode || "").toUpperCase());
+          const modeStyle = MODE_STYLES[modeKey] || MODE_STYLES.DEFAULT;
+          const hideLevel = b.type !== "PULSE" || !["VIBRATION", "SHOCK"].includes(modeKey);
+          const durationLabel = `${fmtDuration(b.duration)}s`;
+           const showChannelBubble = b.type === "PULSE";
+           const channelMarkup = isRoulette
+            ? `<span class="pc-channel pc-channel-plain">Roleta</span>`
+            : (showChannelBubble
+            ? `<span class="pc-channel">
+                  <span>Canal</span>
+                  <span class="pc-channel-value">${b.channel}</span>
+              </span>`
+            : `<span class="pc-channel pc-channel-plain">Intervalo</span>`);
+          const iconMarkup = `<span class="pc-mode-icon"><i class="fa-solid ${modeStyle.icon}"></i></span>`;
+          const levelMarkup = hideLevel ? "" : `<span class="pc-level"><span class="pc-level-value">${b.level}</span><span class="pc-level-icon">${iconMarkup}</span></span>`;
+          const iconOnlyMarkup = hideLevel ? `<span class="pc-icon-only">${iconMarkup}</span>` : "";
 
-  function removeBlock(id){
-    const i = blocks.findIndex(x=>x.id===id);
-    if (i>=0) {
-      blocks.splice(i,1);
-      if (selectedId===id) { selectedId=null; editor.classList.add("d-none"); }
-      render();
-    }
-  }
+          el.style.setProperty("--pc-color", modeStyle.color);
+          el.style.borderColor = modeStyle.color;
+          el.style.background = `linear-gradient(120deg, ${modeStyle.tint}, rgba(12,12,14,0.92))`;
 
-  function selectBlock(id){
-    selectedId = id;
-    const b = blocks.find(x=>x.id===id);
-    if (!b){ editor.classList.add("d-none"); return; }
-    editor.classList.remove("d-none");
+          el.innerHTML = `
+            <div class="pc-btn-content${hideLevel ? " pc-no-level" : ""}">
+              ${levelMarkup || iconOnlyMarkup}
+              <span class="pc-details">
+                <strong class="pc-mode">
+                  ${modeStyle.label}
+                </strong>
+                ${channelMarkup}
+              </span>
+            </div>
+            <div class="pc-meta">
+              <span class="pc-duration">${durationLabel}</span>
+            </div>`;
 
-    setEdType(b.type);
-    setEdMode(b.mode);
-    setEdChannel(b.channel);
-    edDuration.value = b.duration;
-    edLevel.value = b.level;
-    edLevelValue.textContent = b.level;
+          el.addEventListener("click", () => selectBlock(b.id));
 
-    refreshLevelUI();
-    render();
-  }
+          el.addEventListener("dragstart", (ev) => {
+            ev.dataTransfer.setData("text/plain", b.id);
+            el.classList.add("opacity-50");
+          });
+          el.addEventListener("dragend", () => el.classList.remove("opacity-50"));
+          el.addEventListener("dragover", (ev) => ev.preventDefault());
+          el.addEventListener("drop", (ev) => {
+            ev.preventDefault();
+            const draggedId = ev.dataTransfer.getData("text/plain");
+            if (!draggedId || draggedId === b.id) return;
+            reorderBlock(draggedId, b.id);
+          });
 
-  function applyEditor(){
-    const b = blocks.find(x=>x.id===selectedId);
-    if (!b) return;
+          if (selectedId === b.id) {
+            el.classList.add("selected");
+          }
 
-    b.type    = getEdType();
-    b.mode    = getEdMode();
-    b.level   = Math.max(0, Math.min(100, Number(edLevel.value)||0));
-    b.channel = Math.max(1, Math.min(2, getEdChannel()));
-    b.duration= Math.max(0.05, Number(edDuration.value)||0.05);
+          timeline.appendChild(el);
+        });
 
-    edLevelValue.textContent = b.level;
-    refreshLevelUI();
-    render();
-  }
+        setActiveBlock(activeBlockId);
 
-  function reorderBlock(srcId, dstId){
-    const si = blocks.findIndex(x=>x.id===srcId);
-    const di = blocks.findIndex(x=>x.id===dstId);
-    if (si<0 || di<0 || si===di) return;
-    const [moved] = blocks.splice(si,1);
-    blocks.splice(di, 0, moved);
-    render();
-  }
+        const rouletteLock = !!activeRouletteRun;
+        btnPlay.disabled = isPlaying && !isPaused;
+        btnPause.disabled = rouletteLock || !(isPlaying && !isPaused);
+        btnResume.disabled = rouletteLock || !(isPlaying && isPaused);
+        btnStop.disabled = !isPlaying;
+      }
+
+  function addPulseFromControl() {
+        const b = {
+          id: newId(),
+          type: "PULSE",
+          mode: readMode(),
+          level: readLevel(),
+          channel: readChannel(),
+          duration: 0.5
+        };
+        blocks.push(b);
+        persistBlocks();
+        render();
+        selectBlock(b.id);
+      }
+
+  function addPause() {
+        const b = {
+          id: newId(),
+          type: "PAUSE",
+          mode: "BEEP",
+          level: 0,
+          channel: readChannel(),
+          duration: 0.3
+        };
+        blocks.push(b);
+        persistBlocks();
+        render();
+        selectBlock(b.id);
+      }
+
+  function addRoulette() {
+        const b = {
+          id: newId(),
+          type: "ROULETTE",
+          mode: "ROULETTE",
+          level: 0,
+          channel: 0,
+          duration: 3
+        };
+        blocks.push(b);
+        persistBlocks();
+        render();
+        selectBlock(b.id);
+      }
+
+  function removeBlock(id) {
+        const i = blocks.findIndex(x => x.id === id);
+        if (i >= 0) {
+          blocks.splice(i, 1);
+          if (selectedId === id) {
+            selectedId = null;
+            editor.classList.add("d-none");
+            updateControlPreview(null);
+          }
+          persistBlocks();
+          render();
+        }
+      }
+
+  
+
+  function selectBlock(id) {
+        selectedId = id;
+        const b = blocks.find(x => x.id === id);
+        if (!b) {
+          editor.classList.add("d-none");
+          updateControlPreview(null);
+          return;
+        }
+        editor.classList.remove("d-none");
+
+        setEdType(b.type);
+        if (edDuration) edDuration.value = b.duration;
+        updateControlPreview(b);
+        render();
+      }
+
+  function applyEditor() {
+        const b = blocks.find(x => x.id === selectedId);
+        if (!b) return;
+
+        b.type = getEdType();
+        b.duration = Math.max(0.05, Number(edDuration ? edDuration.value : 0.05) || 0.05);
+        if (b.type === "PAUSE") {
+          b.level = 0;
+          b.channel = readChannel();
+        } else if (b.type === "ROULETTE") {
+          b.mode = "ROULETTE";
+          b.level = 0;
+          b.channel = 0;
+        }
+
+        updateControlPreview(b);
+        persistBlocks();
+        render();
+      }
+
+  function reorderBlock(srcId, dstId) {
+        const si = blocks.findIndex(x => x.id === srcId);
+        const di = blocks.findIndex(x => x.id === dstId);
+        if (si < 0 || di < 0 || si === di) return;
+        const [moved] = blocks.splice(si, 1);
+        blocks.splice(di, 0, moved);
+        persistBlocks();
+        render();
+      }
+
+  function syncSelectedBlockFromControl() {
+        const b = blocks.find(x => x.id === selectedId);
+      if (!b || b.type !== "PULSE") return;
+        b.mode = readMode();
+        b.level = readLevel();
+        b.channel = readChannel();
+        updateControlPreview(b);
+        persistBlocks();
+        render();
+      }
 
   // ====== Transporte ======
-  function setStatus(text){ seqStatus.textContent = text; }
+  function setStatus(text) {
+        seqStatus.textContent = text;
+      }
 
-  async function sendHoldOn(b){
-    await pushToChat(`HOLDON ${buildCmdLine(b)}`);
-  }
-  async function sendHoldOff(){
-    await pushToChat("HOLDOFF");
-  }
+  async function sendHoldOn(b) {
+        await pushToChat(`HOLDON ${buildCmdLine(b)}`);
+      }
+  async function sendHoldOff() {
+        await pushToChat("HOLDOFF");
+      }
 
-  function stepPlay(){
-    if (!isPlaying || isPaused) return;
+  function abortActiveRoulette(reason = "abort") {
+        if (!activeRouletteRun) return;
+        try {
+          activeRouletteRun.cancel(reason);
+        } catch (_) {}
+      }
 
-    if (playIndex >= blocks.length){
-      if (loop && blocks.length > 0){
+  function executeRouletteBlock(block) {
+        return new Promise((resolve) => {
+          const bridge = window.__ROULETTE_BRIDGE__;
+          const forwardEvent = bridge && typeof bridge.forwardEvent === "function" ? bridge.forwardEvent : null;
+          const btn = document.getElementById("r3Btn");
+          if (!forwardEvent && !btn) {
+            setStatus("Roleta indisponível (#r3Btn não encontrado).");
+            log("Roleta widget não encontrado.", "warn");
+            resolve();
+            return;
+          }
+
+          const triggerEvent = (type) => {
+            if (forwardEvent) return forwardEvent(type);
+            if (!btn) return false;
+            try {
+              return btn.dispatchEvent(new PointerEvent(type, { bubbles: true }));
+            } catch (_) {
+              return btn.dispatchEvent(new Event(type, { bubbles: true }));
+            }
+          };
+
+          let finished = false;
+          let released = false;
+          const holdMs = Math.max(200, Math.round(block.duration * 1000));
+
+          const releaseBtn = () => {
+            if (released) return;
+            released = true;
+            triggerEvent("pointerup");
+          };
+
+          const cleanup = () => {
+            window.removeEventListener("roulette:finished", onFinish);
+            clearTimeout(releaseTimer);
+            clearTimeout(failsafeTimer);
+            if (activeRouletteRun && activeRouletteRun.blockId === block.id) {
+              activeRouletteRun = null;
+            }
+          };
+
+          const finish = (tag) => {
+            if (finished) return;
+            finished = true;
+            cleanup();
+            if (tag === "timeout") {
+              setStatus("Roleta finalizada por timeout.");
+            } else if (tag === "cancel") {
+              setStatus("Roleta cancelada.");
+            }
+            resolve();
+          };
+
+          const onFinish = () => {
+            setStatus("Roleta concluída. Aguardando próximo bloco…");
+            finish("event");
+          };
+
+          const releaseTimer = setTimeout(() => {
+            releaseBtn();
+            setStatus("Roleta girando… aguardando resultado.");
+          }, holdMs);
+
+          const failsafeTimer = setTimeout(() => {
+            log("Tempo máximo aguardando evento da roleta.", "warn");
+            finish("timeout");
+          }, holdMs + 15000);
+
+          activeRouletteRun = {
+            blockId: block.id,
+            cancel: (tag = "cancel") => {
+              releaseBtn();
+              finish(tag);
+            }
+          };
+
+          setStatus(`Roleta carregando por ${fmtDuration(block.duration)}s…`);
+          window.addEventListener("roulette:finished", onFinish);
+          triggerEvent("pointerdown");
+        });
+      }
+
+  function stepPlay() {
+        if (!isPlaying || isPaused) return;
+
+        if (playIndex >= blocks.length) {
+          if (loop && blocks.length > 0) {
+            playIndex = 0;
+          } else {
+            stopPlayback(false);
+            return;
+          }
+        }
+
+        const b = blocks[playIndex];
+        setActiveBlock(b ? b.id : null);
+        setStatus(`Executando ${playIndex+1}/${blocks.length}: ${formatLabelPlain(b)}`);
+
+        if (b.type === "ROULETTE") {
+          playStartedAt = performance.now();
+          remainingMs = 0;
+          executeRouletteBlock(b).then(() => {
+            if (!isPlaying || isPaused) return;
+            playIndex++;
+            stepPlay();
+          });
+          return;
+        }
+
+        const durationMs = Math.max(50, Math.floor(b.duration * 1000));
+        playStartedAt = performance.now();
+        remainingMs = durationMs;
+
+        const run = async () => {
+          if (b.type === "PULSE") {
+            try {
+              await sendHoldOn(b);
+            } catch (e) {
+              log(e.message, "error");
+            }
+            curTimeout = setTimeout(async () => {
+              try {
+                await sendHoldOff();
+              } catch (e) {
+                log(e.message, "error");
+              }
+              playIndex++;
+              stepPlay();
+            }, remainingMs);
+          } else {
+            curTimeout = setTimeout(() => {
+              playIndex++;
+              stepPlay();
+            }, remainingMs);
+          }
+        };
+        run();
+      }
+
+  function play() {
+        if (isPlaying) return;
+        if (blocks.length === 0) {
+          setStatus("Adicione blocos para tocar.");
+          return;
+        }
+        isPlaying = true;
+        isPaused = false;
+        loop = !!chkLoop.checked;
         playIndex = 0;
-      } else {
-        stopPlayback(false);
-        return;
+        remainingMs = 0;
+        curTimeout && clearTimeout(curTimeout);
+        abortActiveRoulette("restart");
+        setStatus("Tocando…");
+        render();
+        stepPlay();
       }
-    }
 
-    const b = blocks[playIndex];
-    setStatus(`Executando ${playIndex+1}/${blocks.length}: ${formatLabelPlain(b)}`);
-
-    const durationMs = Math.max(50, Math.floor(b.duration * 1000));
-    playStartedAt = performance.now();
-    remainingMs = durationMs;
-
-    const run = async () => {
-      if (b.type === "PULSE") {
-        try { await sendHoldOn(b); } catch(e){ log(e.message,"error"); }
-        curTimeout = setTimeout(async () => {
-          try { await sendHoldOff(); } catch(e){ log(e.message,"error"); }
-          playIndex++; stepPlay();
-        }, remainingMs);
-      } else {
-        curTimeout = setTimeout(() => {
-          playIndex++; stepPlay();
-        }, remainingMs);
+  function pause() {
+        if (!isPlaying || isPaused) return;
+        if (activeRouletteRun) {
+          setStatus("Não é possível pausar enquanto a roleta está executando.");
+          return;
+        }
+        isPaused = true;
+        curTimeout && clearTimeout(curTimeout);
+        const elapsed = performance.now() - playStartedAt;
+        remainingMs = Math.max(0, remainingMs - elapsed);
+        const b = blocks[playIndex];
+        if (b && b.type === "PULSE") {
+          try {
+            sendHoldOff();
+          } catch (_) {}
+        }
+        setStatus("Pausado.");
+        render();
       }
-    };
-    run();
-  }
 
-  function play(){
-    if (isPlaying) return;
-    if (blocks.length === 0) { setStatus("Adicione blocos para tocar."); return; }
-    isPlaying = true; isPaused = false;
-    loop = !!chkLoop.checked;
-    playIndex = 0; remainingMs = 0; curTimeout && clearTimeout(curTimeout);
-    setStatus("Tocando…");
-    render();
-    stepPlay();
-  }
+  function resume() {
+        if (!isPlaying || !isPaused) return;
+        if (activeRouletteRun) {
+          setStatus("Aguarde a roleta finalizar para continuar.");
+          return;
+        }
+        isPaused = false;
+        setStatus("Continuando…");
+        render();
 
-  function pause(){
-    if (!isPlaying || isPaused) return;
-    isPaused = true;
-    curTimeout && clearTimeout(curTimeout);
-    const elapsed = performance.now() - playStartedAt;
-    remainingMs = Math.max(0, remainingMs - elapsed);
-    const b = blocks[playIndex];
-    if (b && b.type === "PULSE"){
-      try { sendHoldOff(); } catch(_) {}
-    }
-    setStatus("Pausado.");
-    render();
-  }
+        const b = blocks[playIndex];
+        playStartedAt = performance.now();
+        if (b.type === "PULSE") {
+          (async () => {
+            try {
+              await sendHoldOn(b);
+            } catch (_) {}
+            curTimeout = setTimeout(async () => {
+              try {
+                await sendHoldOff();
+              } catch (_) {}
+              playIndex++;
+              stepPlay();
+            }, Math.max(0, remainingMs || 0));
+          })();
+        } else {
+          curTimeout = setTimeout(() => {
+            playIndex++;
+            stepPlay();
+          }, Math.max(0, remainingMs || 0));
+        }
+      }
 
-  function resume(){
-    if (!isPlaying || !isPaused) return;
-    isPaused = false;
-    setStatus("Continuando…");
-    render();
-
-    const b = blocks[playIndex];
-    playStartedAt = performance.now();
-    if (b.type === "PULSE"){
-      (async () => {
-        try { await sendHoldOn(b); } catch(_) {}
-        curTimeout = setTimeout(async () => {
-          try { await sendHoldOff(); } catch(_) {}
-          playIndex++; stepPlay();
-        }, Math.max(0, remainingMs || 0));
-      })();
-    } else {
-      curTimeout = setTimeout(() => { playIndex++; stepPlay(); }, Math.max(0, remainingMs || 0));
-    }
-  }
-
-  function stopPlayback(byUser=true){
-    if (!isPlaying) return;
-    isPlaying = false; isPaused = false;
-    curTimeout && clearTimeout(curTimeout); curTimeout = null;
-    remainingMs = 0; playIndex = 0;
-    try { sendHoldOff(); } catch(_) {}
-    setStatus(byUser ? "Parado." : "Concluído.");
-    render();
-  }
+  function stopPlayback(byUser = true) {
+        if (!isPlaying) return;
+        isPlaying = false;
+        isPaused = false;
+        curTimeout && clearTimeout(curTimeout);
+        curTimeout = null;
+        remainingMs = 0;
+        playIndex = 0;
+        abortActiveRoulette("cancel");
+        try {
+          sendHoldOff();
+        } catch (_) {}
+        setStatus(byUser ? "Parado." : "Concluído.");
+        setActiveBlock(null);
+        render();
+      }
 
   // ====== Eventos ======
-  btnAddPulse.addEventListener("click", addPulseFromControl);
-  btnAddPause.addEventListener("click", addPause);
+      btnAddPulse.addEventListener("click", addPulseFromControl);
+      btnAddPause.addEventListener("click", addPause);
+      btnAddRoulette?.addEventListener("click", addRoulette);
 
-  $$('input[name="edTypeRadio"]').forEach(el => {
-    el.addEventListener("change", () => { applyEditor(); });
-  });
-  $$('input[name="edModeRadio"]').forEach(el => {
-    el.addEventListener("change", () => { applyEditor(); });
-  });
-  $$('input[name="edChannelRadio"]').forEach(el => {
-    el.addEventListener("change", () => { applyEditor(); });
-  });
+      $$('input[name="edTypeRadio"]').forEach(el => {
+        el.addEventListener("change", () => {
+          applyEditor();
+        });
+      });
 
-  edLevel.addEventListener("input", applyEditor);
-  edDuration.addEventListener("input", applyEditor);
-  btnDeleteBlock.addEventListener("click", () => { if (selectedId) removeBlock(selectedId); });
+      edDuration?.addEventListener("input", applyEditor);
+      btnSyncControl?.addEventListener("click", syncSelectedBlockFromControl);
+      btnDeleteBlock.addEventListener("click", () => {
+        if (selectedId) removeBlock(selectedId);
+      });
 
-  btnPlay.addEventListener("click", play);
-  btnPause.addEventListener("click", pause);
-  btnResume.addEventListener("click", resume);
-  btnStop.addEventListener("click", () => stopPlayback(true));
-  chkLoop.addEventListener("change", () => { loop = !!chkLoop.checked; });
+      btnPlay.addEventListener("click", play);
+      btnPause.addEventListener("click", pause);
+      btnResume.addEventListener("click", resume);
+      btnStop.addEventListener("click", () => stopPlayback(true));
+      chkLoop.addEventListener("change", () => {
+        loop = !!chkLoop.checked;
+      });
 
   // ====== Inicial ======
-  setEdType("PULSE");
-  setEdMode("BEEP");
-  setEdChannel(1);
-  refreshLevelUI();
-  render();
+      loadBlocksFromStorage();
+      setEdType("PULSE");
+      updateControlPreview(null);
+      render();
 })();
 </script>

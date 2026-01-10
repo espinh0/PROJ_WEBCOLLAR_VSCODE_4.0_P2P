@@ -45,15 +45,12 @@
     chart: null,
     iconCache: {},
     pending: [],
-    lastChatSig: { text: "", ts: 0 },
     counters: {},
-    seenChatIds: new Map(),
     activeHold: null,
     holdSeq: 0,
-    tunnelBound: false,
-    tunnelUnsub: null,
-    lastTxSig: { sig: "", ts: 0 },
     serialListener: null,
+    serialBusUnsub: null,
+    serialBusReadyHandler: null,
     serialStats: {
       seen: 0,
       parsed: 0,
@@ -167,13 +164,6 @@
     }));
   }
 
-  function normalizeSig(text) {
-    return String(text || "")
-      .trim()
-      .toUpperCase()
-      .replace(/\s+/g, " ");
-  }
-
   function clampLevel(n) {
     const num = Number(n);
     if (!Number.isFinite(num)) return 0;
@@ -223,41 +213,13 @@
     return { kind: isHoldOn ? "holdon" : "pulse", mode, level, channel };
   }
 
-  function makeCmdSig(parsed) {
-    if (!parsed) return "";
-    if (parsed.kind === "holdoff") return "HOLDOFF";
-    return `${parsed.kind || ""}|${parsed.mode || ""}|${parsed.level ?? ""}|${parsed.channel ?? ""}`;
-  }
-
-  function extractTextFromMessage(detail) {
-    if (!detail) return "";
-    if (typeof detail.text === "string") return detail.text;
-    if (detail.raw) {
-      if (typeof detail.raw.text === "string") return detail.raw.text;
-      if (typeof detail.raw.msg === "string") return detail.raw.msg;
-      if (typeof detail.raw.command === "string") return detail.raw.command;
-    }
-    if (typeof detail.msg === "string") return detail.msg;
-    if (typeof detail.command === "string") return detail.command;
-    return "";
-  }
-
-  function extractTextFromTunnel(detail) {
-    if (!detail) return "";
-    if (typeof detail === "string") return detail;
-    if (typeof detail.line === "string") return detail.line;
-    if (typeof detail.text === "string") return detail.text;
-    if (detail.raw && typeof detail.raw.text === "string") return detail.raw.text;
-    return "";
-  }
-
   function onSerialLine(line) {
     const text = String(line || "").trim();
     if (!text) return;
     state.serialStats.seen += 1;
+    const now = Date.now();
     state.serialStats.lastLine = text;
     if (/^OK\b/i.test(text)) {
-      const now = Date.now();
       if (state.serialStats.lastOkSig === text && (now - state.serialStats.lastOkTs) < 250) {
         debugLog(`Chart serial OK duplicado em ${now - state.serialStats.lastOkTs}ms: ${text}`);
       }
@@ -271,11 +233,6 @@
       setStatus(`Serial RX ${state.serialStats.seen} (validos: ${state.serialStats.parsed}).`);
       return;
     }
-    const sig = makeCmdSig(parsed);
-    if (sig && state.lastTxSig.sig === sig && (Date.now() - state.lastTxSig.ts) < 500) {
-      debugLog(`Chart serial OK duplicado do TX (${sig}).`);
-      return;
-    }
     state.serialStats.parsed += 1;
     const ts = Date.now();
     if (parsed.kind === "holdoff") {
@@ -283,22 +240,6 @@
       return;
     }
     enqueuePoint(makePoint(parsed, { ts, source: "serial" }));
-    flushPending();
-  }
-
-  function onSerialBridgeTx(line) {
-    const text = String(line || "").trim();
-    if (!text) return;
-    const parsed = parseCommand(text, { requireOk: false });
-    if (!parsed) return;
-    const ts = Date.now();
-    const sig = makeCmdSig(parsed);
-    if (sig) state.lastTxSig = { sig, ts };
-    if (parsed.kind === "holdoff") {
-      finalizeHold(ts);
-      return;
-    }
-    enqueuePoint(makePoint(parsed, { ts, source: "serialbridge" }));
     flushPending();
   }
 
@@ -343,38 +284,50 @@
     }
   }
 
+  function detachFanoutListener() {
+    try {
+      const list = window.__SERIAL_LINE_LISTENERS__;
+      if (Array.isArray(list) && state.serialListener) {
+        const idx = list.indexOf(state.serialListener);
+        if (idx >= 0) list.splice(idx, 1);
+      }
+    } catch(_) {}
+  }
+
+  function attachSerialBus(handler) {
+    detachFanoutListener();
+    if (typeof state.serialBusUnsub === "function") {
+      try { state.serialBusUnsub(); } catch(_) {}
+    }
+    state.serialListener = handler;
+    state.serialBusUnsub = window.addSerialRxListener(handler);
+    if (state.serialBusReadyHandler) {
+      window.removeEventListener("serial-bus-ready", state.serialBusReadyHandler);
+      state.serialBusReadyHandler = null;
+    }
+    setStatus("Escutando serial (bus).");
+  }
+
   function bindSerialMonitor() {
     const handler = (line) => onSerialLine(line);
+
+    if (typeof window.addSerialRxListener === "function") {
+      attachSerialBus(handler);
+      return;
+    }
+
     state.serialListener = handler;
     ensureSerialHook("bind");
-    scheduleSerialBridgeHook();
     setStatus("Escutando monitor serial.");
-  }
 
-  function ensureSerialBridgeHook(reason) {
-    const bridge = window.SerialBridge;
-    if (!bridge || typeof bridge.send !== "function") return false;
-    if (bridge.send._chartBridgeHook) return true;
-    const original = bridge.send;
-    const wrapped = function(line) {
-      try { onSerialBridgeTx(line); } catch(_) {}
-      return original.apply(this, arguments);
-    };
-    wrapped._chartBridgeHook = true;
-    wrapped._orig = original;
-    bridge.send = wrapped;
-    debugLog(`Chart SerialBridge hook aplicado (${reason || "init"}).`);
-    return true;
-  }
-
-  function scheduleSerialBridgeHook() {
-    let tries = 0;
-    const tick = () => {
-      if (ensureSerialBridgeHook("retry")) return;
-      tries += 1;
-      if (tries < 10) setTimeout(tick, 500);
-    };
-    tick();
+    if (!state.serialBusReadyHandler) {
+      state.serialBusReadyHandler = () => {
+        if (typeof window.addSerialRxListener === "function") {
+          attachSerialBus(handler);
+        }
+      };
+      window.addEventListener("serial-bus-ready", state.serialBusReadyHandler);
+    }
   }
 
   function setBounds() {
@@ -484,82 +437,6 @@
     }
     state.activeHold = null;
     if (state.chart) state.chart.update("none");
-  }
-
-  function onChat(ev) {
-    if (state.tunnelBound) return;
-    const detail = ev && ev.detail ? ev.detail : ev;
-    if (detail && detail.loopback === true && detail.silent === true) return;
-    const text = extractTextFromMessage(detail);
-    const parsed = parseCommand(text);
-    if (!parsed) return;
-
-    const ts = Number(detail && (detail.ts || detail.timestamp)) || Date.now();
-    const id = detail && (detail.id || detail.key || detail.raw?.id);
-    if (id) {
-      if (state.seenChatIds.has(id)) return;
-      state.seenChatIds.set(id, ts);
-      if (state.seenChatIds.size > 200) {
-        for (const [key, t] of state.seenChatIds) {
-          if ((ts - t) > 30000 || state.seenChatIds.size > 200) state.seenChatIds.delete(key);
-        }
-      }
-    }
-    state.lastChatSig = { text: normalizeSig(text), ts };
-    if (parsed.kind === "holdoff") {
-      finalizeHold(ts);
-      return;
-    }
-    enqueuePoint(makePoint(parsed, { ts, source: "chat" }));
-    flushPending();
-  }
-
-  function onCollar(ev) {
-    if (state.tunnelBound) return;
-    const text = ev?.detail?.line ? String(ev.detail.line) : "";
-    if (!text) return;
-    const sig = normalizeSig(text);
-    const now = Date.now();
-    if (state.lastChatSig.text === sig && (now - state.lastChatSig.ts) < 400) {
-      return; // ja registrado via chat
-    }
-    const parsed = parseCommand(text);
-    if (!parsed) return;
-    if (state.lastChatSig.text === sig && (now - state.lastChatSig.ts) < 600) {
-      return; // duplicado do chat
-    }
-    if (parsed.kind === "holdoff") {
-      finalizeHold(now);
-      return;
-    }
-    enqueuePoint(makePoint(parsed, { ts: now, source: "collar" }));
-    flushPending();
-  }
-
-  function onTunnel(ev) {
-    const detail = ev && ev.detail ? ev.detail : ev;
-    const text = extractTextFromTunnel(detail);
-    const parsed = parseCommand(text);
-    if (!parsed) return;
-    const ts = Number(detail && (detail.ts || detail.timestamp)) || Date.now();
-    if (parsed.kind === "holdoff") {
-      finalizeHold(ts);
-      return;
-    }
-    enqueuePoint(makePoint(parsed, { ts, source: "tunnel" }));
-    flushPending();
-  }
-
-  function bindTunnel() {
-    if (state.tunnelBound) return;
-    const tunnel = window.__COLLAR_TUNNEL__;
-    if (!tunnel || typeof tunnel.on !== "function") return;
-    try {
-      const unsub = tunnel.on("cmd", onTunnel);
-      state.tunnelUnsub = typeof unsub === "function" ? unsub : null;
-      state.tunnelBound = true;
-      setStatus("Escutando tunnel (sem duplicar chat/serial).");
-    } catch(_) {}
   }
 
   function resetChart() {
@@ -718,11 +595,20 @@
   CLEAR_BTN.addEventListener("click", resetChart);
   bindSerialMonitor();
   window.addEventListener("serial-connected", () => {
-    ensureSerialHook("serial-connected");
-    ensureSerialBridgeHook("serial-connected");
+    const usingBus = typeof window.addSerialRxListener === "function" && typeof state.serialBusUnsub === "function";
+    if (!usingBus) ensureSerialHook("serial-connected");
   });
   window.addEventListener("beforeunload", () => {
-    try { if (state.tunnelUnsub) state.tunnelUnsub(); } catch(_){}
+    try {
+      if (typeof state.serialBusUnsub === "function") {
+        state.serialBusUnsub();
+        state.serialBusUnsub = null;
+      }
+      if (state.serialBusReadyHandler) {
+        window.removeEventListener("serial-bus-ready", state.serialBusReadyHandler);
+        state.serialBusReadyHandler = null;
+      }
+    } catch(_){ }
     try {
       const list = window.__SERIAL_LINE_LISTENERS__;
       if (Array.isArray(list) && state.serialListener) {

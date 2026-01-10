@@ -383,8 +383,13 @@
   function sendKeepAwakeIfIdle() {
     if (!keepAwakeEnabled || !isHost()) return;
     const now = Date.now();
-    const last = lastActivityTs || 0;
-    const diff = now - last;
+    if (!lastActivityTs) {
+      lastActivityTs = now;
+      console.log('[HB+KA] Inicializando keep-awake: aguardando o primeiro ciclo completo.');
+      return;
+    }
+
+    const diff = now - lastActivityTs;
 
     if (diff >= KA_INTERVAL_MS) {
       writeSerialKeepAwake(KA_COMMAND);

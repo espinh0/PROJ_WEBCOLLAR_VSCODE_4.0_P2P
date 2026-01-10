@@ -202,6 +202,71 @@
       logEl.textContent += `[${ts}] ${line}\n`;
       logEl.scrollTop = logEl.scrollHeight;
     }
+    const DEBUG_FLOWGATE = (() => {
+      try {
+        const url = new URL(window.location.href);
+        const q = (url.searchParams.get('debug') || '').trim().toLowerCase();
+        if (q === '1' || q === 'true' || q === 'flowgate') return true;
+        const stored = (localStorage.getItem('flowgate_debug') || '').trim().toLowerCase();
+        if (stored === '1' || stored === 'true') return true;
+      } catch {}
+      return false;
+    })();
+    function dbg(label, detail) {
+      if (!DEBUG_FLOWGATE) return;
+      if (detail === undefined) {
+        log(`[dbg] ${label}`);
+        return;
+      }
+      try {
+        const payload = (typeof detail === 'string') ? detail : JSON.stringify(detail);
+        log(`[dbg] ${label} ${payload}`);
+      } catch {
+        log(`[dbg] ${label}`);
+      }
+    }
+    function debugHostCandidates(reason) {
+      if (!DEBUG_FLOWGATE) return;
+      try {
+        const list = getHostCandidates().map((c) => ({ sid: shortPeer(c.sid), online: !!c.online }));
+        dbg('hosts', { reason, list });
+      } catch {}
+    }
+    function snapshotState(reason, extra) {
+      if (!DEBUG_FLOWGATE) return;
+      const snap = {
+        reason,
+        room: activeRoomId || '',
+        hostId: roomHostId ? shortPeer(roomHostId) : '',
+        peerOpen: !!(peer && peer.open),
+        peerId: shortPeer(peerId || selfIdFn?.() || ''),
+        isHostMode: !!isHostMode,
+        hostConnOpen: !!(hostConn && hostConn.open),
+        hostConnPeer: hostConn?.peer ? shortPeer(hostConn.peer) : '',
+        hostConnLostAt,
+        hubClaimAttempt,
+        hubClaimTimer: !!hubClaimTimer,
+        hubTakeoverTimer: !!hubTakeoverTimer,
+        hostReconnectTimer: !!hostReconnectTimer,
+        hostConnectTimer: !!hostConnectTimer,
+        hostIdTakenAt,
+        hostIdTakenCount,
+        hostIdTakenRecent: typeof isHostIdTakenRecently === 'function' ? isHostIdTakenRecently() : false,
+        lastRoomHostId,
+        activeHostId: activeHostId ? shortPeer(activeHostId) : '',
+        hostIdIndex,
+        hostConnectFailures,
+        connectInProgress: !!connectInProgress,
+        preferredHub: getPreferredHubSid ? (getPreferredHubSid() ? shortPeer(getPreferredHubSid()) : '') : '',
+        preferredSelf: isPreferredHubSelf ? isPreferredHubSelf() : false,
+        canOverride: canOverridePreferredHub ? canOverridePreferredHub() : false,
+        tags: Array.from(localTags || []),
+        peers: peers?.size || 0,
+        knownPeers: knownPeers?.size || 0
+      };
+      if (extra !== undefined) snap.extra = extra;
+      dbg('state', snap);
+    }
     function emitFlowgateEvent(name, detail) {
       try { window.dispatchEvent(new CustomEvent(`flowgate:${name}`, { detail })); } catch {}
     }
@@ -301,10 +366,18 @@
     }
     initPeerSoundListeners();
 
+    let storageDisabled = false;
     function saveState(partial = {}) {
       const current = loadState();
       const next = { ...current, ...partial };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      } catch (e) {
+        if (!storageDisabled) {
+          storageDisabled = true;
+          log('LocalStorage indisponivel. Estado nao persistido.');
+        }
+      }
     }
     function loadState() {
       try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') || {}; }
@@ -458,7 +531,7 @@
       if (turnSelectEl) turnSelectEl.value = preset.id;
       if (changed && !opts.silent) log(`TURN selecionado: ${preset.label}`);
       if (changed && opts.reconnect && room) {
-        disconnect();
+        disconnect('turn-select');
         setTimeout(() => connect(`turn-select:${preset.id}`), 250);
       }
     }
@@ -478,7 +551,7 @@
       if (turnSelectEl) turnSelectEl.value = to.id;
       log(`TURN failover: ${from.label} -> ${to.label} (${reason || 'falha'})`);
       if (room) {
-        disconnect();
+        disconnect('turn-failover');
         setTimeout(() => connect(`turn-failover:${reason || 'falha'}`), 250);
       } else {
         setTimeout(() => connect(`turn-failover:${reason || 'falha'}`), 250);
@@ -491,12 +564,61 @@
     let peerId = '';
     let peerReady = false;
     let selfIdFn = () => (peer && peer.id) ? String(peer.id) : STABLE_SELF_ID;
+    const PEERJS_IMPORT_CDNS = [
+      'https://esm.run/peerjs',
+      'https://esm.sh/peerjs'
+    ];
+    const PEERJS_UMD_FALLBACK = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js';
+
+    function loadScriptOnce(src, id) {
+      return new Promise((resolve) => {
+        if (id && document.getElementById(id)) {
+          resolve(true);
+          return;
+        }
+        const existing = Array.from(document.scripts || []).find((s) => s.src === src);
+        if (existing) {
+          if (typeof window.Peer === 'function') resolve(true);
+          else {
+            existing.addEventListener('load', () => resolve(true), { once: true });
+            existing.addEventListener('error', () => resolve(false), { once: true });
+          }
+          return;
+        }
+        const script = document.createElement('script');
+        if (id) script.id = id;
+        script.src = src;
+        script.async = true;
+        script.onload = () => resolve(true);
+        script.onerror = () => resolve(false);
+        (document.head || document.documentElement).appendChild(script);
+      });
+    }
+
+    async function loadPeerCtor() {
+      const errors = [];
+      for (const url of PEERJS_IMPORT_CDNS) {
+        try {
+          const mod = await import(url);
+          const ctor = mod?.Peer || mod?.default || mod;
+          if (typeof ctor === 'function') return ctor;
+          throw new Error('PeerJS import invalido');
+        } catch (err) {
+          errors.push(`${url}: ${err?.message || err}`);
+        }
+      }
+      const loaded = await loadScriptOnce(PEERJS_UMD_FALLBACK, 'peerjs-umd');
+      if (loaded && typeof window.Peer === 'function') return window.Peer;
+      if (loaded) errors.push(`${PEERJS_UMD_FALLBACK}: Peer global ausente`);
+      const detail = errors.length ? errors.join(' | ') : 'sem detalhes';
+      throw new Error(`Falha ao carregar PeerJS (${detail})`);
+    }
+
     try {
-      const mod = await import('https://esm.run/peerjs');
-      PeerCtor = mod.Peer || mod.default || mod;
-      if (typeof PeerCtor !== 'function') throw new Error('PeerJS import invalido');
+      PeerCtor = await loadPeerCtor();
     } catch (e) {
       setStatus('erro: import');
+      log(`PeerJS indisponivel: ${e?.message || e}`);
       throw e;
     }
 
@@ -612,7 +734,7 @@
       if (!isOn && hubTakeoverTimer) { clearTimeout(hubTakeoverTimer); hubTakeoverTimer = null; }
       if (isHostMode) {
         log('Host alterado, reconectando...');
-        disconnect();
+        disconnect('host-toggle');
         setTimeout(() => connect('host-toggle'), 200);
         return;
       }
@@ -622,7 +744,7 @@
           return;
         }
         log('Host candidato ativo, tentando assumir hub...');
-        disconnect();
+        disconnect('host-toggle');
         setTimeout(() => connect('host-toggle'), 200);
         return;
       }
@@ -1097,6 +1219,15 @@
     const HUB_CLAIM_MAX_DELAY = 12000;
     let peerConnections = new Map();
     let hostConn = null;
+    let hostConnLostAt = 0;
+    let lastRoomHostId = '';
+    let hostIdIndex = 0;
+    let activeHostId = '';
+    let hostIdTakenAt = 0;
+    let hostIdTakenCount = 0;
+    const HOST_ID_TAKEN_COOLDOWN_MS = 20000;
+    const HOST_ID_SUFFIXES = ['', 'h2', 'h3'];
+    const HOST_ID_ROTATE_AFTER = 2;
     let actionHandlers = new Map();
     let peerJoinHandlers = new Set();
     let peerLeaveHandlers = new Set();
@@ -1110,8 +1241,10 @@
     let turnFailoverPending = false;
     let hostConnectTimer = null;
     let hostConnectStartedAt = 0;
+    let hostConnectFailures = 0;
     const HOST_CONNECT_TIMEOUT_MS = 8000;
-    const HOST_CONNECT_GRACE_MS = 2200;
+    const HOST_CONNECT_GRACE_MS = HOST_CONNECT_TIMEOUT_MS;
+    const HUB_OVERRIDE_AFTER_MS = 9000;
 
     function markPeerOnline(peerId) {
       if (!peerId) return false;
@@ -1124,6 +1257,66 @@
       if (!room) return false;
       if (isHostMode) return !!(peer && peer.open);
       return !!(hostConn && hostConn.open);
+    }
+
+    function canOverridePreferredHub() {
+      if (isPreferredHubSelf()) return true;
+      if (!hostConnLostAt) return false;
+      return (Date.now() - hostConnLostAt) >= HUB_OVERRIDE_AFTER_MS;
+    }
+
+    function buildHostIdWithSuffix(baseId, suffix) {
+      const cleanSuffix = suffix ? `-${suffix}` : '';
+      const maxLen = 50;
+      const base = String(baseId || '');
+      const keep = Math.max(1, maxLen - cleanSuffix.length);
+      return `${base.slice(0, keep)}${cleanSuffix}`;
+    }
+
+    function resolveHostIdByIndex(idx) {
+      const suffix = HOST_ID_SUFFIXES[idx] ?? HOST_ID_SUFFIXES[0];
+      return buildHostIdWithSuffix(roomHostId, suffix);
+    }
+
+    function setActiveHostId(nextId, reason) {
+      const cleaned = String(nextId || '').trim();
+      if (!cleaned || cleaned === activeHostId) return false;
+      const idx = HOST_ID_SUFFIXES.findIndex((s) => buildHostIdWithSuffix(roomHostId, s) === cleaned);
+      if (idx >= 0) hostIdIndex = idx;
+      activeHostId = cleaned;
+      snapshotState('host-id-active', { reason, hostIdIndex, activeHostId: shortPeer(activeHostId) });
+      resetHostIdTaken('host-id-adopt');
+      return true;
+    }
+
+    function advanceHostId(reason) {
+      const nextIndex = (hostIdIndex + 1) % HOST_ID_SUFFIXES.length;
+      const nextId = resolveHostIdByIndex(nextIndex);
+      if (!nextId || nextId === activeHostId) return false;
+      hostIdIndex = nextIndex;
+      activeHostId = nextId;
+      snapshotState('host-id-rotate', { reason, hostIdIndex, activeHostId: shortPeer(activeHostId) });
+      return true;
+    }
+
+    function isHostIdTakenRecently() {
+      return !!(hostIdTakenAt && (Date.now() - hostIdTakenAt) < HOST_ID_TAKEN_COOLDOWN_MS);
+    }
+
+    function markHostIdTaken(reason) {
+      hostIdTakenAt = Date.now();
+      hostIdTakenCount = Math.min(hostIdTakenCount + 1, 8);
+      snapshotState('host-id-taken', { reason, count: hostIdTakenCount, activeHostId: shortPeer(activeHostId) });
+      if (!isHostMode && !(hostConn && hostConn.open) && hostIdTakenCount >= HOST_ID_ROTATE_AFTER) {
+        if (advanceHostId('host-id-taken')) resetHostIdTaken('rotate');
+      }
+    }
+
+    function resetHostIdTaken(reason) {
+      if (!hostIdTakenAt && hostIdTakenCount === 0) return;
+      hostIdTakenAt = 0;
+      hostIdTakenCount = 0;
+      snapshotState('host-id-clear', { reason });
     }
 
     function markPeerOffline(peerId) {
@@ -1279,13 +1472,17 @@
         clearHostConnectTimeout();
         if (isHostConn) {
           hostConn = conn;
+          hostConnLostAt = 0;
           hostReconnectDelay = 1500;
+          hostConnectFailures = 0;
+          resetHostIdTaken('host-conn-open');
           if (hostReconnectTimer) { clearTimeout(hostReconnectTimer); hostReconnectTimer = null; }
           if (hubTakeoverTimer) { clearTimeout(hubTakeoverTimer); hubTakeoverTimer = null; }
           resetHubClaimRetry();
         }
         refreshRelayUi();
         log(`${isHostConn ? 'Host' : 'Peer'} conectado: ${shortPeer(conn.peer)}`);
+        snapshotState('conn-open', { peer: shortPeer(conn.peer), isHostConn: !!isHostConn });
         scheduleIceLog(conn, isHostConn ? 'host' : 'peer');
         if (isHostMode && !isHostConn) notifyPeerJoin(conn.peer, true);
         if (!isHostMode && isHostConn) notifyPeerJoin(conn.peer, false);
@@ -1297,14 +1494,18 @@
         turnStateByPeer.delete(conn.peer);
         refreshRelayUi();
         log(`${isHostConn ? 'Host' : 'Peer'} desconectou: ${shortPeer(conn.peer)}`);
+        snapshotState('conn-close', { peer: shortPeer(conn.peer), isHostConn: !!isHostConn });
         if (isHostMode && !isHostConn) notifyPeerLeave(conn.peer, true);
         if (!isHostMode && isHostConn) {
           notifyPeerLeave(conn.peer, false);
+          if (hostConn === conn) hostConn = null;
+          if (!hostConnLostAt) hostConnLostAt = Date.now();
           handleHostDisconnect('host-close');
         }
       });
       conn.on('error', (err) => {
         log(`erro conexao peerjs: ${err?.type || err?.message || err}`);
+        snapshotState('conn-error', { peer: shortPeer(conn.peer), isHostConn: !!isHostConn, err: err?.type || err?.message || '' });
         if (/negotiation-failed/i.test(String(err?.type || err?.message || ''))) {
           logNegotiationFailure(conn, err);
         }
@@ -1313,11 +1514,17 @@
     }
 
     function connectToHost() {
-      if (isHostMode || !peer || !peer.open || !roomHostId) return;
+      if (isHostMode || !activeHostId) return;
+      snapshotState('connectToHost-start');
+      if (!peer || !peer.open) {
+        log('Host indisponivel: peer nao pronto, reagendando...');
+        scheduleHostReconnect();
+        return;
+      }
       if (hostConn && hostConn.open) return;
       try {
-        log(`Conectando ao host: ${shortPeer(roomHostId)}`);
-        const conn = peer.connect(roomHostId, {
+        log(`Conectando ao host: ${shortPeer(activeHostId)}`);
+        const conn = peer.connect(activeHostId, {
           reliable: true,
           serialization: 'json',
           metadata: { room: activeRoomId, sid: STABLE_SELF_ID }
@@ -1428,6 +1635,7 @@
       if (hubTakeoverTimer) return;
       if (hostReconnectTimer) return;
       log(`Agendando reconexao ao host em ${Math.round(hostReconnectDelay)}ms`);
+      snapshotState('host-reconnect-scheduled', { delay: hostReconnectDelay });
       hostReconnectTimer = setTimeout(() => {
         hostReconnectTimer = null;
         connectToHost();
@@ -1470,24 +1678,35 @@
 
     function maybeScheduleHubClaim(reason) {
       if (!room || isHostMode) return false;
+      snapshotState('hub-claim-check', { reason });
       if (hostConn && hostConn.open) { resetHubClaimRetry(); return false; }
       if (!isHostCandidate()) return false;
-      if (!isPreferredHubSelf()) return false;
+      if (!isPreferredHubSelf() && !canOverridePreferredHub()) return false;
       scheduleHubClaimRetry(reason || 'hub-missing', { reuseAttempt: true });
       return true;
     }
 
-    function resetHubClaimRetry() {
+    function resetHubClaimRetry(opts = {}) {
       if (hubClaimTimer) { clearTimeout(hubClaimTimer); hubClaimTimer = null; }
-      hubClaimAttempt = 0;
+      if (!opts.preserveAttempt) hubClaimAttempt = 0;
     }
 
     function scheduleHubClaimRetry(reason, opts = {}) {
       if (!isHostCandidate()) return;
-      if (!isPreferredHubSelf()) return;
+      if (!isPreferredHubSelf() && !canOverridePreferredHub()) return;
       if (isHostMode) return;
       if (hostConn && hostConn.open) { resetHubClaimRetry(); return; }
       if (hubClaimTimer) return;
+      if (isHostIdTakenRecently()) {
+        const wait = Math.max(350, HOST_ID_TAKEN_COOLDOWN_MS - (Date.now() - hostIdTakenAt));
+        log(`Host ocupado recente, aguardando ${Math.round(wait)}ms antes de tentar hub`);
+        snapshotState('hub-claim-cooldown', { reason, wait });
+        hubClaimTimer = setTimeout(() => {
+          hubClaimTimer = null;
+          scheduleHubClaimRetry('host-id-cooldown', { reuseAttempt: true });
+        }, wait);
+        return;
+      }
       if (!opts.reuseAttempt) {
         hubClaimAttempt = Math.min(hubClaimAttempt + 1, 8);
       } else if (hubClaimAttempt === 0) {
@@ -1497,25 +1716,31 @@
       const jitter = 0.7 + Math.random() * 0.6;
       const delay = Math.round(base * jitter);
       log(`Agendando tentativa de host hub em ${delay}ms (${reason || 'retry'})`);
+      snapshotState('hub-claim-scheduled', { reason, delay, attempt: hubClaimAttempt });
       hubClaimTimer = setTimeout(() => {
         hubClaimTimer = null;
         if (!isHostCandidate() || isHostMode) { resetHubClaimRetry(); return; }
-        if (!isPreferredHubSelf()) return;
+        if (!isPreferredHubSelf() && !canOverridePreferredHub()) {
+          snapshotState('hub-claim-wait-preferred', { reason });
+          scheduleHubClaimRetry('aguardando-preferencia', { reuseAttempt: true });
+          return;
+        }
         if (hostConn && hostConn.open) { resetHubClaimRetry(); return; }
         if (connectInProgress) { scheduleHubClaimRetry('busy', { reuseAttempt: true }); return; }
         if (hostConnectTimer && hostConnectStartedAt) {
           const elapsed = Date.now() - hostConnectStartedAt;
-          if (elapsed < HOST_CONNECT_GRACE_MS) {
-            const wait = Math.max(250, HOST_CONNECT_GRACE_MS - elapsed + 150);
-            log(`Aguardando janela de conexao ao host (${Math.round(wait)}ms)`);
+          if (elapsed < HOST_CONNECT_TIMEOUT_MS) {
+            const wait = Math.max(350, HOST_CONNECT_TIMEOUT_MS - elapsed + 200);
+            log(`Aguardando fim da tentativa de conexao ao host (${Math.round(wait)}ms)`);
             hubClaimTimer = setTimeout(() => {
               hubClaimTimer = null;
-              scheduleHubClaimRetry('janela-host', { reuseAttempt: true });
+              scheduleHubClaimRetry('host-connecting', { reuseAttempt: true });
             }, wait);
             return;
           }
         }
-        disconnect();
+        snapshotState('hub-claim-fire', { reason });
+        disconnect('hub-claim');
         setTimeout(() => connect(`hub-claim:${reason || 'retry'}`), 150);
       }, delay);
     }
@@ -1523,23 +1748,34 @@
     function scheduleHubTakeover(reason) {
       if (isHostMode) return;
       if (!isHostCandidate()) return;
-      if (!isPreferredHubSelf()) return;
+      if (!isPreferredHubSelf() && !canOverridePreferredHub()) return;
       if (connectInProgress) return;
       if (hubTakeoverTimer) return;
       const delay = Math.round(HUB_TAKEOVER_MIN_DELAY + Math.random() * (HUB_TAKEOVER_MAX_DELAY - HUB_TAKEOVER_MIN_DELAY));
       log(`Agendando takeover de host em ${delay}ms (${reason || 'host-offline'})`);
+      snapshotState('hub-takeover-scheduled', { reason, delay });
       hubTakeoverTimer = setTimeout(() => {
         hubTakeoverTimer = null;
         if (isHostMode || !isHostCandidate()) return;
-        disconnect();
+        snapshotState('hub-takeover-fire', { reason });
+        disconnect('hub-takeover');
         setTimeout(() => connect(`hub-takeover:${reason || 'host-offline'}`), 150);
       }, delay);
     }
 
     function handleHostDisconnect(reason) {
       if (isHostMode) return;
+      hostConnectFailures = Math.min(hostConnectFailures + 1, 999);
+      if (!hostConnLostAt) hostConnLostAt = Date.now();
+      debugHostCandidates(`host-disconnect:${reason}`);
+      snapshotState('host-disconnect', { reason });
       if (isHostCandidate()) {
-        if (isPreferredHubSelf()) scheduleHubTakeover(reason);
+        if (isHostIdTakenRecently()) {
+          log('Host ocupado recente, aguardando reconexao.');
+          scheduleHostReconnect();
+          return;
+        }
+        if (isPreferredHubSelf() || canOverridePreferredHub()) scheduleHubTakeover(reason);
         else scheduleHostReconnect();
         return;
       }
@@ -1555,6 +1791,7 @@
 
     function scheduleHostConnectTimeout() {
       clearHostConnectTimeout();
+      snapshotState('host-connect-timeout-start', { timeout: HOST_CONNECT_TIMEOUT_MS });
       hostConnectTimer = setTimeout(() => {
         hostConnectTimer = null;
         if (isHostMode) return;
@@ -1576,14 +1813,15 @@
 
     function reconnectWithTurn(reason) {
       iceMode = 'turn';
-      disconnect();
+      disconnect('turn-fallback');
       setTimeout(() => connect(`turn-fallback:${reason || 'host'}`), 250);
     }
 
-    function teardownPeer() {
+    function teardownPeer(opts = {}) {
+      const preserveClaimAttempt = !!opts.preserveClaimAttempt;
       if (hostReconnectTimer) { clearTimeout(hostReconnectTimer); hostReconnectTimer = null; }
       if (hubTakeoverTimer) { clearTimeout(hubTakeoverTimer); hubTakeoverTimer = null; }
-      resetHubClaimRetry();
+      resetHubClaimRetry({ preserveAttempt: preserveClaimAttempt });
       clearHostConnectTimeout();
       hostReconnectDelay = 1500;
       try {
@@ -1594,6 +1832,7 @@
       peerConnections = new Map();
       turnStateByPeer = new Map();
       hostConn = null;
+      hostConnLostAt = 0;
       knownPeers = new Set();
       outboundQueue = [];
       try { if (peer) peer.destroy(); } catch {}
@@ -1719,7 +1958,7 @@
         debug: 2,
         config: { iceServers }
       };
-      const desiredId = (wantHost && useRoomId) ? roomHostId : undefined;
+      const desiredId = (wantHost && useRoomId) ? activeHostId : undefined;
       const p = desiredId ? new PeerCtor(desiredId, options) : new PeerCtor(options);
       peer = p;
       peerReady = false;
@@ -1731,23 +1970,30 @@
           peerReady = true;
           peerId = id || '';
           log(`PeerJS aberto: ${shortPeer(peerId) || 'sem id'}`);
+          snapshotState('peer-open');
+          if (room && !isHostMode) {
+            setTimeout(() => connectToHost(), 0);
+          }
           settled = true;
           resolve(id);
         });
         p.on('connection', (conn) => {
-          const isHostConn = conn && conn.peer === roomHostId;
+        const isHostConn = conn && conn.peer === activeHostId;
           registerConnection(conn, { isHost: isHostConn });
         });
         p.on('disconnected', () => {
           log('PeerJS desconectado (transport).');
+          snapshotState('peer-disconnected');
           try { if (peerReady) p.reconnect(); } catch {}
         });
         p.on('close', () => {
           log('PeerJS fechado.');
           peerReady = false;
+          snapshotState('peer-close');
         });
         p.on('error', (err) => {
           log(`erro peerjs: ${err?.type || err?.message || err}`);
+          snapshotState('peer-error', { type: err?.type || '', message: err?.message || '' });
           if (!settled) {
             settled = true;
             reject(err);
@@ -1763,9 +2009,11 @@
       connectInProgress = true;
       try {
         log(`Conectar acionado (${trigger}).`);
+        snapshotState('connect-start', { trigger });
+        const preserveClaimAttempt = /^hub-(claim|takeover)/.test(String(trigger));
         if (room) {
           log('Conexao ativa, trocando de sala...');
-          disconnect();
+          disconnect('room-switch');
         }
 
         const roomId = (roomInput.value || DEFAULT_ROOM).trim() || DEFAULT_ROOM;
@@ -1778,6 +2026,12 @@
 
         activeRoomId = roomId;
         roomHostId = buildRoomHostId(roomId, password);
+        if (roomHostId && roomHostId !== lastRoomHostId) {
+          lastRoomHostId = roomHostId;
+          resetHostIdTaken('room-change');
+        }
+        hostIdIndex = 0;
+        activeHostId = resolveHostIdByIndex(hostIdIndex);
         const wantsHub = localTags.has('host');
         isHostMode = false;
         iceMode = 'turn';
@@ -1787,28 +2041,68 @@
 
         setStatus(wantsHub ? 'conectando host...' : 'conectando peerjs...');
         runTurnProbe(trigger);
-        teardownPeer();
+        teardownPeer({ preserveClaimAttempt });
 
-        try {
-          const useRoomId = true;
-          await initPeer(wantsHub, useRoomId);
-          isHostMode = wantsHub;
-          setHubTag(isHostMode);
-          if (isHostMode) resetHubClaimRetry();
-        } catch (e) {
-          const errType = e?.type || '';
-          if (wantsHub && errType === 'unavailable-id') {
+        const useRoomId = true;
+        let hostReady = false;
+        let lastHostErr = null;
+
+        if (wantsHub) {
+          const maxAttempts = HOST_ID_SUFFIXES.length;
+          for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+            try {
+              await initPeer(true, useRoomId);
+              hostReady = true;
+              break;
+            } catch (e) {
+              lastHostErr = e;
+              const errType = e?.type || '';
+              if (errType === 'unavailable-id') {
+                markHostIdTaken('unavailable-id');
+                teardownPeer({ preserveClaimAttempt: preserveClaimAttempt || errType === 'unavailable-id' });
+                if (!advanceHostId('unavailable-id')) break;
+                resetHostIdTaken('rotate');
+                continue;
+              }
+              break;
+            }
+          }
+        } else {
+          try {
+            await initPeer(false, useRoomId);
+          } catch (e) {
+            setStatus('erro ao conectar');
+            snapshotState('connect-error', { errType: e?.type || '' });
+            return;
+          }
+        }
+
+        if (wantsHub && hostReady) {
+          isHostMode = true;
+          setHubTag(true);
+          resetHubClaimRetry();
+          resetHostIdTaken('host-acquired');
+          snapshotState('connect-peer-ready', { wantsHub: true });
+        } else if (wantsHub) {
+          const errType = lastHostErr?.type || '';
+          if (errType === 'unavailable-id') {
             log('Host ocupado, entrando como visitante.');
             setHubTag(false);
             isHostMode = false;
-            teardownPeer();
+            teardownPeer({ preserveClaimAttempt: preserveClaimAttempt || errType === 'unavailable-id' });
             try { await initPeer(false, useRoomId); }
             catch { setStatus('erro ao conectar'); return; }
             scheduleHubClaimRetry('id-ocupado');
+            snapshotState('connect-host-occupied', { errType });
           } else {
             setStatus('erro ao conectar');
+            snapshotState('connect-error', { errType });
             return;
           }
+        } else {
+          isHostMode = false;
+          setHubTag(false);
+          snapshotState('connect-peer-ready', { wantsHub: false });
         }
 
         room = createRoomApi();
@@ -1833,7 +2127,15 @@
       function currentLocalPresence() {
         const nm = (userInput.value || '').trim() || '';
         const tagsArr = Array.from(localTags).map(normalizeTag).filter(Boolean);
-        return { name: nm, tags: tagsArr.length ? tagsArr : ['visitante'], t: Date.now(), sid: STABLE_SELF_ID };
+        const hostId = isHostMode ? activeHostId : '';
+        return {
+          name: nm,
+          tags: tagsArr.length ? tagsArr : ['visitante'],
+          t: Date.now(),
+          sid: STABLE_SELF_ID,
+          peerId: selfPeerId(),
+          hostId
+        };
       }
 
       function announcePresence(targetPeerId) {
@@ -1841,11 +2143,39 @@
         syncSelfPeer();
       }
 
+      function forwardPresenceToPeers(data, fromPeerId) {
+        if (!isHostMode) return;
+        const origin = String(fromPeerId || data?.peerId || '');
+        const payload = { ...(data || {}), peerId: origin };
+        for (const [pid, conn] of peerConnections.entries()) {
+          if (!conn || !conn.open) continue;
+          if (origin && pid === origin) continue;
+          try { sendPresence(payload, pid); } catch {}
+        }
+      }
+
+      function sendKnownPresenceToPeer(targetPeerId) {
+        if (!isHostMode) return;
+        for (const [key, meta] of peers.entries()) {
+          if (!meta || meta.online === false) continue;
+          const pid = meta.peerId || (meta.sid === STABLE_SELF_ID ? selfPeerId() : '');
+          const sid = meta.sid || pid || key;
+          if (!sid) continue;
+          if (pid && pid === targetPeerId) continue;
+          const tagsArr = meta.tags ? Array.from(meta.tags) : [];
+          try {
+            sendPresence({ name: meta.name || '', tags: tagsArr, t: Date.now(), sid, peerId: pid || String(key) }, targetPeerId);
+          } catch {}
+        }
+      }
+
       onPresence((data, peerId) => {
-        const pid = String(peerId || '');
+        if (data?.hostId) setActiveHostId(String(data.hostId), 'presence');
+        const pid = String(data?.peerId || peerId || '');
         const sid = data?.sid || pid;
         upsertPeer(pid || sid, { name: data?.name, tags: data?.tags, online: true, sid });
         renderPeerList();
+        forwardPresenceToPeers(data, pid);
       });
 
       announcePresence();
@@ -1881,6 +2211,7 @@
       room.onPeerJoin?.((peerId) => {
         log(`peer join: ${shortPeer(peerId)}`);
         announcePresence(peerId);
+        sendKnownPresenceToPeer(peerId);
         try { sendPing({ t: Date.now() }, peerId); } catch {}
         updateStatusDetails();
       });
@@ -1893,17 +2224,27 @@
 
         setStatus('conectado');
         refreshRelayUi();
+        snapshotState('connect-complete');
+      } catch (err) {
+        const msg = err?.message || err || 'erro desconhecido';
+        log(`erro ao conectar: ${msg}`);
+        setStatus('erro ao conectar');
+        snapshotState('connect-exception', { message: msg });
       } finally {
         connectInProgress = false;
       }
     }
 
-    function disconnect() {
+    function disconnect(reason = 'manual') {
       if (!room) return;
-      try { teardownPeer(); } catch {}
+      const preserveClaimAttempt = /^hub-(claim|takeover)/.test(String(reason));
+      snapshotState('disconnect-start', { reason });
+      try { teardownPeer({ preserveClaimAttempt }); } catch {}
       room = null;
       activeRoomId = '';
       roomHostId = '';
+      activeHostId = '';
+      hostIdIndex = 0;
       isHostMode = false;
 
       if (syncTimer) { clearInterval(syncTimer); syncTimer = null; }
@@ -1928,6 +2269,7 @@
       setStatus('desconectado');
       refreshRelayUi();
       updateStatusDetails();
+      snapshotState('disconnect-complete', { reason });
     }
 
     btnJoin.addEventListener('click', () => connect('click'));
@@ -1989,7 +2331,7 @@
       }
       if (!isConnectionAlive()) {
         log('Retomando conexao apos voltar ao app...');
-        disconnect();
+        disconnect('resume');
         setTimeout(() => connect('resume'), 200);
       }
     });

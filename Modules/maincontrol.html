@@ -3,6 +3,8 @@
   #remoteControlWrapper {
     position: fixed;
     bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
     z-index: 900;
     display: flex;
     flex-direction: column;
@@ -10,14 +12,22 @@
     padding: 0 8px;
     pointer-events: none; /* evita bloquear cliques fora do controle */
   }
-  .toggle-bar {
-    width: 100%;
-    max-width: 1100px;
-    display: flex;
-    justify-content: flex-end;
+  #remoteControlWrapper.inline-mode {
+    position: static;
+    bottom: auto;
+    left: auto;
+    transform: none;
     padding: 0;
-    margin-bottom: 0;
     pointer-events: auto;
+  }
+  #remoteControlWrapper.inline-mode #controlShell {
+    flex-direction: column;
+    align-items: stretch;
+    max-width: none;
+  }
+  #remoteControlWrapper.inline-mode #remoteControlCard {
+    width: 100%;
+    min-width: unset;
   }
   #controlShell {
     display: flex;
@@ -28,15 +38,34 @@
     max-width: 100%;
     position: relative;
   }
+  @media (max-height: 900px) {
+    #controlShell {
+      max-height: calc(100vh - 80px);
+      overflow-y: auto;
+    }
+  }
+  @media (max-height: 720px) {
+    #controlShell {
+      max-height: calc(100vh - 40px);
+    }
+  }
   #remoteControlCard {
     width: auto;
     min-width: 300px;
     max-width: 1100px;
     border-radius: 16px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+    text-align: left;
   }
   @media (max-width: 640px) {
     #remoteControlWrapper {
       position: static;
+      left: auto;
+      transform: none;
       padding: 0;
     }
     #controlShell {
@@ -49,50 +78,142 @@
       min-width: unset;
     }
   }
-  .toggle-handle {
-    position: relative;
-    width: 32px;
-    height: 32px;
-    border-radius: 16px 16px 1px 1px;
-    padding: 0;
-    border: 1px solid rgba(255,255,255,0.12);
-    background: linear-gradient(135deg, #4d71ff, #6c8dff);
-    color: #fff;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 10px 24px rgba(0,0,0,0.28), 0 4px 12px rgba(77,113,255,0.25);
-    align-self: flex-start;
-    z-index: 5;
-    transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
-  }
-  .toggle-handle:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 12px 26px rgba(0,0,0,0.32), 0 6px 14px rgba(77,113,255,0.3);
-  }
   .control-row {
-    display: grid;
-    grid-template-columns: 1fr auto auto auto auto auto;
-    gap: 10px;
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
+    justify-content: flex-start;
+    gap: 12px;
+    width: 100%;
   }
   @media (max-width: 640px) {
-  .control-row {
-      grid-template-columns: 1fr;
+    .control-row {
+      flex-direction: column;
       align-items: stretch;
     }
   }
-  .mode-toggle { max-width: 220px; width: 100%; }
-  .mode-toggle .btn {
-    border-radius: 10px;
-    padding: 6px 10px;
-    border: 1px solid #343a4a;
-    color: #e7eaee;
-    background: #1b1f2a;
+  .control-slider-row {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    margin-top: 8px;
+    max-height: 220px;
   }
-  .mode-toggle .btn:hover { border-color: #4d71ff; color: #ffffff; }
-  .mode-toggle .btn.active { background: #4d71ff; border-color: #4d71ff; color: #fff; }
-  .level-wrap { min-width: 200px; position: relative; }
+  @media (max-width: 640px) {
+    .control-slider-row {
+      margin-top: 12px;
+    }
+  }
+  #rouletteRow {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    margin-top: 12px;
+    max-height: 1200px;
+  }
+  #remoteControlCard #roletas-widget {
+    width: 100%;
+    margin: 0;
+    background: transparent !important;
+    border: none !important;
+    border-radius: 14px;
+    padding: 0 !important;
+  }
+  #remoteControlCard #roletas-widget .r3-layout {
+    gap: clamp(0.75rem, 1.5vw, 1.5rem);
+  }
+  .custom-buttons-slot {
+    width: 100%;
+    margin-top: 18px;
+  }
+  .event-canvas-slot {
+    width: 100%;
+    margin-top: 18px;
+  }
+  .event-canvas-card {
+    position: relative;
+    border-radius: 16px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    overflow: hidden;
+  }
+  .event-canvas-meta-badge {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    font-size: 0.75rem;
+    color: #cbd5f5;
+    background: rgba(10,12,18,0.65);
+    border: 1px solid rgba(255,255,255,0.08);
+    padding: 2px 10px;
+    border-radius: 999px;
+    pointer-events: none;
+  }
+  #collarEventMirrorCanvas {
+    width: 100%;
+    height: auto;
+    display: block;
+    border-radius: 16px;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+  #remoteControlCard #customPads {
+    width: 100%;
+  }
+  #remoteControlCard #customPads .cp-grid {
+    justify-content: flex-start;
+  }
+  .mode-toggle {
+    max-width: 420px;
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: flex-start;
+  }
+  .mode-btn {
+    --mc-color: #4d71ff;
+    --mc-tint: rgba(77,113,255,0.12);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px;
+    background: linear-gradient(120deg, var(--mc-tint), rgba(12,12,14,0.95));
+    color: #e5e7eb;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px;
+    min-width: 70px;
+    transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.28);
+  }
+  .mode-btn .mode-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    color: var(--mc-color);
+  }
+  .mode-btn:hover {
+    border-color: var(--mc-color);
+    box-shadow: 0 10px 22px rgba(0,0,0,0.35);
+    transform: translateY(-1px);
+  }
+  .mode-btn.active {
+    border-color: var(--mc-color);
+    border-width: 2px;
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.12), 0 12px 26px rgba(0,0,0,0.4);
+  }
+  .mode-btn[data-mode="SHOCK"] { --mc-color: #f97316; --mc-tint: rgba(249,115,22,0.16); }
+  .mode-btn[data-mode="VIBRATION"] { --mc-color: #10b981; --mc-tint: rgba(16,185,129,0.18); }
+  .mode-btn[data-mode="LIGHT"] { --mc-color: #facc15; --mc-tint: rgba(250,204,21,0.16); }
+  .mode-btn[data-mode="BEEP"] { --mc-color: #60a5fa; --mc-tint: rgba(96,165,250,0.18); }
+  .mode-btn[data-mode="ROULETTE"] { --mc-color: #f472b6; --mc-tint: rgba(244,114,182,0.18); }
+  .level-wrap {
+    min-width: 200px;
+    position: relative;
+  }
   .level-tooltip-anchor {
     position: absolute;
     top: -4px;
@@ -140,34 +261,219 @@
     box-shadow: 0 0 0 2px #1b1f2a;
   }
   .level-input {
-    background: #1f2430;
+    background: transparent;
     color: #e7eaee;
-    border: 1px solid rgba(255,255,255,0.12);
-    min-width: 48px;
-    width: 64px;
+    border: none;
+    min-width: 0;
+    width: fit-content;
     text-align: center;
-    font-size: 1rem;
+    font-size: 2rem;
     font-weight: 600;
-    padding: 3px 6px;
+    padding: 0;
     flex: 0 0 auto;
+    display: inline-block;
+    line-height: 1;
+  }
+  .level-input:focus,
+  .level-input:active {
+    background: transparent;
+    border: none;
+    outline: none;
+    box-shadow: none;
   }
   .btn-send {
-    width: auto;
-    border-radius: 12px;
-    font-weight: 600;
-    transition: transform .12s ease, box-shadow .12s ease, background .12s ease, border-color .12s ease;
+    --send-color: #ef4444;
+    --send-tint: rgba(239,68,68,0.16);
+    --send-tint-strong: rgba(239,68,68,0.32);
+    width: 64px;
+    height: 64px;
+    padding: 0;
+    border-radius: 50%;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    letter-spacing: 0.02em;
+    border: 3px solid rgba(239,68,68,0.65);
+    background: linear-gradient(125deg, var(--send-tint), rgba(9,10,15,0.92));
+    color: #ffecec;
+    box-shadow: 0 8px 20px rgba(239,68,68,0.25), 0 4px 12px rgba(0,0,0,0.35);
+    transition: transform .12s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease, color .1s ease;
+  }
+  .btn-send i {
+    color: var(--send-color);
+    transition: color .12s ease;
+  }
+  .btn-send:hover {
+    border-color: var(--send-color);
+    background: linear-gradient(125deg, var(--send-tint-strong), rgba(23,6,8,0.92));
+    color: #fff1f1;
+    box-shadow: 0 10px 26px rgba(239,68,68,0.35), 0 6px 12px rgba(0,0,0,0.35);
+    transform: translateY(-1px);
+  }
+  .btn-send i {
+    font-size: 1.2rem;
+  }
+  .btn-send:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.12), 0 0 0 6px rgba(239,68,68,0.25);
   }
   .btn-send.pressed { transform: translateY(1px); }
-  .btn-send.holding { background: #dc3545 !important; border-color: #dc3545 !important; color: #fff !important; box-shadow: 0 0 0 0.2rem rgba(220,53,69,0.25); }
+  .btn-send.holding {
+    background: linear-gradient(120deg, rgba(239,68,68,0.95), rgba(190,18,60,0.9));
+    border-color: rgba(239,68,68,0.95) !important;
+    color: #fff !important;
+    box-shadow: 0 10px 26px rgba(239,68,68,0.45), 0 0 0 0.15rem rgba(239,68,68,0.35);
+  }
+  .btn-send.holding i {
+    color: #ffffff;
+  }
+  .btn-advanced-toggle {
+    --adv-color: #9ca3af;
+    --adv-tint: rgba(156,163,175,0.18);
+    --adv-tint-strong: rgba(156,163,175,0.32);
+    min-width: 48px;
+    min-height: 48px;
+    padding: 10px;
+    border-radius: 14px;
+    border: 1px solid rgba(156,163,175,0.35);
+    background: linear-gradient(120deg, var(--adv-tint), rgba(12,12,14,0.92));
+    color: #f3f4f6;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 8px 18px rgba(0,0,0,0.28);
+    transition: transform .15s ease, box-shadow .2s ease, border-color .15s ease, background .15s ease, color .12s ease;
+  }
+  .btn-advanced-toggle i {
+    color: var(--adv-color);
+    transition: color .12s ease;
+  }
+  .btn-advanced-toggle:hover {
+    border-color: rgba(156,163,175,0.6);
+    background: linear-gradient(120deg, var(--adv-tint-strong), rgba(18,19,24,0.95));
+    color: #fff;
+    box-shadow: 0 10px 22px rgba(0,0,0,0.32);
+    transform: translateY(-1px);
+  }
+  .btn-advanced-toggle:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.12), 0 0 0 6px rgba(156,163,175,0.3);
+  }
+  .btn-advanced-toggle[aria-expanded="true"] {
+    border-color: rgba(156,163,175,0.75);
+    background: linear-gradient(120deg, rgba(156,163,175,0.28), rgba(50,54,65,0.95));
+    color: #fff;
+    box-shadow: 0 0 0 2px rgba(156,163,175,0.28), 0 8px 20px rgba(0,0,0,0.35);
+  }
+  .btn-advanced-toggle[aria-expanded="true"] i {
+    color: #f9fafb;
+  }
+  .control-collapse-btn {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(17,21,32,0.82);
+    color: #f9fafb;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.35);
+    transition: transform .12s ease, box-shadow .15s ease, background .15s ease, color .12s ease;
+    z-index: 2;
+  }
+  .control-collapse-btn i {
+    font-size: 1rem;
+  }
+  .control-collapse-btn:hover {
+    transform: translateY(-1px);
+    background: rgba(239,68,68,0.35);
+    color: #fff;
+    box-shadow: 0 12px 26px rgba(0,0,0,0.45);
+  }
+  .control-collapse-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.25), 0 0 0 6px rgba(239,68,68,0.25);
+  }
   .level-tooltip .tooltip-inner { font-weight: 700; }
   .glass-background {
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    background-color: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(0, 0, 0, 0.3);
+    --glass-grad-start: rgba(77,113,255,0.35);
+    --glass-grad-end: rgba(9,11,20,0);
+    --glass-border: rgba(255,255,255,0.06);
+    --glass-glow: rgba(7,10,22,0.5);
+    position: relative;
+    z-index: 0;
+    overflow: hidden;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    background: rgba(5,7,12,0.45);
+    border: 1px solid var(--glass-border);
     border-radius: 16px;
-    background-image: url();
-    background-blend-mode: overlay;
+    box-shadow: 0 20px 40px var(--glass-glow);
+  }
+  .glass-background::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(135deg, var(--glass-grad-start) 0%, rgba(8,10,16,0.15) 35%, var(--glass-grad-end) 80%);
+    opacity: 0.95;
+    pointer-events: none;
+    z-index: -1;
+  }
+  .control-readouts {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: flex-start;
+    margin-bottom: 1rem;
+    width: 100%;
+  }
+  .control-readout {
+    min-width: 120px;
+    text-align: left;
+  }
+  .control-readout-label {
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #9ca3af;
+  }
+  .control-readout-value {
+    font-size: 1.9rem;
+    font-weight: 700;
+    color: #f9fafb;
+    line-height: 1.1;
+  }
+  @media (max-width: 640px) {
+    .control-readouts {
+      justify-content: center;
+    }
+  }
+  #remoteControlCard > .control-readouts,
+  #remoteControlCard > #controlContent,
+  #remoteControlCard > #advancedPanel {
+    width: 100%;
+  }
+  .collapsible-section {
+    overflow: hidden;
+    transition: max-height .24s ease, opacity .18s ease, transform .24s ease, padding .18s ease, margin .18s ease;
+    will-change: max-height, opacity, transform;
+  }
+  .collapsible-section.is-collapsed {
+    max-height: 0 !important;
+    opacity: 0;
+    transform: translateY(-6px);
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    pointer-events: none;
   }
   .advanced-panel {
     background: rgba(0, 0, 0, 0.4);
@@ -278,52 +584,59 @@
     margin: 0;
   }
   .number-spinner input[type="number"] {
+    appearance: textfield;
     -moz-appearance: textfield;
   }
   .number-spinner input[type="number"]:focus {
     outline: none;
     box-shadow: none;
   }
-  .roleta-shortcut-btn {
-    min-width: auto !important;
-    width: auto;
-    max-width: none;
-    flex: 0 0 auto;
-    padding-left: 12px;
-    padding-right: 12px;
-  }
-  .roleta-shortcut-btn .fa-dice {
-    font-size: 1.35rem;
-  }
 </style>
 <div id="remoteControlWrapper">
-  <div class="toggle-bar">
-    <button id="toggleControl" class="toggle-handle" aria-label="Recolher controle" title="Recolher controle" data-bs-toggle="tooltip">
-      <i class="fa-solid fa-xmark"></i>
-    </button>
-  </div>
   <div id="controlShell">
-    <div id="remoteControlCard" class="card p-3 shadow-lg flex-grow-1 glass-background">
+    <div id="remoteControlCard" class="card p-3 p-lg-4 shadow-lg flex-grow-1 glass-background">
+      <button id="toggleControl" class="control-collapse-btn" aria-label="Voltar para layout normal" title="Voltar para layout normal" data-bs-toggle="tooltip">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+      <div class="control-readouts">
+        <div class="control-readout">
+          <div class="control-readout-label">Modo</div>
+          <div id="modeReadout" class="control-readout-value">-</div>
+        </div>
+        <div class="control-readout">
+          <div class="control-readout-label">Intensidade</div>
+          <div id="intensityReadout" class="control-readout-value">0%</div>
+        </div>
+        <div class="control-readout">
+          <div class="control-readout-label">Canal</div>
+          <div id="channelReadout" class="control-readout-value">1</div>
+        </div>
+        <div class="control-readout">
+          <div class="control-readout-label">Duracao</div>
+          <div id="durationReadout" class="control-readout-value">—</div>
+        </div>
+        <div class="control-readout">
+          <div class="control-readout-label">Pulsos</div>
+          <div id="pulsesReadout" class="control-readout-value">—</div>
+        </div>
+      </div>
       <div id="controlContent" class="control-row">
     <div class="btn-group mode-toggle" role="group" aria-label="Modo">
-      <button class="btn btn-outline-light mode-btn" data-mode="SHOCK" title="Choque" data-bs-toggle="tooltip">
-        <i class="fa-solid fa-bolt-lightning"></i>
+      <button class="mode-btn" data-mode="SHOCK" title="Choque" data-bs-toggle="tooltip">
+        <span class="mode-icon"><i class="fa-solid fa-bolt-lightning"></i></span>
       </button>
-      <button class="btn btn-outline-light mode-btn" data-mode="VIBRATION" title="Vibracao" data-bs-toggle="tooltip">
-        <i class="fa-solid fa-mobile-screen-button"></i>
+      <button class="mode-btn" data-mode="VIBRATION" title="Vibracao" data-bs-toggle="tooltip">
+        <span class="mode-icon"><i class="fa-solid fa-mobile-screen-button"></i></span>
       </button>
-      <button class="btn btn-outline-light mode-btn" data-mode="LIGHT" title="Luz (LED)" data-bs-toggle="tooltip">
-        <i class="fa-solid fa-lightbulb"></i>
+      <button class="mode-btn" data-mode="LIGHT" title="Luz (LED)" data-bs-toggle="tooltip">
+        <span class="mode-icon"><i class="fa-solid fa-lightbulb"></i></span>
       </button>
-      <button class="btn btn-outline-light mode-btn" data-mode="BEEP" title="Som (Beep)" data-bs-toggle="tooltip">
-        <i class="fa-solid fa-volume-high"></i>
+      <button class="mode-btn" data-mode="BEEP" title="Som (Beep)" data-bs-toggle="tooltip">
+        <span class="mode-icon"><i class="fa-solid fa-volume-high"></i></span>
       </button>
-    </div>
-
-    <div id="levelRow" class="d-flex align-items-center gap-2 level-wrap">
-      <i class="fa-solid fa-gauge-high text-light" title="Intensidade" data-bs-toggle="tooltip"></i>
-      <input type="range" class="form-range level-slider" min="0" max="100" step="1" id="levelSlider" data-bs-toggle="tooltip" data-bs-placement="top"/>
-      <input id="levelValue" class="form-control form-control-sm level-input" type="text" inputmode="numeric" pattern="[0-9]*" title="Nivel (0 a 100)" data-bs-toggle="tooltip" value="000"/>
+      <button class="mode-btn" data-mode="ROULETTE" title="Roleta" data-bs-toggle="tooltip">
+        <span class="mode-icon"><i class="fa-solid fa-dice"></i></span>
+      </button>
     </div>
 
     <div class="ms-auto d-flex align-items-center gap-2 justify-content-end host-only">
@@ -332,21 +645,27 @@
       </div>
     </div>
 
-    <button id="btnSend" class="btn btn-primary btn-send px-3" title="Enviar comando" data-bs-toggle="tooltip">
+    <button id="btnSend" class="btn btn-send" title="Enviar comando" data-bs-toggle="tooltip">
       <i class="fa-solid fa-power-off"></i>
     </button>
 
-    <button id="btnAdvancedToggle" class="btn btn-dark btn-send px-2 border-0" title="Opcoes avancadas" data-bs-toggle="tooltip" aria-expanded="false">
+    <button id="btnAdvancedToggle" class="btn btn-advanced-toggle" title="Opcoes avancadas" data-bs-toggle="tooltip" aria-expanded="false">
       <i class="fa-solid fa-chevron-down"></i>
     </button>
 
-    <button id="roletaShortcutBtn" class="btn r3-btn-hold roleta-shortcut-btn fw-semibold px-3" type="button" title="Atalho: girar roleta" data-bs-toggle="tooltip" aria-pressed="false" aria-label="Atalho: girar roleta">
-      <span class="r3BtnMask" aria-hidden="true"></span>
-      <span class="r3BtnContent"><i class="fa-solid fa-dice"></i></span>
-    </button>
   </div>
 
-  <div id="advancedPanel" class="advanced-panel adv-collapsed mt-3">
+  <div class="control-slider-row collapsible-section" id="sliderRow" aria-hidden="false">
+    <div id="levelRow" class="d-flex align-items-center gap-2 level-wrap">
+      <input type="range" class="form-range level-slider" min="0" max="100" step="1" id="levelSlider" data-bs-toggle="tooltip" data-bs-placement="top"/>
+      <input id="levelValue" class="form-control form-control-sm level-input" type="text" inputmode="numeric" pattern="[0-9]*" title="Nivel (0 a 100)" data-bs-toggle="tooltip" value="0%"/>
+    </div>
+  </div>
+  <div id="rouletteRow" class="collapsible-section is-collapsed" aria-hidden="true">
+    <div id="rouletteMount" class="w-100"></div>
+  </div>
+
+  <div id="advancedPanel" class="advanced-panel adv-collapsed">
     <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap mb-2">
       <div class="fw-semibold text-light">Opcoes avancadas</div>
       <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -399,6 +718,15 @@
         </div>
       </div>
   </div>
+  <div class="custom-buttons-slot">
+    <div id="customButtonsMount"></div>
+  </div>
+  <div class="event-canvas-slot">
+    <div class="event-canvas-card" id="collarEventMirror">
+      <canvas id="collarEventMirrorCanvas" height="220"></canvas>
+      <div class="event-canvas-meta-badge" id="collarEventMirrorMeta">Sincronizando…</div>
+    </div>
+  </div>
 </div>
 </div>
 </div>
@@ -439,9 +767,30 @@
   let level = 0;
   let channel = 1;
   const STORAGE_KEY = "remote_control_state_v1";
-  const MODES = ["SHOCK", "VIBRATION", "LIGHT", "BEEP"];
+  const MODES = ["SHOCK", "VIBRATION", "LIGHT", "BEEP", "ROULETTE"];
+  const MODE_LABELS = {
+    SHOCK: "Choque",
+    VIBRATION: "Vibra",
+    LIGHT: "Luz",
+    BEEP: "Beep",
+    ROULETTE: "Roleta"
+  };
+  const MODE_GLASS_THEMES = {
+    SHOCK: { start: "rgba(249,115,22,0.55)", end: "rgba(249,115,22,0)", border: "rgba(249,115,22,0.45)", glow: "rgba(249,115,22,0.25)" },
+    VIBRATION: { start: "rgba(16,185,129,0.45)", end: "rgba(16,185,129,0)", border: "rgba(16,185,129,0.32)", glow: "rgba(16,185,129,0.2)" },
+    LIGHT: { start: "rgba(250,204,21,0.45)", end: "rgba(250,204,21,0)", border: "rgba(250,204,21,0.38)", glow: "rgba(250,204,21,0.2)" },
+    BEEP: { start: "rgba(96,165,250,0.45)", end: "rgba(96,165,250,0)", border: "rgba(96,165,250,0.32)", glow: "rgba(96,165,250,0.25)" },
+    ROULETTE: { start: "rgba(244,114,182,0.5)", end: "rgba(244,114,182,0)", border: "rgba(244,114,182,0.35)", glow: "rgba(244,114,182,0.28)" },
+    DEFAULT: { start: "rgba(77,113,255,0.35)", end: "rgba(77,113,255,0)", border: "rgba(255,255,255,0.08)", glow: "rgba(7,10,22,0.5)" }
+  };
+  const MODE_LEVEL_COLORS = {
+    SHOCK: "#f97316",
+    VIBRATION: "#10b981"
+  };
+  const modeSupportsLevel = (mode)=> mode === "SHOCK" || mode === "VIBRATION";
   let levelTooltip = null;
   let levelTooltipAnchor = null;
+  let levelTooltipVisible = false;
   const LEVEL_PATCH_REASON = "remote-level";
   const lastControlTs = new Map(); // origin -> ts
   let levelDebounce = null;
@@ -454,6 +803,17 @@
   };
   let advanced = { ...ADV_DEFAULTS };
   let advancedOpen = false;
+  const ROULETTE_DEFAULT_HOLD_MS = 220;
+  const ROULETTE_HOLD_LIMITS = { min: 200, max: 20000 };
+  let roulettePointerActive = false;
+  let rouletteAutoReleaseTimer = null;
+  const eventMirrorState = {
+    interval: null,
+    resizeObserver: null,
+    retryTimer: null,
+    listeners: [],
+    active: false
+  };
 
   const HOLD_THRESHOLD_MS = 220; // abaixo disso: clique unico; acima: HOLD
   const GLOBAL_HARD_LIMIT = 15;  // failsafe geral (mantido)
@@ -476,7 +836,15 @@
   const advStatusPill = $("#advStatusPill");
   const advCountdownText = $("#advCountdownText");
   const advStopBtn = $("#advStopBtn");
-  const roletaShortcutBtn = $("#roletaShortcutBtn");
+  const btnSend = $("#btnSend");
+  const remoteControlCard = $("#remoteControlCard");
+  const modeReadoutEl = $("#modeReadout");
+  const intensityReadoutEl = $("#intensityReadout");
+  const channelReadoutEl = $("#channelReadout");
+  const durationReadoutEl = $("#durationReadout");
+  const pulsesReadoutEl = $("#pulsesReadout");
+  const sliderRowEl = $("#sliderRow");
+  const rouletteRowEl = $("#rouletteRow");
   let advCountdownTimer = null;
   let advCountdownEndAt = 0;
   let advStopSignal = { stop: false, holdActive: false };
@@ -493,7 +861,9 @@
   const msToSecStr = (ms, key="durationMs") => {
     const lim = ADV_LIMITS[key] || ADV_LIMITS.durationMs;
     const upper = Number.isFinite(lim.max) ? lim.max : Number(ms)||0;
-    return (clampNum(Number(ms)||0, lim.min, upper) / 1000).toFixed(2);
+    const seconds = clampNum(Number(ms)||0, lim.min, upper) / 1000;
+    const fixed = seconds.toFixed(2);
+    return fixed.replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
   };
   const secToMs = (s, key="durationMs") => {
     const lim = ADV_LIMITS[key] || ADV_LIMITS.durationMs;
@@ -565,6 +935,145 @@
       log(`Falha ao salvar estado: ${e && e.message || e}`, "warn");
     }
   }
+
+      function destroyEventCanvasMirror(){
+        if (eventMirrorState.interval) {
+          clearInterval(eventMirrorState.interval);
+          eventMirrorState.interval = null;
+        }
+        if (eventMirrorState.resizeObserver) {
+          try { eventMirrorState.resizeObserver.disconnect(); } catch(_){ }
+          eventMirrorState.resizeObserver = null;
+        }
+        if (Array.isArray(eventMirrorState.listeners)) {
+          eventMirrorState.listeners.forEach(({ target, type, handler }) => {
+            try { target.removeEventListener(type, handler); } catch(_){ }
+          });
+          eventMirrorState.listeners.length = 0;
+        }
+        eventMirrorState.active = false;
+      }
+
+      function initEventCanvasMirror(){
+        const container = document.getElementById("collarEventMirror");
+        const mirrorCanvas = document.getElementById("collarEventMirrorCanvas");
+        const statusEl = document.getElementById("collarEventMirrorMeta");
+        const sourceCanvas = document.getElementById("collarEventCanvas");
+        if (!container || !mirrorCanvas || !statusEl || !sourceCanvas) return false;
+        const ctx = mirrorCanvas.getContext("2d");
+        if (!ctx) return false;
+
+        destroyEventCanvasMirror();
+
+        function syncSize(){
+          const width = sourceCanvas.width || sourceCanvas.clientWidth || 320;
+          const height = sourceCanvas.height || sourceCanvas.clientHeight || 200;
+          if (mirrorCanvas.width !== width) mirrorCanvas.width = width;
+          if (mirrorCanvas.height !== height) mirrorCanvas.height = height;
+        }
+        syncSize();
+
+        if (window.ResizeObserver) {
+          const ro = new ResizeObserver(() => syncSize());
+          ro.observe(sourceCanvas);
+          eventMirrorState.resizeObserver = ro;
+        } else {
+          const resizeHandler = () => syncSize();
+          window.addEventListener("resize", resizeHandler);
+          eventMirrorState.resizeObserver = {
+            disconnect(){ window.removeEventListener("resize", resizeHandler); }
+          };
+        }
+
+        function registerMirrorListener(type, handler, opts){
+          mirrorCanvas.addEventListener(type, handler, opts || { passive: false });
+          eventMirrorState.listeners.push({ target: mirrorCanvas, type, handler });
+        }
+
+        function forwardMirrorInteraction(type, evt){
+          if (!sourceCanvas.isConnected) return;
+          const srcRect = sourceCanvas.getBoundingClientRect();
+          const mirrorRect = mirrorCanvas.getBoundingClientRect();
+          const relX = (evt.clientX || 0) - mirrorRect.left;
+          const relY = (evt.clientY || 0) - mirrorRect.top;
+          const clientX = srcRect.left + relX;
+          const clientY = srcRect.top + relY;
+          const common = {
+            bubbles: true,
+            cancelable: true,
+            clientX,
+            clientY,
+            buttons: evt.buttons || 0,
+            pointerId: evt.pointerId || 1,
+            pointerType: evt.pointerType || "mouse",
+            pressure: evt.pressure || 0,
+            altKey: evt.altKey,
+            ctrlKey: evt.ctrlKey,
+            metaKey: evt.metaKey,
+            shiftKey: evt.shiftKey
+          };
+          const pointerType = type || evt.type;
+          if (window.PointerEvent) {
+            try { sourceCanvas.dispatchEvent(new PointerEvent(pointerType, common)); } catch(_){ }
+          }
+          const mouseType = pointerType.replace("pointer", "mouse");
+          try { sourceCanvas.dispatchEvent(new MouseEvent(mouseType, common)); } catch(_){ }
+        }
+
+        const pointerEvents = [
+          "pointermove",
+          "pointerdown",
+          "pointerup",
+          "pointerenter",
+          "pointerleave",
+          "pointercancel",
+          "click"
+        ];
+        pointerEvents.forEach(type => {
+          registerMirrorListener(type, evt => {
+            evt.preventDefault();
+            forwardMirrorInteraction(type, evt);
+          });
+        });
+        eventMirrorState.interval = setInterval(() => {
+          if (!sourceCanvas.isConnected) {
+            destroyEventCanvasMirror();
+            statusEl.textContent = "Aguardando grafico…";
+            scheduleEventCanvasMirror();
+            return;
+          }
+          try {
+            syncSize();
+            ctx.clearRect(0, 0, mirrorCanvas.width, mirrorCanvas.height);
+            ctx.drawImage(sourceCanvas, 0, 0, mirrorCanvas.width, mirrorCanvas.height);
+          } catch(_){ }
+        }, 250);
+
+        statusEl.textContent = "Atualizado em tempo real";
+        container.classList.add("mirror-ready");
+        eventMirrorState.active = true;
+        return true;
+      }
+
+      function scheduleEventCanvasMirror(){
+        if (eventMirrorState.retryTimer) return;
+        let attempts = 0;
+        const tick = () => {
+          if (initEventCanvasMirror()) {
+            clearInterval(eventMirrorState.retryTimer);
+            eventMirrorState.retryTimer = null;
+            return;
+          }
+          attempts += 1;
+          if (attempts >= 40 && eventMirrorState.retryTimer) {
+            clearInterval(eventMirrorState.retryTimer);
+            eventMirrorState.retryTimer = null;
+          }
+        };
+        tick();
+        eventMirrorState.retryTimer = setInterval(tick, 600);
+      }
+      scheduleEventCanvasMirror();
 
   function emitControlPatch(patch){
     if (!patch || typeof patch !== "object") return;
@@ -643,40 +1152,62 @@
     if (levelTooltip._element !== target) {
       levelTooltip._element = target;
     }
-    levelTooltip._activeTrigger = { manual: true };
-    levelTooltip.show();
-    levelTooltip.update && levelTooltip.update();
-    if (levelTooltip.tip) {
-      levelTooltip.tip.classList.add("show");
-      levelTooltip.tip.setAttribute("data-popper-placement", "top");
-    }
   }
 
   function updateSliderTooltip(n){
     const slider = $("#levelSlider");
-    const text = String(n).padStart(3, "0");
+    const text = `${n}%`;
     if (slider) {
       slider.setAttribute("data-bs-original-title", text);
       slider.setAttribute("title", text);
     }
     ensureSliderTooltip(text);
+    if (levelTooltipVisible && levelTooltip && typeof levelTooltip.update === "function") {
+      levelTooltip.update();
+    }
+  }
+
+  function syncLevelInputWidth(){
+    const el = $("#levelValue");
+    if (!el) return;
+    const len = Math.max(1, (el.value || "").length);
+    el.style.width = `${len + 0.5}ch`;
+  }
+
+  function showSliderTooltip(){
+    const slider = $("#levelSlider");
+    if (!slider) return;
+    const text = `${slider.value || level}%`;
+    ensureSliderTooltip(text);
+    if (!levelTooltip) return;
+    levelTooltip._activeTrigger = levelTooltip._activeTrigger || {};
+    levelTooltip._activeTrigger.manual = true;
+    if (typeof levelTooltip.show === "function") levelTooltip.show();
+    if (levelTooltip.tip) levelTooltip.tip.setAttribute("data-popper-placement", "top");
+    levelTooltipVisible = true;
+  }
+
+  function hideSliderTooltip(){
+    if (!levelTooltipVisible || !levelTooltip || typeof levelTooltip.hide !== "function") return;
+    levelTooltip.hide();
+    levelTooltipVisible = false;
   }
 
   function updateLevelUi(n){
     const slider = $("#levelSlider");
     const levelInput = $("#levelValue");
     if (slider) {
-      // gradiente reativo: verde -> amarelo -> vermelho
-      const hue = 120 - Math.round((n/100) * 120); // 120=verde, 0=vermelho
-      const color = `hsl(${hue}, 90%, 55%)`;
+      const color = MODE_LEVEL_COLORS[currentMode] || "#10b981";
       slider.style.setProperty('--lvl', `${n}%`);
       slider.style.setProperty('--lvlColor', color);
       slider.style.setProperty('--thumb', color);
       slider.style.background = `linear-gradient(90deg, ${color} 0%, ${color} ${n}%, #2c3040 ${n}%, #2c3040 100%)`;
     }
     if (levelInput) {
-      levelInput.value = String(n).padStart(3, "0");
+      levelInput.value = `${n}%`;
+      syncLevelInputWidth();
     }
+    syncIntensityReadout();
     updateSliderTooltip(n);
   }
 
@@ -692,8 +1223,36 @@
     });
   }
 
+  const formatModeLabel = (mode)=> MODE_LABELS[mode] || mode;
+  function syncModeReadout(){
+    if (modeReadoutEl) modeReadoutEl.textContent = formatModeLabel(currentMode);
+  }
+  function syncIntensityReadout(){
+    if (!intensityReadoutEl) return;
+    intensityReadoutEl.textContent = modeSupportsLevel(currentMode) ? `${level}%` : "—";
+  }
+  function syncChannelReadout(){
+    if (channelReadoutEl) channelReadoutEl.textContent = `${channel}`;
+  }
+  function syncAdvancedReadouts(){
+    const durationText = advancedOpen ? `${msToSecStr(advanced.durationMs, "durationMs")}s` : "—";
+    const pulsesText = advancedOpen ? `${advanced.pulses}` : "—";
+    if (durationReadoutEl) durationReadoutEl.textContent = durationText;
+    if (pulsesReadoutEl) pulsesReadoutEl.textContent = pulsesText;
+  }
+
+  function applyModeTheme(mode){
+    if (!remoteControlCard) return;
+    const theme = MODE_GLASS_THEMES[mode] || MODE_GLASS_THEMES.DEFAULT;
+    remoteControlCard.style.setProperty("--glass-grad-start", theme.start);
+    remoteControlCard.style.setProperty("--glass-grad-end", theme.end);
+    remoteControlCard.style.setProperty("--glass-border", theme.border);
+    remoteControlCard.style.setProperty("--glass-glow", theme.glow);
+  }
+
   function syncModeUi(){
     $$(".mode-btn").forEach(b => b.classList.toggle("active", b.dataset.mode === currentMode));
+    applyModeTheme(currentMode);
   }
 
   function syncAdvancedUi(){
@@ -735,6 +1294,7 @@
     advanced = normalizeAdvancedState(advanced);
     syncAdvancedUi();
     persistState();
+    syncAdvancedReadouts();
     broadcastBasics("advanced-change");
   }
 
@@ -742,6 +1302,7 @@
     advanced = { ...ADV_DEFAULTS };
     syncAdvancedUi();
     persistState();
+    syncAdvancedReadouts();
     broadcastBasics("advanced-reset");
     stopAdvCountdown(false);
   }
@@ -886,6 +1447,7 @@
       if (icon) icon.className = open ? "fa-solid fa-chevron-up" : "fa-solid fa-chevron-down";
     }
     persistState();
+    syncAdvancedReadouts();
     if (!advancedOpen) stopAdvCountdown(false);
   }
 
@@ -898,15 +1460,31 @@
       || normalized.preDelayMs !== ADV_DEFAULTS.preDelayMs;
   }
 
+  function setSectionVisibility(el, shouldShow){
+    if (!el) return;
+    const show = !!shouldShow;
+    el.classList.toggle("is-collapsed", !show);
+    el.setAttribute("aria-hidden", show ? "false" : "true");
+  }
+
   function setMode(m){
     currentMode = m; window.currentMode = m;
-    const showLevel = (m==="SHOCK"||m==="VIBRATION");
-    $("#levelRow").classList.toggle("d-none", !showLevel);
-    $("#levelSlider").disabled = !showLevel;
+    const showLevel = modeSupportsLevel(m);
+    setSectionVisibility(sliderRowEl, showLevel);
+    const sliderEl = $("#levelSlider");
+    if (sliderEl) sliderEl.disabled = !showLevel;
+    setSectionVisibility(rouletteRowEl, m === "ROULETTE");
     if (!showLevel){
       setLevel(0, { broadcast:false, reason:"mode-no-level" });
     }
+    if (m !== "ROULETTE") {
+      clearRouletteAutoTimer();
+      releaseRoulettePointer();
+      if (btnSend) btnSend.classList.remove("holding");
+    }
     syncModeUi();
+    syncModeReadout();
+    updateLevelUi(level);
     log(`Modo: ${m}`);
     persistState();
     broadcastBasics("mode-change");
@@ -938,12 +1516,13 @@
     const sw = $("#chanSwitch");
     if (sw) sw.checked = channel === 2;
     log(`Canal: ${channel}`);
+    syncChannelReadout();
     persistState();
     broadcastBasics("channel-change");
   }
 
   function buildCmdLine(durationOverride){
-    const lvl = (currentMode==="SHOCK"||currentMode==="VIBRATION") ? level : 0;
+    const lvl = modeSupportsLevel(currentMode) ? level : 0;
     const base = `${currentMode},${lvl},${channel}`;
     const dur = Number(durationOverride);
     if (Number.isFinite(dur) && dur > 0) {
@@ -970,7 +1549,6 @@
   }
 
   // ===== Envio =====
-  const btnSend = $("#btnSend");
   const sleep = (ms)=> new Promise(r => setTimeout(r, Math.max(0, ms || 0)));
   const ADV_WAIT_SLICE_MS = 60;
   async function waitWithStop(ms){
@@ -1030,6 +1608,11 @@
     const liveCfg = getLiveAdvanced();
     advanced = liveCfg;
     persistState();
+    if (currentMode === "ROULETTE") {
+      stopAdvCountdown(false);
+      triggerRouletteAutoSpin(liveCfg);
+      return;
+    }
     if (!advancedOpen) {
       stopAdvCountdown(false);
       sendCommand(buildCmdLine());
@@ -1047,8 +1630,26 @@
     }
     runBurst(liveCfg);
   }
-  function holdOn(){ if (btnSend) btnSend.classList.add("holding"); sendCommand(`HOLDON ${buildCmdLine()}`); }
-  function holdOff(){ if (btnSend) btnSend.classList.remove("holding"); sendCommand("HOLDOFF"); }
+  function holdOn(){
+    if (btnSend) btnSend.classList.add("holding");
+    if (currentMode === "ROULETTE") {
+      clearRouletteAutoTimer();
+      if (!startRoulettePointer()) {
+        if (btnSend) btnSend.classList.remove("holding");
+      }
+      return;
+    }
+    sendCommand(`HOLDON ${buildCmdLine()}`);
+  }
+  function holdOff(){
+    if (btnSend) btnSend.classList.remove("holding");
+    if (currentMode === "ROULETTE") {
+      clearRouletteAutoTimer();
+      releaseRoulettePointer();
+      return;
+    }
+    sendCommand("HOLDOFF");
+  }
 
   // ===== Botao: clique unico vs segurar =====
   let pressActive = false;
@@ -1130,24 +1731,50 @@
 
   // Toggle de exibicao
   const toggleBtn = $("#toggleControl");
-  const content = $("#controlContent");
-  const card = $("#remoteControlCard");
-  if (toggleBtn && content && card) {
-    toggleBtn.addEventListener("click", () => {
-      const hidden = card.classList.toggle("d-none");
-      content.classList.toggle("d-none", hidden);
-      const icon = toggleBtn.querySelector("i");
-      if (icon) {
-        icon.className = hidden ? "fa-solid fa-gamepad" : "fa-solid fa-xmark";
+  const wrapperEl = $("#remoteControlWrapper");
+  function updateToggleBtnUi(isInline){
+    if (!toggleBtn) return;
+    const icon = toggleBtn.querySelector("i");
+    const label = isInline ? "Fixar controle na tela" : "Voltar para layout normal";
+    if (icon) {
+      icon.className = isInline ? "fa-solid fa-thumbtack" : "fa-solid fa-xmark";
+    }
+    toggleBtn.setAttribute("aria-label", label);
+    toggleBtn.setAttribute("title", label);
+    toggleBtn.setAttribute("data-bs-original-title", label);
+    if (window.bootstrap && window.bootstrap.Tooltip) {
+      const tooltipInstance = window.bootstrap.Tooltip.getInstance(toggleBtn);
+      if (tooltipInstance) {
+        if (typeof tooltipInstance.setContent === "function") {
+          tooltipInstance.setContent({ ".tooltip-inner": label });
+        } else if (tooltipInstance.tip) {
+          const inner = tooltipInstance.tip.querySelector(".tooltip-inner");
+          if (inner) inner.textContent = label;
+        }
       }
-      toggleBtn.setAttribute("aria-label", hidden ? "Exibir controle" : "Recolher controle");
+    }
+  }
+  function setInlineMode(state){
+    if (!wrapperEl) return;
+    wrapperEl.classList.toggle("inline-mode", !!state);
+    updateToggleBtnUi(!!state);
+  }
+  if (toggleBtn && wrapperEl) {
+    toggleBtn.addEventListener("click", () => {
+      const nextState = !wrapperEl.classList.contains("inline-mode");
+      setInlineMode(nextState);
     });
+    updateToggleBtnUi(wrapperEl.classList.contains("inline-mode"));
   }
 
   // Controles
   $$(".mode-btn").forEach(b => b.addEventListener("click", () => setMode(b.dataset.mode)));
   $("#chanSwitch").addEventListener("change", e => setChannel(e.target.checked ? 2 : 1));
   $("#levelSlider").addEventListener("input", e => setLevel(e.target.value));
+  $("#levelSlider").addEventListener("pointerenter", showSliderTooltip);
+  $("#levelSlider").addEventListener("pointerleave", hideSliderTooltip);
+  $("#levelSlider").addEventListener("focus", showSliderTooltip);
+  $("#levelSlider").addEventListener("blur", hideSliderTooltip);
   if (advancedToggleBtn) advancedToggleBtn.addEventListener("click", () => setAdvancedOpen(!advancedOpen));
   if (advancedInputs.pulses) advancedInputs.pulses.addEventListener("change", e => updateAdvancedValue("pulses", parseInt(e.target.value,10)));
   if (advancedInputs.duration) advancedInputs.duration.addEventListener("change", e => updateAdvancedValue("durationMs", parseFloat(e.target.value)));
@@ -1174,29 +1801,77 @@
     });
   }
 
+  function embedRouletteModule(){
+    const mount = document.getElementById("rouletteMount");
+    const widget = document.getElementById("roletas-widget");
+    if (!mount || !widget) return false;
+    if (mount.contains(widget)) return true;
+    mount.appendChild(widget);
+    widget.classList.add("embedded-roulette");
+    return true;
+  }
+
+  function initRouletteEmbed(){
+    let attempts = 0;
+    const maxAttempts = 30;
+    let timer = null;
+    const attempt = () => {
+      if (embedRouletteModule()) {
+        if (timer) clearInterval(timer);
+        return;
+      }
+      attempts += 1;
+      if (attempts >= maxAttempts && timer) {
+        clearInterval(timer);
+      }
+    };
+    attempt();
+    timer = setInterval(attempt, 350);
+  }
+  initRouletteEmbed();
+
+  function embedCustomButtons(){
+    const mount = document.getElementById("customButtonsMount");
+    const panel = document.getElementById("customPads");
+    if (!mount || !panel) return false;
+    if (mount.contains(panel)) return true;
+    mount.appendChild(panel);
+    panel.classList.add("embedded-custom-pads");
+    return true;
+  }
+
+  function initCustomButtonsEmbed(){
+    let attempts = 0;
+    const maxAttempts = 30;
+    let timer = null;
+    const attempt = () => {
+      if (embedCustomButtons()) {
+        if (timer) clearInterval(timer);
+        return;
+      }
+      attempts += 1;
+      if (attempts >= maxAttempts && timer) {
+        clearInterval(timer);
+      }
+    };
+    attempt();
+    timer = setInterval(attempt, 350);
+  }
+  initCustomButtonsEmbed();
+
   function getRoletaBtn(){
     return document.getElementById("r3Btn");
   }
-  function showRoletaShortcutMessage(msg, duration=1400){
-    if (!roletaShortcutBtn) return;
-    const original = roletaShortcutBtn.dataset.originalLabel || roletaShortcutBtn.getAttribute("aria-label") || "Atalho: girar roleta";
-    roletaShortcutBtn.dataset.originalLabel = original;
-    const text = msg || original;
-    roletaShortcutBtn.setAttribute("aria-label", text);
-    roletaShortcutBtn.setAttribute("title", text);
-    if (msg) {
-      setTimeout(() => {
-        roletaShortcutBtn.setAttribute("aria-label", roletaShortcutBtn.dataset.originalLabel || original);
-        roletaShortcutBtn.setAttribute("title", roletaShortcutBtn.dataset.originalLabel || original);
-      }, duration);
-    }
-  }
-  function setRoletaShortcutPressed(state){
-    if (!roletaShortcutBtn) return;
-    roletaShortcutBtn.classList.toggle("r3-pressing", !!state);
-    roletaShortcutBtn.setAttribute("aria-pressed", state ? "true" : "false");
-  }
   function forwardRoletaEvent(type, srcEvt){
+    const bridge = window.__ROULETTE_BRIDGE__;
+    if (bridge) {
+      if (type === "pointerdown" && typeof bridge.nativePress === "function") {
+        return bridge.nativePress(srcEvt) !== false;
+      }
+      if (type === "pointerup" && typeof bridge.nativeRelease === "function") {
+        return bridge.nativeRelease(srcEvt) !== false;
+      }
+    }
     const target = getRoletaBtn();
     if (!target) return false;
     const opts = { bubbles: true, cancelable: true };
@@ -1206,37 +1881,46 @@
     try { ev = new PointerEvent(type, opts); } catch(_){ ev = new Event(type, { bubbles: true }); }
     try { return target.dispatchEvent(ev); } catch(_){ return false; }
   }
-  function bindRoletaShortcut(){
-    if (!roletaShortcutBtn) return;
-    let active = false;
-    const release = () => {
-      if (!active) return;
-      active = false;
-      setRoletaShortcutPressed(false);
-      forwardRoletaEvent("pointerup");
-      window.removeEventListener("pointerup", release);
-      window.removeEventListener("pointercancel", release);
-      window.removeEventListener("blur", release);
-    };
-    roletaShortcutBtn.addEventListener("pointerdown", e => {
-      e.preventDefault();
-      if (active) return;
-      const ok = forwardRoletaEvent("pointerdown", e);
-      if (!ok) {
-        showRoletaShortcutMessage("Roleta indisponivel");
-        return;
-      }
-      active = true;
-      setRoletaShortcutPressed(true);
-      window.addEventListener("pointerup", release, { once: true, passive: true });
-      window.addEventListener("pointercancel", release, { once: true, passive: true });
-      window.addEventListener("blur", release, { once: true });
-    });
-    ["pointerup","pointerleave","pointercancel"].forEach(ev => {
-      roletaShortcutBtn.addEventListener(ev, release);
-    });
+  window.__ROULETTE_BRIDGE__ = window.__ROULETTE_BRIDGE__ || {};
+  window.__ROULETTE_BRIDGE__.forwardEvent = forwardRoletaEvent;
+
+  function clearRouletteAutoTimer(){
+    if (rouletteAutoReleaseTimer) {
+      clearTimeout(rouletteAutoReleaseTimer);
+      rouletteAutoReleaseTimer = null;
+    }
   }
-  bindRoletaShortcut();
+  function releaseRoulettePointer(){
+    if (!roulettePointerActive) return;
+    roulettePointerActive = false;
+    forwardRoletaEvent("pointerup");
+  }
+  function startRoulettePointer(srcEvt){
+    if (roulettePointerActive) return true;
+    const ok = forwardRoletaEvent("pointerdown", srcEvt);
+    if (!ok) {
+      log("Roleta indisponivel (#r3Btn nao encontrado)", "warn");
+      return false;
+    }
+    roulettePointerActive = true;
+    return true;
+  }
+  function getRouletteSpinDurationMs(cfg){
+    if (!advancedOpen) return ROULETTE_DEFAULT_HOLD_MS;
+    const normalized = normalizeAdvancedState({ ...ADV_DEFAULTS, ...(cfg || advanced) });
+    const raw = Math.round(normalized.durationMs || ROULETTE_DEFAULT_HOLD_MS);
+    return clampNum(raw, ROULETTE_HOLD_LIMITS.min, ROULETTE_HOLD_LIMITS.max);
+  }
+  function triggerRouletteAutoSpin(cfg){
+    const holdMs = getRouletteSpinDurationMs(cfg);
+    clearRouletteAutoTimer();
+    releaseRoulettePointer();
+    if (!startRoulettePointer()) return;
+    rouletteAutoReleaseTimer = setTimeout(() => {
+      rouletteAutoReleaseTimer = null;
+      releaseRoulettePointer();
+    }, holdMs);
+  }
 
   function shouldIgnoreKey(e){
     const el = e.target;
@@ -1307,7 +1991,8 @@
   syncAdvancedUi();
   setAdvancedOpen(advancedOpen);
   stopAdvCountdown(false);
-  ensureSliderTooltip(String(initialLevel).padStart(3, "0"));
+  ensureSliderTooltip(`${initialLevel}%`);
+  syncLevelInputWidth();
   broadcastBasics("remote-init");
 })();
 </script>

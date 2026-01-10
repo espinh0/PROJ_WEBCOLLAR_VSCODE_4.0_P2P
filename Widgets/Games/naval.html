@@ -1,25 +1,25 @@
-﻿<!-- BATTLESHIP COLLAR WIDGET – v1.8 -->
+<!-- BATTLESHIP COLLAR WIDGET – v1.8 -->
 <style>
   #battleship-widget {
     --grid-size: min(100%, 65vh, 560px);
     --grid-gap: 4px;
     --grid-pad: 8px;
     --grid-label: 22px;
-    max-width: 1200px;
     width: 100%;
-    margin: 1rem auto 2rem;
+    margin: 0;
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     font-size: 14px;
     color: #e5e7eb;
   }
   #battleship-widget .bs-card {
-    background: #17171b;
-    border: 1px solid #2a2a2e;
-    border-radius: 12px;
-    padding: 1rem 1.15rem 1.1rem;
+    background: #111;
+    border: 1px solid #333;
+    border-radius: .75rem;
+    padding: 0; /* header/body will provide spacing */
     box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     box-sizing: border-box;
     width: 100%;
+    color: #e5e7eb;
   }
   #battleship-widget h5 {
     margin: 0 0 .35rem;
@@ -40,14 +40,14 @@
     margin-top: .5rem;
   }
   #battleship-widget .bs-panels {
-    display: flex;
-    align-items: flex-start;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
     gap: 1rem;
-    flex-wrap: wrap;
   }
   #battleship-widget .bs-panel {
-    flex: 1 1 360px;
-    min-width: 320px;
+    width: 100%;
+    min-width: 0;
   }
   #battleship-widget .bs-panels .bs-row {
     flex-direction: column;
@@ -157,7 +157,9 @@
   }
 
   /* Estados no grid público */
-  #battleship-widget .bs-cell-public.bs-state-empty { }
+  #battleship-widget .bs-cell-public.bs-state-empty {
+    background: radial-gradient(circle at 20% 15%, #101014, #050508 60%, #000000 100%);
+  }
   #battleship-widget .bs-cell-public.bs-state-miss {
     background: radial-gradient(circle at 30% 20%, #020617, #020617 40%, #000000 100%);
     border-color: #374151;
@@ -415,6 +417,12 @@
     color: #94a3b8;
   }
 
+  @media (max-width: 1200px) {
+    #battleship-widget {
+      --grid-size: min(100%, 58vh, 480px);
+    }
+  }
+
   /* ANIMAÇÃO DE HIT (OVO + MARRETA) – ~2.4s total */
   #battleship-widget .bs-hit-overlay {
     position: fixed;
@@ -491,9 +499,9 @@
     100% { opacity: 0; transform: scale(0.9); }
   }
 
-  @media (max-width: 700px) {
+  @media (max-width: 1023px) {
     #battleship-widget .bs-panels {
-      flex-direction: column;
+      grid-template-columns: 1fr;
     }
     #battleship-widget .bs-col-half {
       flex: 1 1 100%;
@@ -501,7 +509,6 @@
   }
   @media (max-width: 640px) {
     #battleship-widget {
-      margin: .75rem .5rem 1.5rem;
       font-size: 13px;
     }
     #battleship-widget .bs-cell {
@@ -518,6 +525,14 @@
     #battleship-widget .bs-hit-hammer,
     #battleship-widget .bs-hit-fry {
       font-size: 6.4rem;
+    }
+  }
+
+  /* Em telas maiores, mantenha os paineis lado a lado sem wrap */
+  @media (min-width: 1024px) {
+    #battleship-widget .bs-panels {
+      gap: 1.25rem;
+      align-items: stretch;
     }
   }
 
@@ -565,16 +580,22 @@
 </style>
 
 <div id="battleship-widget">
-  <div class="bs-panels">
+  <div class="bs-panels mt-3">
     <div class="bs-panel">
   <!-- VISITANTE / TABULEIRO PÚBLICO -->
-  <div class="bs-card" id="bs-public-card">
-    <div style="display:flex;align-items:center;gap:.35rem;margin-bottom:.25rem;">
-      <h5 style="flex:1;">Batalha Naval</h5>
-      <span id="bs-conn-indicator" class="bs-badge warn">
-        <span>●</span> aguardando trystero
-      </span>
+  <div class="bs-card card shadow-sm" id="bs-public-card" style="background:#111;border:1px solid #333;border-radius:.75rem;color:#e5e7eb;">
+    <div class="card-header d-flex align-items-center justify-content-between" style="background:#0c0c0e;border-bottom:1px solid #333;color:#e5e7eb;border-top-left-radius:.65rem;border-top-right-radius:.65rem;padding:8px 12px;">
+      <div class="d-flex align-items-center gap-2">
+        <i class="fa-solid fa-ship"></i>
+        <div class="fw-semibold">Batalha Naval</div>
+      </div>
+      <div>
+        <span id="bs-conn-indicator" class="bs-badge warn">
+          <span>●</span> aguardando flowgate
+        </span>
+      </div>
     </div>
+    <div class="card-body p-3">
     <div class="bs-status-main" id="bs-public-main-status">
       <strong>Navios de carregamento de ovos estão a caminho do porto, e você deve impedir.</strong>
     </div>
@@ -610,19 +631,25 @@
         </div>
       </div>
     </div>
+    </div>
   </div>
-
     </div>
 
-  <!-- HOST / ADMIN -->
-  <div class="bs-panel host-only">
-    <div class="bs-card" id="bs-admin-card">
-      <div style="display:flex;align-items:center;gap:.35rem;margin-bottom:.35rem;">
-        <h5 style="flex:1;">Painel do Host – Batalha Naval</h5>
-        <span id="bs-host-role-indicator" class="bs-badge err">
-          <span>●</span> admin oculto
-        </span>
+    <!-- HOST / ADMIN -->
+    <div class="bs-panel host-only">
+    <div class="bs-card card shadow-sm" id="bs-admin-card" style="background:#111;border:1px solid #333;border-radius:.75rem;color:#e5e7eb;">
+      <div class="card-header d-flex align-items-center justify-content-between" style="background:#0c0c0e;border-bottom:1px solid #333;color:#e5e7eb;border-top-left-radius:.65rem;border-top-right-radius:.65rem;padding:8px 12px;">
+        <div class="d-flex align-items-center gap-2">
+          <i class="fa-solid fa-gear"></i>
+          <div class="fw-semibold">Painel do Host – Batalha Naval</div>
+        </div>
+        <div>
+          <span id="bs-host-role-indicator" class="bs-badge err">
+            <span>●</span> admin oculto
+          </span>
+        </div>
       </div>
+      <div class="card-body p-3">
       <small class="bs-muted">
         Monte o tabuleiro, publique o layout e deixe o visitante tentar impedir o carregamento.  
         Passe o mouse para pré-visualizar, clique para posicionar um navio, arraste um navio para movê-lo  
@@ -704,8 +731,7 @@
         </div>
       </div>
     </div>
-  </div>
-
+    </div>
   </div>
 
   <!-- OVERLAY GLOBAL DE HIT (OVO + MARRETA) -->
@@ -804,6 +830,19 @@
     }
   }
 
+  window.addEventListener("flowgate:local_tags_changed", () => {
+    if (!hostRoleIndicator) return;
+    const isVisible = detectAdminVisible();
+    if (isVisible) {
+      hostRoleIndicator.classList.remove("err","warn");
+      hostRoleIndicator.classList.add("ok");
+      hostRoleIndicator.innerHTML = "<span>?</span> host/admin ativo";
+    } else {
+      hostRoleIndicator.classList.remove("ok","warn");
+      hostRoleIndicator.classList.add("err");
+      hostRoleIndicator.innerHTML = "<span>?</span> admin oculto (sem l▆ica do host)";
+    }
+  });
   window.addEventListener("trystero:localTags", () => {
     if (!hostRoleIndicator) return;
     const isVisible = detectAdminVisible();
@@ -1461,14 +1500,11 @@
   }
 
   function showPlacementPreview(row,col,shipId,dir,ignoreShipId) {
-    logHost("DEBUG: showPlacementPreview called for (" + (row+1) + "," + (col+1) + ")");
     clearPreview();
     // Use hostState.selectedShipType if shipId is not provided (for new placements)
     const currentShipId = shipId || hostState.selectedShipType;
     const len = getShipLengthById(currentShipId);
-    logHost("DEBUG: currentShipId: " + currentShipId + ", len: " + len);
     if (!len) {
-      logHost("DEBUG: !len, exiting showPlacementPreview.");
       return;
     }
 
@@ -1479,7 +1515,6 @@
       const c = col + (dir === "H" ? i : 0);
       if (r<0 || r>9 || c<0 || c>9) {
         inBounds = false;
-        logHost("DEBUG: Out of bounds: (" + (r+1) + "," + (c+1) + ")");
       }
       const cell = adminCells.find(ci => ci.row === r && ci.col === c);
       if (cell) newCells.push(cell);
@@ -1492,19 +1527,15 @@
         const existing = hostState.shipCells[key];
         if (existing && existing !== ignoreShipId) {
           collision = true;
-          logHost("DEBUG: Collision detected at (" + (ci.row+1) + "," + (ci.col+1) + ")");
           break;
         }
       }
     }
     previewState.cells = newCells;
     previewState.valid = inBounds && !collision;
-    logHost("DEBUG: Preview valid: " + previewState.valid + ", newCells count: " + newCells.length);
-
     newCells.forEach(ci => {
       ci.el.classList.add(previewState.valid ? "bs-preview-valid" : "bs-preview-invalid");
     });
-    logHost("DEBUG: Applied preview classes.");
   }
 
   const dragState = {
@@ -1580,41 +1611,29 @@
   }
 
   function handleAdminCellMouseEnter(ev) {
-    logHost("DEBUG: handleAdminCellMouseEnter called.");
-    if (!detectAdminVisible()) {
-      logHost("DEBUG: Admin not visible, exiting mouseenter.");
-      return;
-    }
-    if (hostState.layoutPublished) {
-      logHost("DEBUG: Layout published, exiting mouseenter.");
-      return;
-    }
+    if (!detectAdminVisible()) return;
+    if (hostState.layoutPublished) return;
 
     const el = ev.currentTarget;
     const r = parseInt(el.dataset.row,10);
     const c = parseInt(el.dataset.col,10);
 
-    logHost("DEBUG: mouseenter - r:" + r + ", c:" + c + ", dragState.active:" + dragState.active);
+    
 
     if (dragState.active) {
-      logHost("DEBUG: mouseenter - dragState active. Ship ID:" + dragState.shipId);
+      
       const ship = findShipById(dragState.shipId);
-      if (!ship) {
-        logHost("DEBUG: mouseenter - Drag active but ship not found. Exiting.");
-        return;
-      }
+      if (!ship) return;
       const offset = dragState.offsetIndex;
       let originRow = r;
       let originCol = c;
       if (ship.dir === "H") originCol = c - offset;
       else originRow = r - offset;
-      logHost("DEBUG: mouseenter - Drag calling showPlacementPreview for ship " + ship.id + " at origin (" + originRow + "," + originCol + ")");
       showPlacementPreview(originRow, originCol, ship.id, ship.dir, ship.id);
       dragState.currentOrigin = previewState.valid ? {row: originRow, col: originCol} : null;
     } else { // Normal placement preview
       const id = hostState.selectedShipType || "A";
       const dir = hostState.placementDir || "H";
-      logHost("DEBUG: Calling showPlacementPreview for ID: " + id + ", Dir: " + dir);
       showPlacementPreview(r,c,id,dir,null);
     }
   }
@@ -1768,67 +1787,27 @@
   async function sendToChat(text) {
     const payload = String(text ?? "");
     try {
-      const chat = window.__TRYSTERO_CHAT__;
+      const chat = (window.Flowgate && typeof window.Flowgate.send === "function")
+        ? window.Flowgate
+        : window.__TRYSTERO_CHAT__;
       if (chat && typeof chat.send === "function") {
         await chat.send(payload, { via: "naval" });
         return;
       }
-      console.warn("[battleship] chat Trystero indisponivel. Mensagem nao enviada:", payload);
+      console.warn("[battleship] chat Flowgate indisponivel. Mensagem nao enviada:", payload);
     } catch(e) {
-      console.error("[battleship] erro ao enviar via Trystero:", e);
+      console.error("[battleship] erro ao enviar via Flowgate:", e);
     }
   }
 
   async function sendCollarCommand(line) {
     const txt = String(line || "").trim();
     if (!txt) return;
-    let sent = false;
-
-    try {
-      const tunnel = window.__COLLAR_TUNNEL__;
-      if (tunnel && typeof tunnel.send === "function") {
-        await tunnel.send(txt, { via: "naval", kind: "cmd" });
-        sent = true;
-      }
-    } catch (_){}
-
-    if (!sent) {
-      try {
-        if (typeof window.collarSend === "function") {
-          await window.collarSend(txt);
-          sent = true;
-        } else if (window.SerialBridge && typeof window.SerialBridge.send === "function") {
-          await window.SerialBridge.send(txt);
-          sent = true;
-        }
-      } catch (_){}
+    if (window.SerialBridge && typeof window.SerialBridge.send === "function") {
+      await window.SerialBridge.send(txt);
+      return;
     }
-
-    if (!sent) {
-      try {
-        window.dispatchEvent(new CustomEvent("collar:tx", { detail: { line: txt, source: "naval" } }));
-        sent = true;
-      } catch (_){}
-    }
-
-    if (!sent) {
-      const now = Date.now();
-      const id = `naval:${now}:${Math.random().toString(36).slice(2,8)}`;
-      try {
-        window.dispatchEvent(new CustomEvent("chat:message", {
-          detail: {
-            id,
-            key: id,
-            text: txt,
-            raw: { text: txt },
-            ts: now,
-            origin: "naval",
-            username: "naval",
-            peerId: "naval"
-          }
-        }));
-      } catch (_){}
-    }
+    console.warn("[battleship] SerialBridge.send indisponivel:", txt);
   }
 
   function getInheritedControl() {
@@ -2197,30 +2176,32 @@
     }
   }
 
-    function initTrysteroBridge() {
+  function initFlowgateBridge() {
     let attached = false;
 
-    function onChat(ev) {
+    function onMessage(ev) {
       try {
-        const det = ev?.detail || {};
+        const detail = ev?.detail || {};
+        const det = detail.type === "chat" && detail.data ? detail.data : detail;
         handleChatRawText(det.text || (det.raw && det.raw.text));
-        if (det.origin === "trystero-in" || det.origin === "trystero-out") {
-          setConnStatus(true, "conectado (Trystero)", "ok");
+        if (det.origin === "trystero-in" || det.origin === "trystero-out" || det.origin === "flowgate-in" || det.origin === "flowgate-out") {
+          setConnStatus(true, "conectado (Flowgate)", "ok");
         }
-      } catch(_){}
+      } catch(_){ }
     }
 
     function ensureReady() {
-      const chat = window.__TRYSTERO_CHAT__;
+      const chat = (window.Flowgate && typeof window.Flowgate.send === "function") ? window.Flowgate : window.__TRYSTERO_CHAT__;
       if (!(chat && typeof chat.send === "function")) {
-        setConnStatus(false, "aguardando Trystero…", "warn");
+        setConnStatus(false, "aguardando Flowgate", "warn");
         setTimeout(ensureReady, 800);
         return;
       }
       const ready = typeof chat.isReady === "function" ? !!chat.isReady() : true;
-      setConnStatus(ready, ready ? "conectado (Trystero)" : "aguardando peers…", ready ? "ok" : "warn");
+      setConnStatus(ready, ready ? "conectado (Flowgate)" : "aguardando peers...", ready ? "ok" : "warn");
       if (!attached) {
-        window.addEventListener("chat:message", onChat);
+        window.addEventListener("flowgate:message", onMessage);
+        window.addEventListener("chat:message", onMessage);
         attached = true;
       }
       if (!ready) setTimeout(ensureReady, 1200);
@@ -2235,13 +2216,7 @@
   visitorResetState();
   updateSelectedShipUI(); // New: initial call to set active button
 
-  setConnStatus(false, "aguardando Trystero", "warn");
-  setTimeout(initTrysteroBridge, 500);
+  setConnStatus(false, "aguardando Flowgate", "warn");
+  setTimeout(initFlowgateBridge, 500);
 })();
 </script>
-
-
-
-
-
-

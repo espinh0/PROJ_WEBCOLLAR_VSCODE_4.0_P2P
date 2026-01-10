@@ -1,4 +1,4 @@
-﻿<!-- NOTIFICACOES SIMPLES -->
+<!-- NOTIFICACOES SIMPLES -->
 <style>
   #notify-stack {
     position: fixed;
@@ -96,13 +96,13 @@
 
   window.notify = showNotification;
 
-  window.addEventListener("trystero:peer-join", (ev) => {
+  window.addEventListener("flowgate:peer_connected", (ev) => {
     const d = ev?.detail || {};
     const name = d.name || shortId(d.peerId);
     showNotification({ text: `Peer entrou: ${name}`, type: "join", ttl: 4500 });
   });
 
-  window.addEventListener("trystero:peer-leave", (ev) => {
+  window.addEventListener("flowgate:peer_disconnected", (ev) => {
     const d = ev?.detail || {};
     const name = d.name || shortId(d.peerId);
     showNotification({ text: `Peer saiu: ${name}`, type: "leave", ttl: 4500 });
@@ -110,7 +110,7 @@
 
   // Tags locais (host/serial)
   let lastTagsSig = null;
-  window.addEventListener("trystero:localTags", (ev) => {
+  window.addEventListener("flowgate:local_tags_changed", (ev) => {
     const tags = Array.isArray(ev?.detail?.tags) ? ev.detail.tags.map(String) : [];
     const sig = tags.slice().sort().join("|");
     if (sig === lastTagsSig) return;
@@ -143,26 +143,18 @@
     showNotification({ text: msg, type: "leave", ttl: 3200 });
   });
 
-  // Trystero room events
-  window.addEventListener("trystero:room-connected", () => showNotification({ text: "Sala Trystero conectada", type: "join", ttl: 3200 }));
-  window.addEventListener("trystero:room-disconnected", () => showNotification({ text: "Sala Trystero saiu", type: "leave", ttl: 3200 }));
-  window.addEventListener("trystero:room-error", (ev) => {
-    const msg = ev?.detail?.message || "Erro ao conectar sala";
-    showNotification({ text: msg, type: "leave", ttl: 3200 });
-  });
 
-  // TX erros
   window.addEventListener("serial:tx-error", (ev) => {
     const msg = ev?.detail?.message || "TX erro: serial indisponivel";
     showNotification({ text: msg, type: "leave", ttl: 3200 });
   });
 
-  // holdSync watchdog (HOLDOFF autom├ítico)
+  // holdSync watchdog (HOLDOFF autom+�tico)
   window.addEventListener("holdsync:watchdog", () => {
     showNotification({ text: "HoldSync: watchdog soltou HOLDOFF", type: "leave", ttl: 3000 });
   });
 
-  // Logs cr├¡ticos (warn/error) via CustomEvent('app-log', {detail:{msg, level}})
+  // Logs cr+�ticos (warn/error) via CustomEvent('app-log', {detail:{msg, level}})
   window.addEventListener("app-log", (ev) => {
     const d = ev?.detail || {};
     const level = (d.level || "info").toLowerCase();

@@ -1,0 +1,141 @@
+<div class="card p-0 mt-3 game-tabs" id="gameTabsModule">
+  <ul class="nav nav-pills game-tabs-nav" id="gameTabsNav" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="tab-roletas" data-bs-toggle="tab" data-bs-target="#pane-roletas" type="button" role="tab" aria-controls="pane-roletas" aria-selected="true">
+        <i class="fa-solid fa-dice"></i> Roletas
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-naval" data-bs-toggle="tab" data-bs-target="#pane-naval" type="button" role="tab" aria-controls="pane-naval" aria-selected="false">
+        <i class="fa-solid fa-ship"></i> Naval
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-audio-listener" data-bs-toggle="tab" data-bs-target="#pane-audio-listener" type="button" role="tab" aria-controls="pane-audio-listener" aria-selected="false">
+        <i class="fa-solid fa-headphones"></i> Audio Listener
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-pulse-sequencer" data-bs-toggle="tab" data-bs-target="#pane-pulse-sequencer" type="button" role="tab" aria-controls="pane-pulse-sequencer" aria-selected="false">
+        <i class="fa-solid fa-wave-square"></i> Sequenciador de Pulsos
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content pt-0">
+    <div class="tab-pane fade show active" id="pane-roletas" role="tabpanel" aria-labelledby="tab-roletas">
+      <div class="game-slot" data-game-src="Widgets/Roleta.html"></div>
+    </div>
+    <div class="tab-pane fade" id="pane-naval" role="tabpanel" aria-labelledby="tab-naval">
+      <div class="game-slot" data-game-src="Widgets/Games/naval.html" data-defer="true"></div>
+    </div>
+    <div class="tab-pane fade" id="pane-audio-listener" role="tabpanel" aria-labelledby="tab-audio-listener">
+      <div class="game-slot" data-game-src="Widgets/audiolistener.html" data-defer="true"></div>
+    </div>
+    <div class="tab-pane fade" id="pane-pulse-sequencer" role="tabpanel" aria-labelledby="tab-pulse-sequencer">
+      <div class="game-slot" data-game-src="Widgets/sequence.html" data-defer="true"></div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .game-tabs {
+    border-radius: 0;
+    background-color: transparent;
+    border-style: none;
+    }
+  .game-tabs-nav {
+    gap: 0.5rem;
+  }
+  .game-tabs-nav .nav-link {
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    color: #cbd5f5;
+    background: rgba(255, 255, 255, 0.06);
+    font-weight: 600;
+    transition: transform 0.12s ease, background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  }
+  .game-tabs-nav .nav-link:hover {
+    transform: translateY(-1px);
+    border-color: rgba(99, 102, 241, 0.5);
+    color: #ffffff;
+  }
+  .game-tabs-nav .nav-link.active {
+    background: linear-gradient(120deg, rgba(77, 113, 255, 0.9), rgba(52, 211, 153, 0.9));
+    color: #0b1020;
+    border-color: transparent;
+    box-shadow: 0 10px 18px rgba(77, 113, 255, 0.25);
+  }
+  .game-slot:empty::before {
+    content: "Carregando...";
+    display: block;
+    padding: 1.5rem;
+    text-align: center;
+    color: #94a3b8;
+  }
+  @media (max-width: 640px) {
+    .game-tabs-nav {
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+  }
+</style>
+
+<script>
+(() => {
+  const root = document.getElementById("gameTabsModule");
+  if (!root) return;
+
+  const slots = Array.from(root.querySelectorAll("[data-game-src]"));
+  const loaded = new Set();
+
+  function runScripts(container) {
+    const scripts = Array.from(container.querySelectorAll("script"));
+    scripts.forEach((oldScript) => {
+      const newScript = document.createElement("script");
+      Array.from(oldScript.attributes).forEach((attr) => newScript.setAttribute(attr.name, attr.value));
+      if (oldScript.textContent) newScript.textContent = oldScript.textContent;
+      if (oldScript.src) newScript.src = oldScript.src;
+      oldScript.parentNode.replaceChild(newScript, oldScript);
+    });
+  }
+
+  function loadSlot(slot) {
+    if (!slot) return;
+    const src = slot.getAttribute("data-game-src");
+    if (!src || loaded.has(src)) return;
+    loaded.add(src);
+    fetch(src)
+      .then((res) => {
+        if (!res.ok) throw new Error(`Falha ao carregar ${src}: ${res.status}`);
+        return res.text();
+      })
+      .then((html) => {
+        slot.innerHTML = html;
+        runScripts(slot);
+      })
+      .catch((err) => {
+        console.error(err);
+        slot.innerHTML = `<div class="alert alert-danger">Nao foi possivel carregar ${src}</div>`;
+      });
+  }
+
+  slots.forEach((slot) => {
+    if (!slot.hasAttribute("data-defer")) loadSlot(slot);
+  });
+
+  const tabButtons = Array.from(root.querySelectorAll('[data-bs-toggle="tab"]'));
+  const loadForButton = (btn) => {
+    const target = btn.getAttribute("data-bs-target");
+    if (!target) return;
+    const pane = root.querySelector(target);
+    if (!pane) return;
+    loadSlot(pane.querySelector("[data-game-src]"));
+  };
+
+  tabButtons.forEach((btn) => {
+    btn.addEventListener("shown.bs.tab", () => loadForButton(btn));
+    btn.addEventListener("click", () => loadForButton(btn));
+  });
+})();
+</script>

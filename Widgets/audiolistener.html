@@ -1,4 +1,4 @@
-<!-- AUDIO→COLLAR (blog widget) — v1.4 (HOLD via holdSync Trystero)
+<!-- AUDIO→COLLAR (blog widget) — v1.4 (HOLD via holdSync Flowgate)
      - Controle por ESTADO (hold.state) em canal dedicado: makeAction('holdSync')
      - Heartbeat enquanto ON + watchdog timeout no receiver
      - Loopback local (funciona com 1 peer)
@@ -36,14 +36,14 @@
   <div class="row g-2 mt-2">
     <div class="col-12 col-md-4 d-flex align-items-center gap-2">
       <label class="small mb-0">Gamma</label>
-      <input id="audio-collar-gamma" type="range" min="1.0" max="4.0" step="0.1"
-             class="form-range" style="max-width:160px;">
+      <input id="audio-collar-gamma" type="range" min="1.0" max="4.0" step="0.1" 
+ class="form-range" style="max-width:160px;" />
       <small id="audio-collar-gammalbl" class="text-secondary">2.4</small>
     </div>
     <div class="col-12 col-md-4 d-flex align-items-center gap-2">
       <label class="small mb-0">Ruído</label>
-      <input id="audio-collar-nf" type="range" min="0" max="20" step="1"
-             class="form-range" style="max-width:160px;">
+      <input id="audio-collar-nf" type="range" min="0" max="20" step="1" 
+ class="form-range" style="max-width:160px;" />
       <small id="audio-collar-nflbl" class="text-secondary">6%</small>
     </div>
     <div class="col-12 col-md-4 d-flex align-items-center gap-2">
@@ -71,7 +71,7 @@
         <div class="d-flex align-items-center gap-2 flex-wrap">
           <label for="audio-collar-mic-select" class="small mb-0 text-secondary">Microfone</label>
           <select id="audio-collar-mic-select" class="form-select form-select-sm" style="min-width: 120px; max-width: 140px;">
-            <option value="">Padrão do sistema</option>
+            <option value="" />Padrão do sistema
           </select>
           <button id="audio-collar-mic" class="btn btn-sm btn-outline-light"
                   title="Capturar microfone (getUserMedia)">
@@ -121,9 +121,6 @@
   const DWELL_ON_MS = 40;       // precisa ficar acima por X ms (antes 80; evita perder picos)
   const DWELL_OFF_MS = 120;     // precisa ficar abaixo por X ms
   const FAST_TRIP_MARGIN = 10;  // se passar muito do threshold, dispara sem dwell
-  const HOLD_MUTE_MS = 1200;    // janela de silencio apos STOP para evitar HOLDON atrasado
-  const HOLDOFF_BURST_COUNT = 3;
-  const HOLDOFF_BURST_GAP_MS = 180;
 
   // Receiver watchdog (se perder heartbeat, solta)
   const RX_TIMEOUT_MS = 950;
@@ -183,7 +180,7 @@
     channel: normalizeChannel(window.channel || 1)
   };
   let cfg = {
-    thresholdPct:  LS.get('thresholdPct', 90),
+    thresholdPct:  LS.get('thresholdPct', 20),
     gamma:         LS.get('gamma', 2.4),
     noiseFloorPct: LS.get('noiseFloorPct', 6),
     sensDb:        LS.get('sensDb', 0)
@@ -218,7 +215,6 @@
   let controlBusBound = false;
   let lastRxSig = null;
   let warnedNoHoldTx = false;
-  let holdMuteUntil = 0;
 
   function setControlState(next){
     appendLog(`setControlState: next=${JSON.stringify(next)}`);
@@ -249,36 +245,11 @@
   function emitChatMessage(text, origin, extra){
     const t = String(text || '').trim();
     if (!t) return;
-
-    const tunnel = window.__COLLAR_TUNNEL__;
-    if (tunnel && typeof tunnel.send === 'function') {
-      try { tunnel.send(t, { via: 'holdSync', kind: 'cmd', meta: extra?.meta }); } catch(_){}
-      return;
-    }
-    if (typeof window.collarSend === 'function') {
-      try { window.collarSend(t); } catch(_){}
-      return;
-    }
     if (window.SerialBridge && typeof window.SerialBridge.send === 'function') {
       try { window.SerialBridge.send(t); } catch(_){}
       return;
     }
-
-    const now = Date.now();
-    const id = `holdSync:${now}:${Math.random().toString(36).slice(2,8)}`;
-    try {
-      window.dispatchEvent(new CustomEvent('chat:message', {
-        detail: Object.assign({
-          id,
-          key: id,
-          text: t,
-          origin: origin || 'trystero-in',
-          ts: now,
-          username: 'audio-collar',
-          peerId: 'holdSync'
-        }, extra || {})
-      }));
-    } catch(_){}
+    try { console.warn('[audio-collar] SerialBridge.send indisponivel.'); } catch(_){}
   }
 
   function applyHoldStateLocal(state, meta){
@@ -326,8 +297,8 @@
     holdRxBound = false;
 
     if (!room) {
-      setStatus('conecte no Trystero', false);
-      appendLog('Sem sala Trystero: aguardando conexão.');
+      setStatus('conecte no Flowgate', false);
+      appendLog('Sem sala Flowgate: aguardando conexao.');
       return;
     }
 
@@ -389,7 +360,9 @@
   }
 
   // Bind imediato se ja existir sala
-  if (window.__TRYSTERO_ROOM__) bindRoom(window.__TRYSTERO_ROOM__);
+  if (window.Flowgate && window.Flowgate.room) bindRoom(window.Flowgate.room);
+  else if (window.__TRYSTERO_ROOM__) bindRoom(window.__TRYSTERO_ROOM__);
+  window.addEventListener('flowgate:room_changed', (ev) => bindRoom(ev?.detail?.room || null));
   window.addEventListener('trystero:room', (ev) => bindRoom(ev?.detail?.room || null));
 
  
@@ -426,7 +399,7 @@
       const nfl = $('#audio-collar-nflbl');
       if (g && gl) { g.value = String(cfg.gamma); gl.textContent = String(cfg.gamma); }
       if (nf && nfl) { nf.value = String(cfg.noiseFloorPct); nfl.textContent = cfg.noiseFloorPct + '%'; }
-      appendLog('Config recebida via Trystero.');
+      appendLog('Config recebida via Flowgate.');
     }
   }
 
@@ -466,7 +439,7 @@
         applyRemoteCfg(data);
       });
       cfgSyncRxBound = true;
-      appendLog('Sync de config ligado (Trystero).');
+      appendLog('Sync de config ligado (Flowgate).');
       broadcastCfg('bind');
     } catch(e){
       appendLog('Erro bind audio.cfg: ' + (e?.message || String(e)));
@@ -519,7 +492,7 @@
         applyRemoteLevel(data);
       });
       levelSyncRxBound = true;
-      appendLog('Sync de pico ligado (Trystero).');
+      appendLog('Sync de pico ligado (Flowgate).');
     } catch(e){
       appendLog('Erro bind audioLevel: ' + (e?.message || String(e)));
     }
@@ -640,29 +613,6 @@
     }
   }
 
-  function forceHoldOff(reason, force){
-    if (!force && !desired.on) return;
-    holdMuteUntil = Math.max(holdMuteUntil, Date.now() + HOLD_MUTE_MS);
-    desired = { on:false, mode: control.mode, level: 0, ch: control.channel, seq: ++seq };
-    aboveSince = 0;
-    belowSince = 0;
-    sendHoldState(desired, { reason: reason || 'manual-stop' });
-    lastCommittedSeq = desired.seq;
-    setStatus('pronto', false);
-    appendLog(`FORCE HOLDOFF (${reason || 'manual-stop'})`);
-
-    if (force) {
-      for (let i = 1; i <= HOLDOFF_BURST_COUNT; i++) {
-        setTimeout(() => {
-          if (Date.now() >= holdMuteUntil) return;
-          desired = { on:false, mode: control.mode, level: 0, ch: control.channel, seq: ++seq };
-          sendHoldState(desired, { reason: `${reason || 'manual-stop'}-burst${i}` });
-          lastCommittedSeq = desired.seq;
-        }, i * HOLDOFF_BURST_GAP_MS);
-      }
-    }
-  }
-
   function readLevelsInstant(){
     if (!analyser) return {pct:0, peakPct:0};
 
@@ -713,23 +663,11 @@
     const now = Date.now();
     const thrOn  = clamp(cfg.thresholdPct, 0, 100);
     const thrOff = clamp(thrOn - THRESH_HYST, 0, 100);
-    const onThreshold = thrOn === 0 ? 1 : thrOn;
-    const offThreshold = thrOn === 0 ? 0 : thrOff;
-    const minLevelBase = thrOn === 0 ? STEP_PCT : Math.ceil(thrOn / STEP_PCT) * STEP_PCT;
-
-    if (holdMuteUntil && now < holdMuteUntil) {
-      if (desired.on) {
-        desired = { on:false, mode: control.mode, level: 0, ch: control.channel, seq: ++seq };
-      }
-      aboveSince = 0;
-      belowSince = 0;
-      return;
-    }
 
     if (!desired.on) {
       // Fast-path: pico bem acima do threshold dispara sem esperar dwell
-      if (peakPct >= (onThreshold + FAST_TRIP_MARGIN)) {
-        const minLevel = minLevelBase;
+      if (peakPct >= (thrOn + FAST_TRIP_MARGIN)) {
+        const minLevel = Math.ceil(thrOn/STEP_PCT)*STEP_PCT;
         const lvl = Math.max(minLevel, Math.floor(peakPct/STEP_PCT)*STEP_PCT);
         desired = { on:true, mode: control.mode, level: clamp(lvl, 0, 100), ch: control.channel, seq: ++seq };
         aboveSince = 0;
@@ -737,11 +675,11 @@
         return;
       }
 
-      if (peakPct >= onThreshold) {
+      if (peakPct >= thrOn) {
         if (!aboveSince) aboveSince = now;
         if ((now - aboveSince) >= DWELL_ON_MS) {
           // vira ON
-          const minLevel = minLevelBase;
+          const minLevel = Math.ceil(thrOn/STEP_PCT)*STEP_PCT;
           const lvl = Math.max(minLevel, Math.floor(peakPct/STEP_PCT)*STEP_PCT);
 
           desired = { on:true, mode: control.mode, level: clamp(lvl, 0, 100), ch: control.channel, seq: ++seq };
@@ -755,7 +693,7 @@
     }
 
     // desired.on === true
-    if (peakPct <= offThreshold) {
+    if (peakPct < thrOff) {
       if (!belowSince) belowSince = now;
       if ((now - belowSince) >= DWELL_OFF_MS) {
         desired = { on:false, mode: control.mode, level: 0, ch: control.channel, seq: ++seq };
@@ -1028,12 +966,7 @@
 
     btnStop && btnStop.addEventListener('click', async ()=>{
       btnStop.disabled = true;
-      try {
-        forceHoldOff('manual-stop', true);
-        stopAllSources();
-      } finally {
-        btnStop.disabled = false;
-      }
+      try { stopAllSources(); } finally { btnStop.disabled = false; }
     });
 
     const logToggle = $('#audio-collar-log-toggle');

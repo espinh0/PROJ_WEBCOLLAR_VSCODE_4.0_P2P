@@ -54,7 +54,7 @@
 
   let activeHls = null;
   let hlsLibPromise = null;
-  let trRoom = null;
+  let flowgateRoom = null;
   let sendVideoSync = null;
   let videoSyncBound = false;
   let suppressSyncEmit = false;
@@ -490,6 +490,15 @@
   async function buildPlayer(url, restore, fileObject, customTitle, fromSync){
     const prevSuppress = suppressSyncEmit;
     if (restore || fromSync) suppressSyncEmit = true;
+    let box = null;
+    let header = null;
+    let content = null;
+    let btnMin = null;
+    let btnMax = null;
+    let btnFull = null;
+    let btnClose = null;
+    let state = null;
+    let media = null;
     try {
       if (isM3UUrl(url)) {
         await loadM3UFromURL(url);
@@ -504,7 +513,7 @@
 
       let prev = loadState();
 
-      const box = document.createElement("div");
+      box = document.createElement("div");
       box.id = "floating-player";
       box.style.position = "fixed";
       box.style.zIndex = "99999";
@@ -529,7 +538,7 @@
       }
 
       /* HEADER */
-      const header = document.createElement("div");
+      header = document.createElement("div");
       header.style.height = "40px";
       header.style.background = "#0c0c0e";
       header.style.display = "flex";
@@ -553,21 +562,20 @@
       btnGroup.style.display = "flex";
       btnGroup.style.gap = "8px";
 
-      const btnMin   = headerButton("bi-dash",             "Minimizar / Restaurar", "btn-outline-secondary");
-      const btnMax   = headerButton("bi-aspect-ratio",     "Expandir / Reduzir",    "btn-outline-info");
-      const btnFull  = headerButton("bi-arrows-fullscreen","Tela cheia",            "btn-outline-warning");
-      const btnClose = headerButton("bi-x-lg",             "Fechar",                "btn-outline-danger");
+      btnMin   = headerButton("bi-dash",             "Minimizar / Restaurar", "btn-outline-secondary");
+      btnMax   = headerButton("bi-aspect-ratio",     "Expandir / Reduzir",    "btn-outline-info");
+      btnFull  = headerButton("bi-arrows-fullscreen","Tela cheia",            "btn-outline-warning");
+      btnClose = headerButton("bi-x-lg",             "Fechar",                "btn-outline-danger");
 
       btnGroup.append(btnMin, btnMax, btnFull, btnClose);
       header.append(titleSpan, btnGroup);
 
       /* CONTENT */
-      const content = document.createElement("div");
+      content = document.createElement("div");
       content.style.width = "100%";
       content.style.height = "calc(100% - 40px)";
       content.style.background = "#000";
 
-      let media = null;
       let initialTitle = customTitle || "Video";
 
       // cria mídia base sem bloquear UI; fontes serão carregadas após montar listeners
@@ -589,7 +597,7 @@
 
       // estado inicial
       let rect = box.getBoundingClientRect();
-      let state = {
+      state = {
         open: true,
         url: url,
         isLocal: !!fileObject,
@@ -657,6 +665,8 @@
     } finally {
       suppressSyncEmit = prevSuppress;
     }
+
+    if (!box || !header || !content || !btnMin || !btnMax || !btnFull || !btnClose) return;
 
     /* ---------------------------------------------------------
        SNAP INTELIGENTE
@@ -1057,7 +1067,7 @@
   ------------------------------------------------------------- */
 
   function bindVideoSync(room){
-    trRoom = room || null;
+    flowgateRoom = room || null;
     sendVideoSync = null;
     videoSyncBound = false;
     if (!room || typeof room.makeAction !== "function") return;
@@ -1101,15 +1111,15 @@
     document.addEventListener("DOMContentLoaded", () => {
       initWidget();
       restorePlayer();
-      if (window.__TRYSTERO_ROOM__) bindVideoSync(window.__TRYSTERO_ROOM__);
+      if (window.Flowgate && window.Flowgate.room) bindVideoSync(window.Flowgate.room);
     });
   } else {
     initWidget();
     restorePlayer();
-    if (window.__TRYSTERO_ROOM__) bindVideoSync(window.__TRYSTERO_ROOM__);
+    if (window.Flowgate && window.Flowgate.room) bindVideoSync(window.Flowgate.room);
   }
 
-  window.addEventListener("trystero:room", (ev) => {
+  window.addEventListener("flowgate:room_changed", (ev) => {
     const detail = ev && ev.detail;
     bindVideoSync(detail && detail.room ? detail.room : null);
   });

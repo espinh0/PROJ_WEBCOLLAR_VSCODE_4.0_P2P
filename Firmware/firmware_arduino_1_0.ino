@@ -1,7 +1,14 @@
-﻿/*
+/*
   PET998DR TX (Arduino Nano/UNO + MX-FS-03V)
   Serial: 115200 (MODE,LEVEL,CHANNEL[,DUR_MS]) + CADENCE/PATTERN/SEQUENCE.
   TX RF: D2.
+
+  Patch aplicado (para reduzir “perde cliques rápidos” sem voltar o “rabo”):
+  - Disparo único: agora envia 2 frames (SINGLE_SHOT_FRAMES_DEFAULT = 2)
+  - Entre frames do disparo único: gap em milissegundos (SINGLE_SHOT_GAP_MS = 6)
+  - HOLD: mantém período fixo HOLD_PERIOD_US e sem flood (já aplicado no código anterior)
+
+  Observação: este patch melhora confiabilidade do receiver em “cliques rápidos” mantendo boa responsividade.
 */
 
 #include <Arduino.h>
@@ -15,9 +22,10 @@
 #define TX_PIN 2
 #endif
 
-#ifndef ACT_LED_PIN
-#define ACT_LED_PIN 5
-#endif
+#define LED_AZUL_PIN      5
+#define LED_VERMELHO_PIN  6
+#define LED_AMARELO_PIN   7
+#define LED_VERDE_PIN     8
 
 #ifndef BTN_PIN
 #define BTN_PIN 4
@@ -38,6 +46,18 @@ const unsigned int T_SHORT_US        = 350;
 const unsigned int T_LONG_US         = 710;
 const unsigned int PREAMBLE_HIGH_US  = 1400;
 volatile unsigned int INTERFRAME_GAP_US = 800;
+
+// Período de repetição do HOLD (evita “flood” e reduz prolongamento percebido)
+static const unsigned long HOLD_PERIOD_US = 50000UL;
+
+// ====== Parâmetros do motor rítmico ======
+static const uint16_t PULSE_MS_DEFAULT = 180;
+static const uint16_t MIN_GAP_MS       = 50;
+
+// ====== Patch: confiabilidade em cliques rápidos ======
+// 2 frames por disparo único + pequeno gap em ms entre eles (melhora taxa de acerto sem “rabo” excessivo)
+static const uint8_t  SINGLE_SHOT_FRAMES_DEFAULT = 2;
+static const uint16_t SINGLE_SHOT_GAP_MS         = 6;   // 3–8ms típico (ajuste conforme ambiente)
 
 // ====== ID fixo (17 bits) ======
 static const char* FIXED_ID_BITS = "00110101001000100";
@@ -68,7 +88,17 @@ static inline uint16_t u16max(uint16_t a, uint16_t b) { return (a > b) ? a : b; 
 
 // ====== LEDs ======
 static inline void rfLed(bool on){ digitalWrite(LED_BUILTIN, on ? HIGH : LOW); }
-static inline void cmdLed(bool on){ digitalWrite(ACT_LED_PIN, on ? HIGH : LOW); }
+static inline void azulLed(bool on){ digitalWrite(LED_AZUL_PIN, on ? HIGH : LOW); }
+static inline void vermelhoLed(bool on){ digitalWrite(LED_VERMELHO_PIN, on ? HIGH : LOW); }
+static inline void amareloLed(bool on){ digitalWrite(LED_AMARELO_PIN, on ? HIGH : LOW); }
+static inline void verdeLed(bool on){ digitalWrite(LED_VERDE_PIN, on ? HIGH : LOW); }
+
+static void allLedsOff() {
+  azulLed(false);
+  vermelhoLed(false);
+  amareloLed(false);
+  verdeLed(false);
+}
 
 // ====== Serial output (ATÔMICO) ======
 static inline void serialLine(const char* s){
@@ -141,7 +171,10 @@ static uint8_t bitsStringToWord(const char* bits, uint64_t &outWord) {
   outWord = 0ULL;
   uint8_t n = 0;
   for (const char* p = bits; *p; ++p) {
-    if (*p == '0' || *p == '1') { outWord = (outWord << 1) | (uint64_t)(*p == '1'); n++; }
+    if (*p == '0' || *p == '1') {
+      outWord = (outWord << 1) | (uint64_t)(*p == '1');
+      n++;
+    }
   }
   return n;
 }
@@ -191,10 +224,12 @@ static void sendFrame_once(uint64_t frame) {
   yield();
 }
 
-static void sendCommandBurst(uint64_t frame, uint8_t times = 6) {
+// ====== PATCH AQUI ======
+// Burst com gap em MILISSEGUNDOS entre frames (melhora muito cliques rápidos / AGC / separação de frames)
+static void sendCommandBurst(uint64_t frame, uint8_t times = SINGLE_SHOT_FRAMES_DEFAULT) {
   for (uint8_t i = 0; i < times; ++i) {
     sendFrame_once(frame);
-    delayMicroseconds(300);
+    if (i + 1 < times) delay(SINGLE_SHOT_GAP_MS);
   }
 }
 
@@ -211,8 +246,12 @@ static inline void holdSessionClear(){
 static void holdStart(uint64_t frame) {
   holdFrame = frame;
   holdActive = true;
-  for (uint8_t i = 0; i < 3; ++i) sendFrame_once(holdFrame);
-  nextFrameAt_us = micros();
+
+  // 1 frame inicial
+  sendFrame_once(holdFrame);
+
+  // Agenda próximo envio para um período fixo (evita flood).
+  nextFrameAt_us = micros() + HOLD_PERIOD_US;
 }
 
 static void holdStop() {
@@ -224,9 +263,15 @@ static void holdStop() {
 static void serviceHoldTx() {
   if (!holdActive) return;
   unsigned long now = micros();
+
   if ((long)(now - nextFrameAt_us) >= 0) {
     sendFrame_once(holdFrame);
-    nextFrameAt_us = micros();
+    nextFrameAt_us += HOLD_PERIOD_US;
+
+    // Proteção simples caso haja grande atraso (evita loop imediato):
+    if ((long)(now - nextFrameAt_us) > (long)(HOLD_PERIOD_US * 3UL)) {
+      nextFrameAt_us = now + HOLD_PERIOD_US;
+    }
   }
 }
 
@@ -252,11 +297,15 @@ static bool extractCadenceMLC(const String& cmd, char* outMode, uint8_t &outLvl,
   int p1 = args.indexOf(',');
   int p2 = args.indexOf(',', p1+1);
   int p3 = args.indexOf(',', p2+1);
-  if (p1<0 || p2<0 || p3<0) return false;
+  int p4 = args.indexOf(',', p3+1);
+  if (p1<0||p2<0||p3<0||p4<0) return false;
 
   String m = args.substring(0,p1); m.trim(); m.toUpperCase();
-  uint8_t lvl = (uint8_t)constrain(args.substring(p1+1,p2).toInt(), 0, 100);
+  uint8_t lvl = (uint8_t) constrain(args.substring(p1+1,p2).toInt(), 0, 100);
   uint8_t ch  = (uint8_t)(constrain(args.substring(p2+1,p3).toInt(), 1, 2));
+  uint16_t gap= u16max(MIN_GAP_MS, (uint16_t)args.substring(p4+1).toInt());
+
+  (void)gap;
 
   if (!(m=="SHOCK"||m=="VIBRATION"||m=="BEEP"||m=="LIGHT")) return false;
 
@@ -271,7 +320,8 @@ static bool extractPatternMLC(const String& cmd, char* outMode, uint8_t &outLvl,
   outMode[0]=0; outLvl=0; outCh=1;
   int sp = cmd.indexOf(' ');
   if (sp < 0) return false;
-  String rest = cmd.substring(sp+1); rest.trim();
+  String rest = cmd.substring(sp+1);
+  rest.trim();
 
   int brOpen = rest.indexOf('[');
   if (brOpen < 0) return false;
@@ -284,7 +334,7 @@ static bool extractPatternMLC(const String& cmd, char* outMode, uint8_t &outLvl,
   if (p1<0 || p2<0) return false;
 
   String m = head.substring(0,p1); m.trim(); m.toUpperCase();
-  uint8_t lvl = (uint8_t)constrain(head.substring(p1+1,p2).toInt(), 0, 100);
+  uint8_t lvl = (uint8_t) constrain(head.substring(p1+1,p2).toInt(), 0, 100);
   uint8_t ch  = (uint8_t)(constrain(head.substring(p2+1).toInt(), 1, 2));
 
   if (!(m=="SHOCK"||m=="VIBRATION"||m=="BEEP"||m=="LIGHT")) return false;
@@ -295,12 +345,21 @@ static bool extractPatternMLC(const String& cmd, char* outMode, uint8_t &outLvl,
   return true;
 }
 
+static void handleLedForCommand(const char* mode, bool turnOn) {
+  if (strcmp(mode, "SHOCK") == 0) {
+    digitalWrite(LED_VERMELHO_PIN, turnOn ? HIGH : LOW);
+  } else if (strcmp(mode, "BEEP") == 0) {
+    digitalWrite(LED_AZUL_PIN, turnOn ? HIGH : LOW);
+  } else if (strcmp(mode, "VIBRATION") == 0) {
+    digitalWrite(LED_AMARELO_PIN, turnOn ? HIGH : LOW);
+  } else if (strcmp(mode, "LIGHT") == 0) {
+    digitalWrite(LED_VERDE_PIN, turnOn ? HIGH : LOW);
+  }
+}
+
 /* ============================================================
    ============  MOTOR RÍTMICO (millis)  =======================
    ============================================================ */
-
-static const uint16_t PULSE_MS_DEFAULT = 180;
-static const uint16_t MIN_GAP_MS       = 50;
 
 enum StepKind : uint8_t { STEP_ON_HOLD_MS, STEP_OFF_MS };
 struct Step { StepKind kind; uint32_t ms; uint64_t frame; };
@@ -376,7 +435,6 @@ static void engineService(){
 static inline bool pinToOnOff(bool pinLevel){ return (pinLevel == BTN_ON_LEVEL); }
 
 static void reportBtnState(bool isOn){
-  // ATÔMICO
   serialBTN_STATE(isOn);
 }
 
@@ -398,6 +456,7 @@ static void serviceButton(){
 
 // ====== AUTO HOLDOFF por heartbeat ======
 static void doHoldoffAndReport(bool isAuto){
+  allLedsOff();
   engineStop();
   holdStop();
   capturingSeq = false; seqCount = 0; seqRepeatOnEnd = false;
@@ -409,7 +468,6 @@ static void doHoldoffAndReport(bool isAuto){
     holdSessionClear();
   }
 
-  // ATÔMICO
   serialOK_HOLDOFF_MS(elapsed);
 
   if (isAuto) serialLineF(F("AUTO HOLDOFF"));
@@ -420,11 +478,9 @@ static void serviceHeartbeat(){
 
   const unsigned long now = millis();
   if ((now - lastPingMs) > HEARTBEAT_TIMEOUT_MS) {
-    // Só faz HOLDOFF automático se houver algo "contínuo" em execução/captura
     if (holdActive || engineActive || capturingSeq) {
       doHoldoffAndReport(true);
     }
-    // desarma até receber novo PING, para não repetir infinitamente
     heartbeatArmed = false;
   }
 }
@@ -471,7 +527,6 @@ static void compile_SIMPLE_into_playlist(const String& cmdLine){
 }
 
 static bool compile_CADENCE(const String& line){
-  // CADENCE <MODE,LVL,CH,REPS,GAP_MS>
   int sp = line.indexOf(' ');
   if (sp < 0) return false;
   String args = line.substring(sp+1);
@@ -489,8 +544,7 @@ static bool compile_CADENCE(const String& line){
   uint8_t reps= (uint8_t)imax(1, args.substring(p3+1,p4).toInt());
   uint16_t gap= u16max(MIN_GAP_MS, (uint16_t)args.substring(p4+1).toInt());
 
-  if (m=="BEEP" || m=="LIGHT") lvl = 0;
-  if (!shouldTransmit(m.c_str(), lvl)) return true;
+  if (!(m=="SHOCK"||m=="VIBRATION"||m=="BEEP"||m=="LIGHT")) return false;
 
   uint64_t frame = composeFrame(m.c_str(), lvl, ch);
 
@@ -502,7 +556,6 @@ static bool compile_CADENCE(const String& line){
 }
 
 static bool compile_PATTERN(const String& line){
-  // PATTERN <MODE,LVL,CH> [d1,d2,...]
   int sp = line.indexOf(' ');
   if (sp < 0) return false;
   String rest = line.substring(sp+1);
@@ -544,6 +597,7 @@ static bool compile_PATTERN(const String& line){
 }
 
 static bool compile_SEQUENCE_finalize(){
+  extern void compile_SIMPLE_into_playlist(const String& cmdLine);
   for (uint8_t i=0;i<seqCount;i++){
     String ln = seqLines[i]; ln.trim();
     if (!ln.length()) continue;
@@ -563,6 +617,32 @@ static bool compile_SEQUENCE_finalize(){
 
 /* =========================  Setup / Loop  ========================= */
 
+static bool animationPlayed = false;
+
+void startupAnimation() {
+  int del = 100;
+  allLedsOff();
+  delay(del);
+
+  digitalWrite(LED_AZUL_PIN, HIGH);      delay(del);
+  digitalWrite(LED_VERMELHO_PIN, HIGH);  delay(del);
+  digitalWrite(LED_AMARELO_PIN, HIGH);   delay(del);
+  digitalWrite(LED_VERDE_PIN, HIGH);     delay(del);
+
+  allLedsOff();
+  delay(del*2);
+
+  for (int i=0; i<2; i++) {
+    digitalWrite(LED_AZUL_PIN, HIGH);
+    digitalWrite(LED_VERMELHO_PIN, HIGH);
+    digitalWrite(LED_AMARELO_PIN, HIGH);
+    digitalWrite(LED_VERDE_PIN, HIGH);
+    delay(del);
+    allLedsOff();
+    delay(del);
+  }
+}
+
 void setup() {
   pinMode(TX_PIN, OUTPUT);
   digitalWrite(TX_PIN, LOW);
@@ -570,8 +650,11 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   rfLed(false);
 
-  pinMode(ACT_LED_PIN, OUTPUT);
-  cmdLed(false);
+  pinMode(LED_AZUL_PIN, OUTPUT);
+  pinMode(LED_VERMELHO_PIN, OUTPUT);
+  pinMode(LED_AMARELO_PIN, OUTPUT);
+  pinMode(LED_VERDE_PIN, OUTPUT);
+  allLedsOff();
 
   pinMode(BTN_PIN, INPUT_PULLUP);
 
@@ -602,24 +685,18 @@ static bool handleLine(String line){
   line.trim();
   if (!line.length()) return false;
 
-  cmdLed(true);
-
-  // Heartbeat
   if (line.equalsIgnoreCase("PING")) {
     lastPingMs = millis();
     heartbeatArmed = true;
-    cmdLed(false);
     return true;
   }
 
-  // Captura de SEQUENCE
   if (capturingSeq) {
     if (startsWithIgnoreCase(line, "ENDSEQ") || startsWithIgnoreCase(line, "ENDSEQUENCE")) {
       capturingSeq = false;
       stepCount = 0;
 
       if (compile_SEQUENCE_finalize()) {
-        // HOLDON SEQUENCE => repete (seqRepeatOnEnd=true)
         if (seqRepeatOnEnd) pendingHoldSessionStart = true;
         engineStart(seqRepeatOnEnd);
         serialLineF(F("OK SEQUENCE"));
@@ -639,17 +716,14 @@ static bool handleLine(String line){
     }
   }
 
-  // HOLDOFF
   else if (startsWithIgnoreCase(line, "HOLDOFF")) {
     doHoldoffAndReport(false);
   }
 
-  // HOLDON X
   else if (startsWithIgnoreCase(line, "HOLDON ")) {
     String cmd = line.substring(line.indexOf(' ') + 1);
     cmd.trim();
 
-    // HOLDON CADENCE
     if (cmd.startsWith("CADENCE") || cmd.startsWith("Cadence") || cmd.startsWith("cadence")) {
       char mode[16]; uint8_t lvl=0, ch=1;
       if (!extractCadenceMLC(cmd, mode, lvl, ch)) {
@@ -657,6 +731,9 @@ static bool handleLine(String line){
       } else {
         normalizeModeLvlForBeepLight(mode, lvl);
         serialOK_HOLDON_MLC(mode, lvl, ch);
+
+        allLedsOff();
+        handleLedForCommand(mode, true);
 
         engineClear();
         if (compile_CADENCE(cmd)) {
@@ -666,7 +743,6 @@ static bool handleLine(String line){
       }
     }
 
-    // HOLDON PATTERN
     else if (cmd.startsWith("PATTERN") || cmd.startsWith("Pattern") || cmd.startsWith("pattern")) {
       char mode[16]; uint8_t lvl=0, ch=1;
       if (!extractPatternMLC(cmd, mode, lvl, ch)) {
@@ -674,6 +750,9 @@ static bool handleLine(String line){
       } else {
         normalizeModeLvlForBeepLight(mode, lvl);
         serialOK_HOLDON_MLC(mode, lvl, ch);
+
+        allLedsOff();
+        handleLedForCommand(mode, true);
 
         engineClear();
         if (compile_PATTERN(cmd)) {
@@ -683,26 +762,25 @@ static bool handleLine(String line){
       }
     }
 
-    // HOLDON SEQUENCE (captura)
     else if (cmd.startsWith("SEQUENCE") || cmd.startsWith("Sequence") || cmd.startsWith("sequence")) {
       capturingSeq = true; seqCount = 0; engineClear();
       seqRepeatOnEnd = true;
       serialLineF(F("OK HOLDON"));
     }
 
-    // HOLDON clássico MODE,LVL,CH[,MS]
     else {
-      char mode[16]={0}; uint8_t lvl=0, ch=1; uint16_t _ms=0;
+      char mode[16] = {0}; uint8_t lvl=0, ch=1; uint16_t _ms=0;
       if (parseSimpleCmd(cmd, mode, lvl, ch, _ms)) {
         normalizeModeLvlForBeepLight(mode, lvl);
 
         if (!shouldTransmit(mode, lvl)) {
-          // não transmite, mas confirma
           engineStop();
           holdStop();
           holdSessionClear();
           serialOK_HOLDON_MLC(mode, lvl, ch);
         } else {
+          allLedsOff();
+          handleLedForCommand(mode, true);
           uint64_t frame = composeFrame(mode, lvl, ch);
           engineStop();
           holdSessionStartNow();
@@ -715,28 +793,24 @@ static bool handleLine(String line){
     }
   }
 
-  // SEQUENCE (1x por padrão)
   else if (startsWithIgnoreCase(line, "SEQUENCE")) {
     capturingSeq = true; seqCount = 0; engineClear();
     seqRepeatOnEnd = false;
     serialLineF(F("OK SEQUENCE"));
   }
 
-  // CADENCE (uma vez)
   else if (startsWithIgnoreCase(line, "CADENCE ")) {
     engineClear();
     if (compile_CADENCE(line)) { engineStart(false); serialLineF(F("OK CADENCE")); }
     else serialLineF(F("ERR CADENCE"));
   }
 
-  // PATTERN (uma vez)
   else if (startsWithIgnoreCase(line, "PATTERN ")) {
     engineClear();
     if (compile_PATTERN(line)) { engineStart(false); serialLineF(F("OK PATTERN")); }
     else serialLineF(F("ERR PATTERN"));
   }
 
-  // Disparo único
   else {
     char mode[16] = {0};
     uint8_t lvl=0, ch=1; uint16_t ms=PULSE_MS_DEFAULT;
@@ -744,29 +818,33 @@ static bool handleLine(String line){
       normalizeModeLvlForBeepLight(mode, lvl);
 
       if (shouldTransmit(mode, lvl)) {
+        handleLedForCommand(mode, true);
         uint64_t frame = composeFrame(mode, lvl, ch);
-        sendCommandBurst(frame, 3);
+
+        // Disparo com redundância controlada (2 frames + gap ms)
+        sendCommandBurst(frame, SINGLE_SHOT_FRAMES_DEFAULT);
+
+        handleLedForCommand(mode, false);
       }
 
-      // ATÔMICO
       serialOK_MLC(mode, lvl, ch);
     } else {
       serialLineF(F("ERR"));
     }
   }
 
-  cmdLed(false);
   return false;
 }
 
 void loop() {
-  // 0) Heartbeat supervisiona e faz HOLDOFF automático se necessário
-  serviceHeartbeat();
+  if (Serial && !animationPlayed) {
+    startupAnimation();
+    animationPlayed = true;
+  }
 
-  // Botão sempre rodando
+  serviceHeartbeat();
   serviceButton();
 
-  // 1) Serial primeiro
   if (Serial.available()) {
     String line = Serial.readStringUntil('\n');
     if (handleLine(line)) return;
@@ -778,9 +856,7 @@ void loop() {
     if (handleLine(line)) return;
   }
 #endif
-  // 2) HOLD clássico
-  serviceHoldTx();
 
-  // 3) Motor rítmico
+  serviceHoldTx();
   engineService();
 }

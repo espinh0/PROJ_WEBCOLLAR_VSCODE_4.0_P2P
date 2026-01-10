@@ -1606,7 +1606,7 @@
       if (fromUrl) return fromUrl;
     } catch {}
     try {
-      const st = JSON.parse(localStorage.getItem('trystero_widget_state_v5') || '{}') || {};
+      const st = JSON.parse(localStorage.getItem('flowgate_widget_state_v5') || localStorage.getItem('trystero_widget_state_v5') || '{}') || {};
       const name = (st.name || '').trim();
       if (name) return name;
     } catch {}
@@ -1763,8 +1763,8 @@
 
   function isLocalHost() {
     try {
-      const tags = (window.__TRYSTERO_PEER__ && typeof window.__TRYSTERO_PEER__.getLocalTags === "function")
-        ? window.__TRYSTERO_PEER__.getLocalTags()
+      const tags = (window.Flowgate.localPeer && typeof window.Flowgate.localPeer.getLocalTags === "function")
+        ? window.Flowgate.localPeer.getLocalTags()
         : [];
       return Array.isArray(tags) && tags.some(t => String(t).toLowerCase() === "host");
     } catch {
@@ -1863,7 +1863,7 @@
         nameInput.value = trVal;
       } else {
         try {
-          const st = JSON.parse(localStorage.getItem('trystero_widget_state_v5') || '{}') || {};
+          const st = JSON.parse(localStorage.getItem('flowgate_widget_state_v5') || localStorage.getItem('trystero_widget_state_v5') || '{}') || {};
           nameInput.value = (st.name || '').trim();
         } catch {}
       }
@@ -4002,9 +4002,9 @@
         trInput.dispatchEvent(new Event('input', { bubbles: true }));
         trInput.dispatchEvent(new Event('change', { bubbles: true }));
         try {
-          const st = JSON.parse(localStorage.getItem('trystero_widget_state_v5') || '{}') || {};
+          const st = JSON.parse(localStorage.getItem('flowgate_widget_state_v5') || localStorage.getItem('trystero_widget_state_v5') || '{}') || {};
           st.name = nm;
-          localStorage.setItem('trystero_widget_state_v5', JSON.stringify(st));
+          localStorage.setItem('flowgate_widget_state_v5', JSON.stringify(st));
         } catch {}
       }
       if (self) { self.name = getUsername(); self.ts = Date.now(); }
@@ -4179,13 +4179,20 @@
     sendItemAction = null;
   }
 
+  window.addEventListener("flowgate:room_changed", (evt) => {
+    const room = evt?.detail?.room || null;
+    if (room) bindRoom(room);
+    else unbindRoom();
+  });
   window.addEventListener("trystero:room", (evt) => {
     const room = evt?.detail?.room || null;
     if (room) bindRoom(room);
     else unbindRoom();
   });
 
-  if (window.__TRYSTERO_ROOM__) {
+  if (window.Flowgate && window.Flowgate.room) {
+    bindRoom(window.Flowgate.room);
+  } else if (window.__TRYSTERO_ROOM__) {
     bindRoom(window.__TRYSTERO_ROOM__);
   }
 

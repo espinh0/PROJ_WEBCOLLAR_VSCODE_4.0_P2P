@@ -1,5 +1,5 @@
 <!-- ROLETAS v4.4 (Sync determinístico por timestamps + resync em visibilitychange; lock robusto) -->
-<div class="r3 card p-3 mt-3 position-relative" style="background:#111;border:1px solid #333;border-radius:.75rem;">
+<div class="r3 card p-3 mt-3 position-relative" id="roletas-widget" style="background:#111;border:1px solid #333;border-radius:.75rem;">
   <div class="d-flex align-items-center justify-content-between mb-3">
     <h5 class="m-0">Roletas</h5>
     <small class="text-secondary">Segure para carregar • Solte para lançar</small>
@@ -63,19 +63,19 @@
     <div class="text-secondary small mb-2">Modos ativos</div>
     <div class="r3-mode-grid">
       <div class="form-check form-switch r3-mode-switch">
-        <input class="form-check-input" type="checkbox" id="r3ModeToggleBeep" checked>
+        <input class="form-check-input" type="checkbox" id="r3ModeToggleBeep" checked />
         <label class="form-check-label" for="r3ModeToggleBeep"><i class="fa-solid fa-volume-high"></i> Beep</label>
       </div>
       <div class="form-check form-switch r3-mode-switch">
-        <input class="form-check-input" type="checkbox" id="r3ModeToggleVibration" checked>
+        <input class="form-check-input" type="checkbox" id="r3ModeToggleVibration" checked />
         <label class="form-check-label" for="r3ModeToggleVibration"><i class="fa-solid fa-mobile-screen-button"></i> Vibra</label>
       </div>
       <div class="form-check form-switch r3-mode-switch">
-        <input class="form-check-input" type="checkbox" id="r3ModeToggleShock" checked>
+        <input class="form-check-input" type="checkbox" id="r3ModeToggleShock" checked />
         <label class="form-check-label" for="r3ModeToggleShock"><i class="fa-solid fa-bolt-lightning"></i> Choque</label>
       </div>
       <div class="form-check form-switch r3-mode-switch">
-        <input class="form-check-input" type="checkbox" id="r3ModeToggleLight" checked>
+        <input class="form-check-input" type="checkbox" id="r3ModeToggleLight" checked />
         <label class="form-check-label" for="r3ModeToggleLight"><i class="fa-solid fa-lightbulb"></i> Luz</label>
       </div>
     </div>
@@ -846,28 +846,11 @@
   async function pushToChat(text){
     const t = String(text || '').trim();
     if (!t) return;
-
-    const tunnel = window.__COLLAR_TUNNEL__;
-    if (tunnel && typeof tunnel.send === 'function') {
-      await tunnel.send(t, { via: 'roleta', kind: 'cmd' });
-      return;
-    }
-
-    if (typeof window.collarSend === 'function') {
-      await window.collarSend(t);
-      return;
-    }
     if (window.SerialBridge && typeof window.SerialBridge.send === 'function') {
       await window.SerialBridge.send(t);
       return;
     }
-
-    const chat = window.__TRYSTERO_CHAT__;
-    if (!chat || typeof chat.send !== 'function') {
-      setStatus('Chat Trystero indisponivel.');
-      return;
-    }
-    await chat.send(t, { via: 'roleta', kind: 'cmd', fallback: 'chat' });
+    setStatus('SerialBridge indisponivel.');
   }
   function buildCmd(modeKey, intensity){
     const lvl = (modeKey==='SHOCK'||modeKey==='VIBRATION') ? intensity : 0;
@@ -1019,7 +1002,7 @@
     }
 
     sendSync = s; onSync = o; syncBound = true;
-    initTrysteroSync();
+    initFlowgateSync();
     return true;
   }
 
@@ -1028,7 +1011,7 @@
     try { sendSync({ t:'ping', t0: Date.now(), from: SYNC.selfId }); } catch(_) {}
   }
 
-  function initTrysteroSync(){
+  function initFlowgateSync(){
     if (!syncBound || SYNC.inited) return;
     SYNC.inited = true;
 
@@ -1421,7 +1404,7 @@
   angleD = angleForIndexWeighted(0, slicesDur); setAngle(wD, angleD); rD.textContent = DUR_VALUES[0];
 
   // =========================
-  // Bind Trystero room
+  // Bind Flowgate room
   // =========================
   function onRoomChanged(room){
     if (!room) {
@@ -1439,12 +1422,16 @@
     bindSyncFromRoom(room);
   }
 
-  if (window.__TRYSTERO_ROOM__ && typeof window.__TRYSTERO_ROOM__.makeAction === 'function') {
-    onRoomChanged(window.__TRYSTERO_ROOM__);
+  const initialRoom = (window.Flowgate && window.Flowgate.room) ? window.Flowgate.room : window.__TRYSTERO_ROOM__;
+  if (initialRoom && typeof initialRoom.makeAction === 'function') {
+    onRoomChanged(initialRoom);
   } else {
-    setStatus('Sync: aguardando conexão do Trystero…');
+    setStatus('Sync: aguardando conexao do Flowgate.');
   }
 
+  window.addEventListener('flowgate:room_changed', (ev)=>{
+    onRoomChanged(ev?.detail?.room || null);
+  }, { passive:true });
   window.addEventListener('trystero:room', (ev)=>{
     onRoomChanged(ev?.detail?.room || null);
   }, { passive:true });

@@ -1,0 +1,390 @@
+<!-- ===== BOTÕES PERSONALIZADOS — v1.0 ================================== -->
+<style>
+  #customPads {
+    margin: 0 auto;
+  }
+  #customPads .cp-head {
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    margin-bottom: 10px;
+    border-bottom:1px solid #333;
+    color:#e5e7eb;
+    border-top-left-radius:.65rem;
+    border-top-right-radius:.65rem;
+    padding:8px 10px;
+  }
+  #customPads .cp-grid {
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+  }
+  #customPads .cp-item {
+    display:flex;
+    align-items:stretch;
+    border: 1px solid #2a2a2e;
+    border-radius: 12px;
+    overflow:hidden;
+    background: #17171b;
+    --cp-color:#fcd34d;
+    transition: border-color .2s ease, transform .2s ease, box-shadow .2s ease;
+  }
+  #customPads .cp-item:hover { transform: translateY(-1px); box-shadow: 0 8px 18px rgba(0,0,0,.25); }
+  #customPads .cp-btn {
+    appearance:none;
+    border:0;
+    padding: 10px 12px;
+    min-width: 200px;
+    color:#e5e5e5;
+    background: transparent;
+    text-align:left;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    gap:14px;
+  }
+  #customPads .cp-btn:active { transform: translateY(1px); }
+  #customPads .cp-btn.cp-no-level .cp-btn-content {
+    justify-content:flex-start;
+  }
+  #customPads .cp-btn-content {
+    display:flex;
+    align-items:center;
+    gap:14px;
+    width:100%;
+  }
+  #customPads .cp-level {
+    font-size: 2.75rem;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--cp-color, #fcd34d);
+    min-width: 64px;
+    text-align:center;
+  }
+  #customPads .cp-details {
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+  }
+  #customPads .cp-mode {
+    font-size:1.3rem;
+    letter-spacing:.03em;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  #customPads .cp-mode-icon {
+    width:28px;
+    height:28px;
+    border-radius:50%;
+    border:1px solid var(--cp-color, #fcd34d);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:1rem;
+    color: var(--cp-color, #fcd34d);
+    background: rgba(255,255,255,0.04);
+  }
+  #customPads .cp-channel {
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    font-size:.75rem;
+    color: rgba(229,231,235,.8);
+    align-self:flex-start;
+  }
+  #customPads .cp-channel-value {
+    width:32px;
+    height:32px;
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:1rem;
+    font-weight:800;
+    letter-spacing:.04em;
+    background: rgba(5,5,7,0.9);
+    color: var(--cp-color, #fcd34d);
+    border:2px solid var(--cp-color, #fcd34d);
+    box-shadow: 0 0 10px rgba(0,0,0,0.45);
+  }
+  #customPads .cp-actions {
+    display:flex;
+    align-items:center;
+    border-left: 1px solid #2a2a2e;
+    background:#101014;
+  }
+  #customPads .cp-del {
+    width: 44px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    border:0;
+    background: transparent;
+    cursor:pointer;
+    color:#ffb4b4;
+  }
+  #customPads .cp-del:hover { background: rgba(220,53,69,.12); }
+  #customPads .cp-empty {
+    color:#a8a8b3;
+    font-size:.95rem;
+    padding: 10px 2px;
+    opacity:.9;
+  }
+</style>
+
+<div id="customPads" class="card shadow-sm" style="background:#111;border:1px solid #333;border-radius:.75rem;color:#e5e7eb;">
+  <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2" style="background:#0c0c0e;border-bottom:1px solid #333;color:#e5e7eb;border-top-left-radius:.65rem;border-top-right-radius:.65rem;padding:8px 10px;">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <strong>Atalhos</strong>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button id="cpAdd" class="btn btn-sm btn-outline-light" type="button">
+        <i class="fa-solid fa-plus"></i> Salvar
+      </button>
+      <button id="cpClear" class="btn btn-sm btn-outline-danger" type="button" title="Apagar todos">
+        <i class="fa-solid fa-trash"></i>
+      </button>
+    </div>
+  </div>
+
+  <div class="card-body p-3">
+    <div id="cpList" class="cp-grid"></div>
+    <div id="cpEmpty" class="cp-empty d-none">Nenhum botão salvo. Selecione Modo/Nível/Canal no controle e clique em “Adicionar”.</div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ====== Integração (mesma convenção do seu template) ======
+  const PATH_MESSAGES = "livechat_v1/messages";
+
+  function getRoomRef(){
+    if (!window.firebase || !firebase.apps || !firebase.apps.length) {
+      throw new Error("Firebase não inicializado (carregue o chat antes).");
+    }
+    return firebase.database().ref(PATH_MESSAGES);
+  }
+
+  const CID_KEY = "lc_cid";
+  const cid = sessionStorage.getItem(CID_KEY) || ("c_" + Math.random().toString(36).slice(2));
+  sessionStorage.setItem(CID_KEY, cid);
+
+  function getFlowgateChat(){
+    if (window.Flowgate && typeof window.Flowgate.send === 'function') return window.Flowgate;
+    if (window.__TRYSTERO_CHAT__ && typeof window.__TRYSTERO_CHAT__.send === 'function') return window.__TRYSTERO_CHAT__;
+    return null;
+  }
+
+  async function pushToFlowgate(text){
+    const chat = getFlowgateChat();
+    if (!chat) return false;
+    try {
+      await chat.send(text.slice(0, 400), { via: 'custom-buttons' });
+      return true;
+    } catch(_) {
+      return false;
+    }
+  }
+
+  async function pushToFirebase(text){
+    const roomRef = getRoomRef();
+    const msgRef = roomRef.push();
+    try { msgRef.onDisconnect().remove(); } catch(_) {}
+    await msgRef.set({
+      text: text.slice(0,400),
+      ts: firebase.database.ServerValue.TIMESTAMP,
+      cid: cid
+    });
+  }
+
+  async function sendCommand(text){
+    const payload = String(text || '').trim();
+    if (!payload) return;
+
+    if (window.SerialBridge && typeof window.SerialBridge.send === 'function') {
+      try { await window.SerialBridge.send(payload); return; } catch(_){}
+    }
+
+    if (await pushToFlowgate(payload)) return;
+
+    try { await pushToFirebase(payload); } catch(_){}
+  }
+
+  function readMode(){ return (window.currentMode || "BEEP").toUpperCase(); }
+  function readLevel(){
+    const n = Number(window.level);
+    return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 0;
+  }
+  function readChannel(){
+    const n = Number(window.channel);
+    return Number.isFinite(n) ? Math.max(1, Math.min(99, n)) : 1;
+  }
+  function buildCmdLine(){
+    const m = readMode();
+    const lvl = (m === "SHOCK" || m === "VIBRATION") ? readLevel() : 0;
+    return `${m},${lvl},${readChannel()}`;
+  }
+
+  // ====== UI / Estado ======
+  const $ = s => document.querySelector(s);
+  const elList = $("#cpList");
+  const elEmpty = $("#cpEmpty");
+  const btnAdd = $("#cpAdd");
+  const btnClear = $("#cpClear");
+
+  const STORE_KEY = "cp_custom_buttons_v1";
+  const MODE_STYLES = {
+    SHOCK:     { color: "#f97316", tint: "rgba(249,115,22,0.14)", icon: "fa-bolt-lightning", label: "Choque" },
+    VIBRATION: { color: "#10b981", tint: "rgba(16,185,129,0.14)", icon: "fa-mobile-screen-button", label: "Vibração" },
+    LIGHT:     { color: "#facc15", tint: "rgba(250,204,21,0.16)", icon: "fa-lightbulb", label: "Luz" },
+    BEEP:      { color: "#60a5fa", tint: "rgba(96,165,250,0.16)", icon: "fa-volume-high", label: "Bip" },
+    BTN_STATE: { color: "#f43f5e", tint: "rgba(244,63,94,0.16)", icon: "fa-toggle-on", label: "Estado Botão" },
+    DEFAULT:   { color: "#a855f7", tint: "rgba(168,85,247,0.16)", icon: "fa-wave-square", label: "Modo" }
+  };
+
+  /** @type {{id:string, mode:string, level:number, channel:number}[]} */
+  let items = [];
+
+  function load(){
+    try {
+      const raw = localStorage.getItem(STORE_KEY);
+      items = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(items)) items = [];
+    } catch {
+      items = [];
+    }
+  }
+
+  function save(){
+    localStorage.setItem(STORE_KEY, JSON.stringify(items));
+  }
+
+  function render(){
+    elList.innerHTML = "";
+    elEmpty.classList.toggle("d-none", items.length !== 0);
+
+    for (const it of items){
+      const cmd = `${it.mode},${it.level},${it.channel}`;
+
+      const wrap = document.createElement("div");
+      wrap.className = "cp-item";
+
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "cp-btn";
+      const modeKey = String(it.mode || "").toUpperCase();
+      const modeStyle = MODE_STYLES[modeKey] || MODE_STYLES.DEFAULT;
+      const modeLabel = modeStyle.label || modeKey;
+      const hideLevel = modeKey === "LIGHT" || modeKey === "BEEP";
+      wrap.dataset.mode = modeKey;
+      wrap.style.setProperty("--cp-color", modeStyle.color);
+      wrap.style.borderColor = modeStyle.color;
+      wrap.style.background = `linear-gradient(120deg, ${modeStyle.tint}, rgba(12,12,14,0.92))`;
+      if (hideLevel) b.classList.add("cp-no-level");
+      b.innerHTML = `<span class="cp-btn-content">
+                        ${hideLevel ? "" : `<span class=\"cp-level\">${it.level}</span>`}
+                        <span class="cp-details">
+                          <strong class="cp-mode">
+                            <span class="cp-mode-icon"><i class="fa-solid ${modeStyle.icon}"></i></span>
+                            ${modeLabel}
+                          </strong>
+                          <span class="cp-channel">
+                            <span>Canal</span>
+                            <span class="cp-channel-value">${it.channel}</span>
+                          </span>
+                        </span>
+                      </span>`;
+
+      // Comportamento: pressionar = HOLDON, soltar = HOLDOFF
+      // Fallback: se soltar não disparar por algum motivo, corta em 2s.
+      let safetyTimer = null;
+      let down = false;
+
+      async function holdOn(){
+        if (down) return;
+        down = true;
+        try { await sendCommand(`HOLDON ${cmd}`); } catch(_) {}
+        clearTimeout(safetyTimer);
+        safetyTimer = setTimeout(() => { holdOff(); }, 2000);
+      }
+      async function holdOff(){
+        if (!down) return;
+        down = false;
+        clearTimeout(safetyTimer);
+        safetyTimer = null;
+        try { await sendCommand("HOLDOFF"); } catch(_) {}
+      }
+
+      b.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        b.setPointerCapture?.(e.pointerId);
+        holdOn();
+      });
+
+      b.addEventListener("pointerup", (e) => {
+        e.preventDefault();
+        try { b.releasePointerCapture?.(e.pointerId); } catch(_){}
+        holdOff();
+      });
+
+      b.addEventListener("pointercancel", holdOff);
+      window.addEventListener("blur", holdOff);
+      b.addEventListener("click", (e) => {
+        if (down) return;
+        e.preventDefault();
+        holdOn();
+        setTimeout(holdOff, 120);
+      });
+
+      const acts = document.createElement("div");
+      acts.className = "cp-actions";
+
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "cp-del";
+      del.title = "Remover";
+      del.innerHTML = `<i class="fa-solid fa-xmark"></i>`;
+      del.addEventListener("click", () => {
+        items = items.filter(x => x.id !== it.id);
+        save();
+        render();
+      });
+
+      acts.appendChild(del);
+      wrap.appendChild(b);
+      wrap.appendChild(acts);
+      elList.appendChild(wrap);
+    }
+  }
+
+  function addCurrent(){
+    const mode = readMode();
+    const level = (mode === "SHOCK" || mode === "VIBRATION") ? readLevel() : 0;
+    const channel = readChannel();
+
+    const id = "cp_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2,8);
+
+    items.push({ id, mode, level, channel });
+    save();
+    render();
+  }
+
+  // ====== Eventos ======
+  btnAdd.addEventListener("click", () => {
+    try { addCurrent(); } catch (e) { alert(e.message || "Falha ao adicionar."); }
+  });
+
+  btnClear.addEventListener("click", () => {
+    if (!confirm("Apagar todos os botões personalizados?")) return;
+    items = [];
+    save();
+    render();
+  });
+
+  // Init
+  load();
+  render();
+})();
+</script>

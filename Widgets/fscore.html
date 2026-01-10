@@ -30,7 +30,7 @@
         </div>
       </div>
     </div>
-    <div class="mt-3 d-flex align-items-center gap-2 flex-wrap justify-content-center">
+    <div class="mt-3 d-flex align-items-center gap-3 flex-wrap justify-content-center">
       <div class="btn-group btn-group-sm" role="group" aria-label="Selecionar time">
         <button class="btn btn-outline-info" id="fsm-target-home">Casa</button>
         <button class="btn btn-outline-info" id="fsm-target-any" aria-label="Ambos" title="Ambos">
@@ -38,11 +38,29 @@
         </button>
         <button class="btn btn-outline-info" id="fsm-target-away">Fora</button>
       </div>
+      <div class="d-flex flex-column gap-1" style="min-width: 260px;">
+        <div class="input-group input-group-sm">
+          <input id="fsm-search-team" type="text" class="form-control" placeholder="Digite o time e Enter" aria-label="Pesquisar time" />
+          <button id="fsm-search-btn" class="btn btn-outline-secondary" type="button"><i class="fa-solid fa-magnifying-glass"></i></button>
+          <span id="fsm-search-status" class="input-group-text text-muted" style="min-width: 120px;">Aguardando</span>
+        </div>
+      </div>
     </div>
   </div>
 </div>
 
 <style>
+  #fsm-home-card,
+  #fsm-away-card {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  #fsm-home-name,
+  #fsm-away-name {
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
   .score-num {
     font-family: 'Anton', sans-serif;
     letter-spacing: .02em;
@@ -386,8 +404,10 @@
     }
   }
 
+  window.addEventListener('flowgate:room_changed', (ev) => bindRoom(ev?.detail?.room || null));
   window.addEventListener('trystero:room', (ev) => bindRoom(ev?.detail?.room || null));
-  if (window.__TRYSTERO_ROOM__) bindRoom(window.__TRYSTERO_ROOM__);
+  if (window.Flowgate && window.Flowgate.room) bindRoom(window.Flowgate.room);
+  else if (window.__TRYSTERO_ROOM__) bindRoom(window.__TRYSTERO_ROOM__);
 
   // Bus: receive global fs-score messages
   if (window.__FS_BUS__) {
@@ -689,12 +709,22 @@
     p2: {},
     p3: {}
   };
-  const searchBox = {
-    input: $('fsr-search-team'),
-    btn: $('fsr-search-btn'),
-    status: $('fsr-search-status'),
-    lastTerm: ''
-  };
+  const searchBoxes = [
+    {
+      input: $('fsr-search-team'),
+      btn: $('fsr-search-btn'),
+      status: $('fsr-search-status'),
+      lastTerm: '',
+      source: 'fs-remote'
+    },
+    {
+      input: $('fsm-search-team'),
+      btn: $('fsm-search-btn'),
+      status: $('fsm-search-status'),
+      lastTerm: '',
+      source: 'fs-mirror'
+    }
+  ];
   const flashIframe = document.getElementById('flashscore-browser-iframe');
 
   function setStatus(text){ if (statusEl) statusEl.textContent = text; }
@@ -718,11 +748,11 @@
     });
   }
 
-  function setSearchStatus(text, variant='muted'){
-    if (!searchBox.status) return;
-    searchBox.status.textContent = text;
-    searchBox.status.classList.remove('text-muted','text-info','text-success','text-danger','text-warning');
-    searchBox.status.classList.add(`text-${variant}`);
+  function setSearchStatus(box, text, variant='muted'){
+    if (!box || !box.status) return;
+    box.status.textContent = text;
+    box.status.classList.remove('text-muted','text-info','text-success','text-danger','text-warning');
+    box.status.classList.add(`text-${variant}`);
   }
 
   function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
@@ -834,40 +864,17 @@
     const txt = String(line||'').trim();
     if (!txt) return;
     if (!isHost()) { console.warn('ignorado: comandos so em host'); return; }
-    let sent = false;
     const emitEcho = () => {
       try { window.dispatchEvent(new CustomEvent('collar:echo', { detail: { line: txt, source: 'fscore' } })); } catch(_){ }
     };
-    const emitTx = () => {
-      try { window.dispatchEvent(new CustomEvent('collar:tx', { detail: { line: txt } })); return true; } catch(_){ return false; }
-    };
-    try {
-      const tunnel = window.__COLLAR_TUNNEL__;
-      if (tunnel && typeof tunnel.send === 'function') {
-        await tunnel.send(txt, { via: 'fscore', kind: 'cmd' });
-        sent = true;
-        emitEcho();
-      }
-    } catch(e){ console.warn('falha tunnel', e); }
-    if (!sent) {
+    if (window.SerialBridge && typeof window.SerialBridge.send === 'function') {
       try {
-        if (typeof window.collarSend === 'function') {
-          await window.collarSend(txt);
-          sent = true;
-          emitEcho(); // telemetria para graficos/logs sem reenviar para serial
-        } else if (typeof window.dispatchEvent === 'function') {
-          sent = emitTx();
-        }
-      } catch(e){ console.warn('falha serial', e); }
-      if (!sent && typeof window.dispatchEvent === 'function') {
-        sent = emitTx(); // fallback: ao menos tenta evento para serial/log
-      }
+        await window.SerialBridge.send(txt);
+        emitEcho();
+        return;
+      } catch(e){ console.warn('falha SerialBridge', e); }
     }
-    if (!sent && sendChat) {
-      try { sendChat(buildPayload(txt)); sent = true; }
-      catch(e){ console.warn('falha chat', e); }
-      emitEcho();
-    }
+    console.warn('SerialBridge.send indisponivel');
   }
 
 
@@ -1209,27 +1216,29 @@ function mountProfileRows(){
       try { flashIframe.contentWindow.postMessage(payload, '*'); } catch(_){}
       return true;
     };
-    const triggerSearch = ()=>{
-      if (!searchBox.input) return;
-      const term = (searchBox.input.value || '').trim();
-      if (!term) { setSearchStatus('Digite um time', 'warning'); return; }
-      searchBox.lastTerm = term;
-      if (!sendSearchToFlashscore(term)) {
-        setSearchStatus('Browser indisponivel', 'danger');
-        return;
-      }
-      setSearchStatus('Enviado ao Flashscore', 'success');
-      appendLog(`Pesquisa enviada para lista: ${term}`, 'fs-remote');
-    };
-    if (searchBox.btn) searchBox.btn.addEventListener('click', triggerSearch);
-    if (searchBox.input) {
-      searchBox.input.addEventListener('keydown', (e)=>{
+  const triggerSearch = (box)=>{
+    if (!box || !box.input) return;
+    const term = (box.input.value || '').trim();
+    if (!term) { setSearchStatus(box, 'Digite um time', 'warning'); return; }
+    box.lastTerm = term;
+    if (!sendSearchToFlashscore(term)) {
+      setSearchStatus(box, 'Browser indisponivel', 'danger');
+      return;
+    }
+    setSearchStatus(box, 'Enviado ao Flashscore', 'success');
+    appendLog(`Pesquisa enviada para lista: ${term}`, box.source || 'fs-remote');
+  };
+  searchBoxes.forEach((box)=>{
+    if (box.btn) box.btn.addEventListener('click', ()=> triggerSearch(box));
+    if (box.input) {
+      box.input.addEventListener('keydown', (e)=>{
         if (e.key === 'Enter') {
           e.preventDefault();
-          triggerSearch();
+          triggerSearch(box);
         }
       });
     }
+  });
   }
   bindInputs();
 
@@ -1336,8 +1345,10 @@ function mountProfileRows(){
     }
   }
 
+  window.addEventListener('flowgate:room_changed', (ev) => bindRoom(ev?.detail?.room || null));
   window.addEventListener('trystero:room', (ev) => bindRoom(ev?.detail?.room || null));
-  if (window.__TRYSTERO_ROOM__) bindRoom(window.__TRYSTERO_ROOM__);
+  if (window.Flowgate && window.Flowgate.room) bindRoom(window.Flowgate.room);
+  else if (window.__TRYSTERO_ROOM__) bindRoom(window.__TRYSTERO_ROOM__);
 
   // respond to replay requests from mirrors via bus
   if (window.__FS_BUS__) {
@@ -1356,7 +1367,7 @@ function mountProfileRows(){
           // ignora eco proprio
           if (m.payload.origin && m.payload.origin === SELF_ID) return;
           applyConfig(m.payload, { toBus:false, toRoom:false, relay:false });
-          // encaminha para sala trystero para outros peers
+          // encaminha para sala Flowgate para outros peers
           relayControlPayload(m.payload, { toBus:false, toRoom:true });
         }
       }catch(_){ }
@@ -1428,8 +1439,8 @@ function mountProfileRows(){
     };
 
     let savedVisibility = null;
-    try { savedVisibility = localStorage.getItem(visibilityKey); } catch(_){}
-    let isExpanded = savedVisibility === null ? false : savedVisibility === 'expanded';
+    try { savedVisibility = localStorage.getItem(visibilityKey); } catch(_){ }
+    let isExpanded = savedVisibility === null ? true : savedVisibility === 'expanded';
     applyExpandedState(isExpanded);
 
     const lastUrl = localStorage.getItem(storageKey);
@@ -1509,8 +1520,8 @@ function mountProfileRows(){
 <script>
   function isHost(){
     try {
-      const tags = (window.__TRYSTERO_PEER__ && typeof window.__TRYSTERO_PEER__.getLocalTags === 'function')
-        ? window.__TRYSTERO_PEER__.getLocalTags() : [];
+      const peer = (window.Flowgate && window.Flowgate.localPeer) ? window.Flowgate.localPeer : window.__TRYSTERO_PEER__;
+      const tags = (peer && typeof peer.getLocalTags === 'function') ? peer.getLocalTags() : [];
       if (Array.isArray(tags) && tags.map(t=>String(t||'').toLowerCase()).includes('host')) return true;
     } catch(_){}
     return document.documentElement.classList.contains('host-on');

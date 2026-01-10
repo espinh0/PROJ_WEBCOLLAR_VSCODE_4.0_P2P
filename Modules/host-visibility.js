@@ -1,4 +1,5 @@
-﻿// Controle de visibilidade para elementos exclusivos do host
+<script>
+// Controle de visibilidade para elementos exclusivos do host
 (function () {
   const HOST_CLASS = 'host-only';
   const HIDDEN_CLASS = 'd-none';
@@ -16,9 +17,8 @@
 
   function isHost() {
     try {
-      const tags = (window.__TRYSTERO_PEER__ && typeof window.__TRYSTERO_PEER__.getLocalTags === 'function')
-        ? window.__TRYSTERO_PEER__.getLocalTags()
-        : [];
+      const peer = (window.Flowgate && window.Flowgate.localPeer) ? window.Flowgate.localPeer : window.__TRYSTERO_PEER__;
+      const tags = (peer && typeof peer.getLocalTags === 'function') ? peer.getLocalTags() : [];
       return Array.isArray(tags) && tags.map((t) => String(t || '').toLowerCase()).includes('host');
     } catch {
       return false;
@@ -57,5 +57,7 @@
   }
 
   document.addEventListener('DOMContentLoaded', init);
+  window.addEventListener('flowgate:local_tags_changed', () => applyVisibility());
   window.addEventListener('trystero:localTags', () => applyVisibility());
 })();
+</script>

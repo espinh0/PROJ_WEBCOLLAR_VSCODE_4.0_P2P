@@ -1,21 +1,12 @@
-﻿<!-- CONEXAO SERIAL (Web Serial) -->
+<!-- CONEXAO SERIAL (Web Serial) -->
 <div class="host-only">
-  <div class="card p-3" style="background:#111;border:1px solid #333;border-radius:.75rem;color:#e5e7eb;">
-    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+  <div class="card shadow-sm" id="serialPortCard" style="background:#111;border:1px solid #333;border-radius:.75rem;color:#e5e7eb;">
+    <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2" style="background:#0c0c0e;border-bottom:1px solid #333;color:#e5e7eb;border-top-left-radius:.65rem;border-top-right-radius:.65rem;">
       <div class="d-flex align-items-center gap-2">
-        <h5 class="m-0 d-flex align-items-center gap-2">
-          <i class="fa-solid fa-plug"></i>
-          <span>Conexão Serial</span>
-        </h5>
-        <span id="wsStatusCompact" class="badge text-bg-secondary fw-semibold">Desconectado</span>
-      </div>
-      <button id="wsToggle" type="button" class="btn btn-sm btn-outline-light" aria-expanded="false" aria-controls="wsBody" title="Mostrar painel">
         <i class="fa-solid fa-plug"></i>
-      </button>
-    </div>
-
-    <div id="wsBody" class="collapse mt-3">
-      <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+        <div class="fw-semibold">Conexao do Transmissor</div>
+      </div>
+      <div class="d-flex align-items-center gap-2">
         <div class="d-flex align-items-center gap-1">
           <label class="small text-secondary">Baud</label>
           <select id="wsBaud" class="form-select form-select-sm" style="width:auto;">
@@ -26,115 +17,40 @@
             <option />9600
           </select>
         </div>
-        <div class="d-flex align-items-center gap-2">
-          <div class="form-check form-switch m-0">
-            <input class="form-check-input" type="checkbox" id="wsAuto" />
-            <label class="form-check-label small" for="wsAuto">Auto-reconectar</label>
-          </div>
-          <button id="wsConnect" class="btn btn-sm btn-primary">
-            <i class="fa-solid fa-circle-play me-1"></i>Conectar
-          </button>
-          <button id="wsDisconnect" class="btn btn-sm btn-outline-light" disabled>
-            <i class="fa-solid fa-circle-stop me-1"></i>Desconectar
-          </button>
+        <div class="form-check form-switch m-0">
+          <input class="form-check-input" type="checkbox" id="wsAuto" checked />
+          <label class="form-check-label small" for="wsAuto">Auto-reconectar</label>
         </div>
-      </div>
-
-      <div class="row g-2 align-items-center">
-        <div class="col-12 col-md-6">
-          <div class="small text-secondary">Status</div>
-          <div id="wsStatus" class="fw-semibold">Desconectado</div>
-        </div>
-        <div class="col-12 col-md-6">
-          <div class="small text-secondary">Porta</div>
-          <div id="wsPortInfo" class="text-truncate"><em>--</em></div>
-        </div>
-      </div>
-
-      <div class="mt-2 small text-secondary">
-        Dica: o Web Serial precisa de <strong>HTTPS</strong> (ou <code>localhost</code>) e um gesto do usuario para abrir a porta.
-      </div>
-
-      <!-- Serial monitor fica abaixo, dentro do painel recolhivel -->
-      <div class="border rounded p-3 mt-4" id="wsMonitorSlot">
-        <div class="d-flex align-items-center justify-content-between mb-2">
-          <h5 class="m-0"><i class="fa-solid fa-terminal me-2"></i>Serial Monitor</h5>
-          <div class="d-flex flex-wrap gap-2">
-            <button id="smPause" class="btn btn-sm btn-outline-light" title="Pausar/Continuar">Pausar</button>
-            <button id="smClear" class="btn btn-sm btn-outline-light" title="Limpar">Limpar</button>
-
-            <div class="form-check form-switch m-0 ms-2">
-              <input class="form-check-input" type="checkbox" id="smTimestamps" checked />
-              <label class="form-check-label small" for="smTimestamps">Timestamps</label>
-            </div>
-
-            <div class="form-check form-switch m-0 ms-2">
-              <input class="form-check-input" type="checkbox" id="smWrap" checked />
-              <label class="form-check-label small" for="smWrap">Quebra de linha</label>
-            </div>
-
-            <div class="ms-2">
-              <label class="small me-1" for="smEOL">EOL</label>
-              <select id="smEOL" class="form-select form-select-sm d-inline-block" style="width:auto;">
-                <option value="\n" />LF (\n)
-                <option value="\r\n" selected />CRLF (\r\n)
-                <option value="" />Nenhum
-              </select>
-            </div>
-          </div>
-        </div>
-
-        <div id="smView" class="border rounded p-2 bg-black text-monospace"
-             style="height: 280px; overflow:auto; white-space: pre-wrap;"></div>
-
-        <div class="input-group mt-3">
-          <input id="smInput" type="text" class="form-control" placeholder="Digite um comando e pressione Enter..." />
-          <button id="smSend" class="btn btn-primary"><i class="fa-solid fa-paper-plane me-1"></i>Enviar</button>
-        </div>
-
-        <div class="form-text mt-1">
-          Dica: selecione o final de linha (EOL) acima. Enter tambem envia.
-        </div>
-      </div>
-
-      <!-- Log consolidado junto da conexao serial -->
-      <div class="border rounded p-3 mt-4" id="wsLogSlot">
-        <div class="d-flex align-items-center justify-content-between mb-2">
-          <h5 class="m-0"><i class="fa-solid fa-clipboard-list me-2"></i>Log</h5>
-          <div class="d-flex flex-wrap gap-2 align-items-center">
-            <div class="form-check form-switch m-0">
-              <input class="form-check-input" type="checkbox" id="lmTimestamps" checked />
-              <label class="form-check-label small" for="lmTimestamps">Timestamps</label>
-            </div>
-            <div class="form-check form-switch m-0 ms-2">
-              <input class="form-check-input" type="checkbox" id="lmWrap" checked />
-              <label class="form-check-label small" for="lmWrap">Quebra</label>
-            </div>
-            <div class="ms-2 d-flex align-items-center gap-1">
-              <label class="small">Nivel</label>
-              <select id="lmLevel" class="form-select form-select-sm" style="width:auto;">
-                <option value="all" selected />Tudo
-                <option value="info" />Info
-                <option value="warn" />Warn
-                <option value="error" />Error
-              </select>
-            </div>
-            <button id="lmPause" class="btn btn-sm btn-outline-light">Pausar</button>
-            <button id="lmClear" class="btn btn-sm btn-outline-light">Limpar</button>
-            <button id="lmCopy" class="btn btn-sm btn-outline-light">Copiar</button>
-            <button id="lmSave" class="btn btn-sm btn-outline-light">Salvar .txt</button>
-          </div>
-        </div>
-
-        <div id="lmView" class="border rounded p-2 bg-black text-monospace"
-             style="height: 260px; overflow:auto; white-space: pre-wrap;"></div>
+        <button id="wsConnect" class="btn btn-sm btn-primary">
+          <i class="fa-solid fa-circle-play me-1"></i>Conectar
+        </button>
+        <button id="wsDisconnect" class="btn btn-sm btn-outline-light" disabled>
+          <i class="fa-solid fa-circle-stop me-1"></i>Desconectar
+        </button>
       </div>
     </div>
+    <div class="card-body p-3">
+      <div class="row g-2 align-items-center">
+      <div class="col-12 col-md-6">
+        <div class="small text-secondary">Status</div>
+        <div id="wsStatus" class="fw-semibold">Desconectado</div>
+      </div>
+      <div class="col-12 col-md-6">
+        <div class="small text-secondary">Porta</div>
+        <div id="wsPortInfo" class="text-truncate"><em>--</em></div>
+      </div>
+    </div>
+
+    <div class="mt-2 small text-secondary">
+      Dica: o Web Serial precisa de <strong>HTTPS</strong> (ou <code>localhost</code>) e um gesto do usuario para abrir a porta.
+    </div>
+    </div>
   </div>
-</div>
 
 <script>
 (() => {
+  console.log("🔌 [SERIAL] Script iniciando...");
+  
   const $ = s => document.querySelector(s);
   const statusEl = $("#wsStatus");
   const portInfoEl = $("#wsPortInfo");
@@ -142,15 +58,22 @@
   const btnDisconnect = $("#wsDisconnect");
   const baudSel = $("#wsBaud");
   const autoChk = $("#wsAuto");
-  const wsBody = document.getElementById("wsBody");
-  const btnToggle = document.getElementById("wsToggle");
-  const statusCompact = document.getElementById("wsStatusCompact");
+
+  console.log("🔌 [SERIAL] Elementos:", {
+    statusEl: !!statusEl,
+    portInfoEl: !!portInfoEl,
+    btnConnect: !!btnConnect,
+    btnDisconnect: !!btnDisconnect,
+    baudSel: !!baudSel,
+    autoChk: !!autoChk
+  });
 
   const hasWebSerial = !!navigator.serial;
+  console.log("🔌 [SERIAL] Web Serial disponível:", hasWebSerial);
+  
   const HOST_REQUIRED_MSG = "Habilite 'host' para abrir a serial";
   const LAST_BAUD_KEY = "ws.lastBaud";
   const WANT_AUTO_KEY = "ws.autoReconnect";
-  const UI_KEY = "ws.uiExpanded";
 
   const state = {
     port: null,
@@ -159,31 +82,6 @@
     readPipeClosed: null,
     portOpening: null
   };
-
-  function setUiExpanded(open) {
-    if (wsBody) {
-      wsBody.classList.toggle("show", !!open);
-    }
-    if (btnToggle) {
-      btnToggle.setAttribute("aria-expanded", open ? "true" : "false");
-      btnToggle.setAttribute("title", open ? "Ocultar painel" : "Mostrar painel");
-      btnToggle.classList.toggle("btn-success", !!open);
-      btnToggle.classList.toggle("btn-outline-light", !open);
-    }
-  }
-
-  function initUiToggle() {
-    const stored = (() => { try { return localStorage.getItem(UI_KEY); } catch { return null; }})();
-    const startExpanded = stored === "1";
-    setUiExpanded(startExpanded);
-    if (btnToggle) {
-      btnToggle.addEventListener("click", () => {
-        const next = !wsBody?.classList.contains("show");
-        setUiExpanded(next);
-        try { localStorage.setItem(UI_KEY, next ? "1" : "0"); } catch {}
-      });
-    }
-  }
 
   function log(msg, level = "info") {
     try {
@@ -194,8 +92,9 @@
 
   function isHost() {
     try {
-      const tags = (window.__TRYSTERO_PEER__ && typeof window.__TRYSTERO_PEER__.getLocalTags === "function")
-        ? window.__TRYSTERO_PEER__.getLocalTags()
+      const peer = (window.Flowgate && window.Flowgate.localPeer) ? window.Flowgate.localPeer : window.__TRYSTERO_PEER__;
+      const tags = (peer && typeof peer.getLocalTags === "function")
+        ? peer.getLocalTags()
         : [];
       const hasTag = Array.isArray(tags) && tags.map(t => String(t || "").toLowerCase()).includes("host");
       if (hasTag) return true;
@@ -205,17 +104,13 @@
 
   function setStatus(text, portText) {
     statusEl.textContent = text;
-    if (statusCompact) {
-      statusCompact.textContent = text;
-      const isConnected = /conectad/i.test(text) && !/desconectad/i.test(text);
-      statusCompact.classList.toggle("text-bg-success", isConnected);
-      statusCompact.classList.toggle("text-bg-secondary", !isConnected);
-    }
     portInfoEl.textContent = portText ?? portInfoEl.textContent;
   }
   function setButtons(connected) {
     const host = isHost();
-    btnConnect.disabled = connected || !hasWebSerial || !host || !!state.portOpening;
+    const disabled = connected || !hasWebSerial || !host || !!state.portOpening;
+    console.log("🔌 [SERIAL] setButtons:", {connected, hasWebSerial, host, portOpening: !!state.portOpening, "btnConnect.disabled": disabled});
+    btnConnect.disabled = disabled;
     btnDisconnect.disabled = !connected;
   }
 
@@ -254,9 +149,13 @@
       log("Web Serial exige site servido via HTTPS (ou localhost).", "warn");
       return false;
     }
-    if (!isHost()) {
+    const host = isHost();
+    const bypassHost = localStorage.getItem('serial.bypassHostCheck') === '1';
+    console.log("DEBUG prelimCheck - isHost:", host, "bypass:", bypassHost);
+    if (!host && !bypassHost) {
       setStatus(HOST_REQUIRED_MSG);
-      log("Marcador de host desligado: serial bloqueada.", "warn");
+      log("Marcador de host desligado: serial bloqueada. (Use localStorage para bypass)", "warn");
+      console.warn("Host check failed - tags:", (window.Flowgate && window.Flowgate.localPeer) ? "flowgate disponível" : "sem flowgate", "classList:", document.documentElement.className);
       return false;
     }
     return true;
@@ -360,7 +259,9 @@
     finally { state.portOpening = null; }
   }
 
-  async function disconnectSerial() {
+  async function disconnectSerial(opts = {}) {
+    const forgetGrant = opts.forgetPermission === true;
+    const portRef = state.port;
     try {
       if (state.reader) {
         try { await state.reader.cancel(); } catch {}
@@ -386,6 +287,14 @@
       portInfoEl.textContent = "--";
       window.dispatchEvent(new Event("serial-disconnected"));
       log("Porta desconectada.");
+    }
+    if (forgetGrant && portRef && typeof portRef.forget === "function") {
+      try {
+        await portRef.forget();
+        log("Permissao da porta esquecida (requer nova confirmacao do navegador).");
+      } catch (e) {
+        log(`Nao foi possivel limpar a permissao: ${e?.message || e}`, "warn");
+      }
     }
   }
 
@@ -423,9 +332,14 @@
   }
 
   btnConnect.addEventListener("click", async () => {
-    try { await ensureSerial(); }
+    console.log("✓ Botão conectar clicado");
+    try { 
+      console.log("Iniciando ensureSerial...");
+      await ensureSerial(); 
+    }
     catch (e) {
       const msg = e && e.name === "NotFoundError" ? "Usuario cancelou a selecao da porta." : (e.message || String(e));
+      console.error("Erro ao conectar:", msg, e);
       log(`Falha ao conectar: ${msg}`, e && e.name === "NotFoundError" ? "warn" : "error");
       setStatus("Desconectado");
       setButtons(false);
@@ -433,7 +347,7 @@
   });
 
   btnDisconnect.addEventListener("click", async () => {
-    await disconnectSerial();
+    await disconnectSerial({ forgetPermission: true });
   });
 
   baudSel.addEventListener("change", () => {
@@ -448,15 +362,15 @@
     if (autoChk.checked) scheduleReconnect();
   });
 
+  window.addEventListener("flowgate:local_tags_changed", refreshHostGuard);
   window.addEventListener("trystero:localTags", refreshHostGuard);
 
   const savedBaud = localStorage.getItem(LAST_BAUD_KEY);
   if (savedBaud) baudSel.value = savedBaud;
   const savedAuto = localStorage.getItem(WANT_AUTO_KEY);
   if (savedAuto != null) autoChk.checked = savedAuto === "1";
-  else autoChk.checked = false;
+  else autoChk.checked = true;
 
-  initUiToggle();
   setButtons(false);
   if (!hasWebSerial) {
     setStatus("Navegador sem Web Serial");
@@ -477,6 +391,9 @@
   window.ensureSerial = ensureSerial;
   window.disconnectSerial = disconnectSerial;
 
+  console.log("🔌 [SERIAL] Script carregado com sucesso!");
+  console.log("🔌 [SERIAL] btnConnect.disabled:", btnConnect ? btnConnect.disabled : "BOTÃO NÃO ENCONTRADO");
+
 })();
 </script>
 
@@ -484,49 +401,10 @@
 <script>
 (() => {
   const enc = new TextEncoder();
-  const MIRROR_STATE_KEY = "remote_control_state_v1";
 
-  function shouldMirrorOpposite() {
-    try {
-      const raw = localStorage.getItem(MIRROR_STATE_KEY);
-      if (!raw) return false;
-      const parsed = JSON.parse(raw);
-      return !!(parsed && parsed.advanced && parsed.advanced.mirrorChan2);
-    } catch {
-      return false;
-    }
-  }
-
-  function mirrorCommandToOppositeChannel(text) {
-    const raw = String(text ?? "");
-    const trimmed = raw.trim();
-    if (!trimmed) return null;
-
-    const holdMatch = trimmed.match(/^(HOLDON\s+)(.+)$/i);
-    const prefix = holdMatch ? holdMatch[1] : "";
-    const body = holdMatch ? holdMatch[2] : trimmed;
-
-    const cmdMatch = body.match(/^([A-Z]+)\s*,\s*([+-]?\d+(?:\.\d+)?)\s*,\s*(\d+)(.*)$/i);
-    if (!cmdMatch) return null;
-
-    const channelNum = Number(cmdMatch[3]);
-    if (!Number.isFinite(channelNum) || (channelNum !== 1 && channelNum !== 2)) return null;
-
-    const targetChannel = channelNum === 2 ? 1 : 2;
-    const suffix = cmdMatch[4] || "";
-    const mirroredBody = `${cmdMatch[1]},${cmdMatch[2]},${targetChannel}${suffix}`;
-    return prefix ? `${prefix}${mirroredBody}` : mirroredBody;
-  }
-
-  try {
-    window.__SERIAL_MIRROR__ = window.__SERIAL_MIRROR__ || {};
-    window.__SERIAL_MIRROR__.shouldMirrorOpposite = shouldMirrorOpposite;
-    window.__SERIAL_MIRROR__.mirrorCommandToOppositeChannel = mirrorCommandToOppositeChannel;
-  } catch {}
-
-  async function writeLineRaw(line) {
-    const trimmed = String(line ?? "").trim();
-    if (!trimmed) return;
+  async function writeLine(line) {
+    line = String(line ?? "").trim();
+    if (!line) return;
 
     try {
       if (!window.port || !window.port.writable) {
@@ -538,57 +416,317 @@
         catch (e) { if (!/locked/i.test(String(e))) throw e; }
       }
 
-    const payload = /(\r\n|\n)$/.test(trimmed) ? trimmed : (trimmed + "\n");
-    try {
-      const clean = payload.replace(/\r?\n$/, "");
-      window.dispatchEvent(new CustomEvent("serial-tx", { detail: { line: clean } }));
-    } catch {}
-    await window.writer.write(enc.encode(payload));
+      const payload = /(\r\n|\n)$/.test(line) ? line : (line + "\n");
+      await window.writer.write(enc.encode(payload));
 
-    try { (window.appLog || console.log)(`TX: ${payload.replace(/\n$/, "")}`); } catch {}
+      try { (window.appLog || console.log)(`TX: ${payload.replace(/\n$/, "")}`); } catch {}
     } catch (err) {
       try { (window.appLog || console.error)(`TX erro: ${err && err.message ? err.message : err}`); } catch {}
     }
   }
 
-  async function writeLine(line, opts = {}) {
-    const trimmed = String(line ?? "").trim();
-    if (!trimmed) return;
-
-    const forceBoth = !!opts.forceBothChannels;
-    const noMirror = !!opts.noMirror;
-    let lines = [trimmed];
-
-    if (forceBoth) {
-      const mirrored = mirrorCommandToOppositeChannel(trimmed);
-      if (mirrored && mirrored !== trimmed) lines = [trimmed, mirrored];
-    } else if (!noMirror && shouldMirrorOpposite()) {
-      const mirrored = mirrorCommandToOppositeChannel(trimmed);
-      if (mirrored && mirrored !== trimmed) lines = [trimmed, mirrored];
-    }
-
-    for (const cmd of lines) {
-      await writeLineRaw(cmd);
-    }
-  }
-
-  window.collarSend = async (line, opts) => writeLine(line, opts);
+  window.collarSend = async (line) => writeLine(line);
   window.SerialBridge = window.SerialBridge || {};
   window.SerialBridge.send = window.collarSend;
+  if (!window.executorLogs) window.executorLogs = [];
+  if (typeof window.getExecutorLogs !== 'function') {
+    window.getExecutorLogs = function(){ return window.executorLogs; };
+  }
+  if (typeof window.executorLog !== 'function') {
+    window.executorLog = function(action, cmd, origin, details){
+      try {
+        const entry = {
+          ts: Date.now(),
+          tsStr: new Date().toLocaleTimeString(),
+          action,
+          cmd,
+          origin: origin || 'unknown',
+          details: details || {}
+        };
+        window.executorLogs.push(entry);
+        if (window.executorLogs.length > 1000) window.executorLogs.shift();
+      } catch(_) {}
+    };
+  }
+  if (!window.SerialBridge._executorHooked) {
+    window.SerialBridge._executorHooked = true;
+    const origSend = window.SerialBridge.send;
+    window.SerialBridge.send = function(line) {
+      try {
+        if (typeof window.executorLog === 'function') {
+          window.executorLog('sent', String(line || ''), 'SerialBridge', { path: 'SerialBridge.send' });
+        }
+      } catch(_) {}
+      return origSend.apply(this, arguments);
+    };
+  }
 
   window.addEventListener("collar:tx", (e) => {
-    const detail = e?.detail || {};
-    const line = detail.line ? detail.line : "";
+    const line = e?.detail?.line ? e.detail.line : "";
     if (!line) return;
-    writeLine(line, {
-      noMirror: !!detail.noMirror,
-      forceBothChannels: !!detail.forceBothChannels
-    });
+    writeLine(line);
   });
 
   try { (window.appLog || console.log)("PATCH serial forwarder: pronto (escutando 'collar:tx')."); } catch {}
 })();
 </script>
+
+<!-- EXECUTOR FLOW LOG ÔÇö Painel de log do fluxo de comandos -->
+<div class="host-only">
+  <div class="card shadow-sm" style="background:#111;border:1px solid #333;border-radius:.75rem;color:#e5e7eb;">
+    <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2" style="background:#0c0c0e;border-bottom:1px solid #333;color:#e5e7eb;border-top-left-radius:.65rem;border-top-right-radius:.65rem;">
+      <div class="d-flex align-items-center gap-2">
+        <i class="fa-solid fa-flow-branch"></i>
+        <div class="fw-semibold">Executor Flow Log</div>
+      </div>
+      <div class="d-flex flex-wrap gap-2">
+        <button id="efClear" class="btn btn-sm btn-outline-light" title="Limpar">Limpar</button>
+        <button id="efExport" class="btn btn-sm btn-outline-light" title="Exportar como JSON">Exportar</button>
+        
+        <div class="form-check form-switch m-0 ms-2">
+          <input class="form-check-input" type="checkbox" id="efAutoScroll" checked />
+          <label class="form-check-label small" for="efAutoScroll">Auto-scroll</label>
+        </div>
+      </div>
+        </div>
+        <div class="card-body p-3">
+        <div id="executor-flow-log" class="border rounded p-3" 
+          style="height: 300px; overflow-y: auto; font-size: 0.9em; font-family: 'Monaco', 'Courier New', monospace; background: rgba(0,0,0,0.08);">
+      <div class="text-muted text-center py-4"><small>Aguardando eventos...</small></div>
+    </div>
+
+    <div class="form-text mt-2">
+      <i class="fa-solid fa-circle-info me-1"></i>
+      Mostra o fluxo de comandos: origem → Executor → Serial. 
+      Origem: <span class="badge bg-warning text-dark">chat</span>
+      <span class="badge bg-primary">flowgate</span>
+      <span class="badge bg-success">serial adapter</span>
+      <span class="badge bg-danger">error</span>
+    </div>
+    </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .executor-log-entry {
+    background-color: rgba(255, 255, 255, 0.02);
+    border-radius: 4px;
+    font-size: 0.85rem;
+    line-height: 1.4;
+  }
+
+  .executor-log-entry .badge {
+    font-size: 0.7rem;
+    padding: 0.25rem 0.5rem;
+    font-weight: 600;
+  }
+
+  .executor-log-entry code {
+    background-color: rgba(0, 0, 0, 0.3);
+    padding: 0.25rem 0.4rem;
+    border-radius: 3px;
+    display: block;
+    word-break: break-all;
+  }
+
+  #executor-flow-log {
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+    scrollbar-width: thin;
+  }
+
+  #executor-flow-log::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  #executor-flow-log::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  #executor-flow-log::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+  }
+
+  #executor-flow-log::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.4);
+  }
+</style>
+
+<script>
+(() => {
+  const logPanel = document.getElementById('executor-flow-log');
+  const btnClear = document.getElementById('efClear');
+  const btnExport = document.getElementById('efExport');
+  const cbAutoScroll = document.getElementById('efAutoScroll');
+
+  function updateLogDisplay() {
+    if (typeof window.getExecutorLogs !== 'function') return;
+    
+    const logs = window.getExecutorLogs();
+    const recent = logs.slice(-30);
+    
+    let html = '';
+    
+    if (recent.length === 0) {
+      html = '<div class="text-muted text-center py-4"><small>Aguardando eventos...</small></div>';
+    } else {
+      for (let i = 0; i < recent.length; i++) {
+        const log = recent[i];
+        const badgeClass = getActionBadgeClass(log.action);
+        const originBg = getOriginBadgeClass(log.origin);
+        
+        html += `<div class="executor-log-entry mb-2 p-2 border-start border-3" style="border-color: var(--bs-${badgeClass.replace('bg-', '')});">
+          <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
+            <span class="badge ${badgeClass}">${getActionIcon(log.action)} ${log.action.toUpperCase()}</span>
+            <span class="badge ${originBg}" title="Origem">${escapeHtml(log.origin)}</span>
+            <small class="text-muted">${log.tsStr}</small>
+          </div>
+          <code class="text-break">${escapeHtml(log.cmd)}</code>`;
+        
+        if (log.details && Object.keys(log.details).length > 0) {
+          html += `<div class="small text-muted mt-1">
+            ${Object.entries(log.details).map(([k, v]) => `${escapeHtml(k)}: ${escapeHtml(JSON.stringify(v))}`).join(' | ')}
+          </div>`;
+        }
+        
+        html += `</div>`;
+      }
+    }
+    
+    logPanel.innerHTML = html;
+    if (cbAutoScroll.checked) {
+      logPanel.scrollTop = logPanel.scrollHeight;
+    }
+  }
+
+  function getActionBadgeClass(action) {
+    switch(action) {
+      case 'received': return 'bg-info';
+      case 'sent': return 'bg-success';
+      case 'error': return 'bg-danger';
+      case 'init': return 'bg-secondary';
+      default: return 'bg-dark';
+    }
+  }
+
+  function getActionIcon(action) {
+    switch(action) {
+      case 'received': return '↓';
+      case 'sent': return '↑';
+      case 'error': return '⚠';
+      case 'init': return '●';
+      default: return '•';
+    }
+  }
+
+  function getOriginBadgeClass(origin) {
+    if (origin.includes('chat')) return 'bg-warning text-dark';
+    if (origin.includes('trystero') || origin.includes('flowgate')) return 'bg-primary';
+    if (origin.includes('holdSync')) return 'bg-purple';
+    if (origin.includes('SerialBridge') || origin.includes('collarSend') || origin.includes('sendSerial')) return 'bg-success';
+    if (origin.includes('executor')) return 'bg-secondary';
+    if (origin.includes('error')) return 'bg-danger';
+    return 'bg-dark';
+  }
+
+  function escapeHtml(text) {
+    const map = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;'
+    };
+    return String(text).replace(/[&<>"']/g, m => map[m]);
+  }
+
+  btnClear.addEventListener('click', () => {
+    if (typeof window.executorLogs !== 'undefined') {
+      window.executorLogs.length = 0;
+      updateLogDisplay();
+    }
+  });
+
+  btnExport.addEventListener('click', () => {
+    if (typeof window.getExecutorLogs !== 'function') {
+      alert('Executor logs não disponíveis');
+      return;
+    }
+    
+    const logs = window.getExecutorLogs();
+    const json = JSON.stringify(logs, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `executor-flow-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+  cbAutoScroll.addEventListener('change', () => {
+    if (cbAutoScroll.checked) {
+      logPanel.scrollTop = logPanel.scrollHeight;
+    }
+  });
+
+  // Atualizar a cada 500ms para pegar novos logs
+  setInterval(updateLogDisplay, 500);
+  updateLogDisplay();
+})();
+</script>
+
+<!-- SERIAL MONITOR ÔÇö bloco independente (sempre aberto / admin-only) -->
+<div class="host-only">
+  <div class="card shadow-sm" style="background:#111;border:1px solid #333;border-radius:.75rem;color:#e5e7eb;">
+    <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2" style="background:#0c0c0e;border-bottom:1px solid #333;color:#e5e7eb;border-top-left-radius:.65rem;border-top-right-radius:.65rem;">
+      <div class="d-flex align-items-center gap-2">
+        <i class="fa-solid fa-terminal"></i>
+        <div class="fw-semibold">Serial Monitor</div>
+      </div>
+      <div class="d-flex flex-wrap gap-2">
+        <button id="smPause" class="btn btn-sm btn-outline-light" title="Pausar/Continuar">Pausar</button>
+        <button id="smClear" class="btn btn-sm btn-outline-light" title="Limpar">Limpar</button>
+
+        <div class="form-check form-switch m-0 ms-2">
+          <input class="form-check-input" type="checkbox" id="smTimestamps" checked />
+          <label class="form-check-label small" for="smTimestamps">Timestamps</label>
+        </div>
+
+        <div class="form-check form-switch m-0 ms-2">
+          <input class="form-check-input" type="checkbox" id="smWrap" checked />
+          <label class="form-check-label small" for="smWrap">Quebra de linha</label>
+        </div>
+
+        <div class="ms-2">
+          <label class="small me-1" for="smEOL">EOL</label>
+          <select id="smEOL" class="form-select form-select-sm d-inline-block" style="width:auto;">
+            <option value="\n" />LF (\n)
+            <option value="\r\n" selected />CRLF (\r\n)
+            <option value="" />Nenhum
+          </select>
+        </div>
+      </div>
+        </div>
+        <div class="card-body p-3">
+    
+        <div id="smView" class="border rounded p-2 bg-black text-monospace"
+          style="height: 280px; overflow:auto; white-space: pre-wrap;"></div>
+
+    <div class="input-group mt-3">
+      <input id="smInput" type="text" class="form-control" placeholder="Digite um comando e pressione EnterÔÇª" />
+      <button id="smSend" class="btn btn-primary"><i class="fa-solid fa-paper-plane me-1"></i>Enviar</button>
+    </div>
+
+    <div class="form-text mt-1">
+      Dica: selecione o final de linha (EOL) acima. Enter tamb├®m envia.
+    </div>
+    </div>
+  </div>
+</div>
 
 <style>
   #smView .sm-line { line-height: 1.25; padding: 2px 0; }
@@ -607,7 +745,7 @@
   #smView .cmd-vibration { color: #eab308; } /* amarelo */
   #smView .cmd-light     { color: #ef4444; } /* vermelho */
 
-  /* Contador de repeticao */
+  /* Contador de repeti├º├úo */
   #smView .sm-dup { opacity: .85; margin-left: 8px; }
 </style>
 
@@ -626,7 +764,7 @@
   let paused = false;
   let autoscroll = true;
 
-  // Compactacao
+  // Compacta├º├úo
   let lastKey = null;
   let lastLineEl = null;
   let lastCount = 1;
@@ -644,33 +782,33 @@
     return i;
   }
 
-  // Remove sufixos "(3x)" vindos do proprio texto para nao quebrar a compactacao
+  // Remove sufixos "(3x)" vindos do pr├│prio texto para n├úo quebrar a compacta├º├úo
   function stripInlineCounter(s) {
     return String(s ?? "").replace(/\(\s*\d+\s*x\s*\)\s*$/i, "").trim();
   }
 
-  // Normaliza entidades cruas que chegam como texto
+  // Normaliza entidades ÔÇ£cruasÔÇØ que chegam como texto
   function normalizeIncoming(s) {
     let t = String(s ?? "");
 
-    // Entidades vistas nos seus logs (literal, nao renderiza como emoji)
+    // Entidades vistas nos seus logs (literal, n├úo renderiza como emoji)
     t = t
       .replace(/&#11013;(&#65039;)?/g, "")   // seta esquerda literal
       .replace(/&#10145;(&#65039;)?/g, "")  // seta direita literal
       .replace(/&#9889;?/g, "")             // raio literal
 
-      // tambem remove entidades nomeadas se vierem cruas
+      // tamb├®m remove entidades nomeadas se vierem cruas
       .replace(/&larr;?/gi, "")
       .replace(/&rarr;?/gi, "");
 
     // remove setas unicode se vierem embutidas
-    t = t.replace(/[\u2190\u2192]/g, "");
+    t = t.replace(/[ÔåÉÔåÆ]/g, "");
 
-    // limpa espacos duplicados
+    // limpa espa├ºos duplicados
     return t.replace(/\s{2,}/g, " ").trim();
   }
 
-  // Extrai (modo, nivel, canal)
+  // Extrai (modo, n├¡vel, canal)
   // Suporta: SHOCK, BEEP/BIP, VIBRATION, LIGHT/LUZ
   // Ex: "OK SHOCK,12,1" / "OK VIBRATION,8,1" / "LIGHT,0,1"
   function parseTuple(text) {
@@ -732,7 +870,7 @@
 
     const key = makeKey(dir, text);
 
-    // Compacta somente quando identico (mesmo modo/nivel/canal ou RAW identico)
+    // Compacta somente quando id├¬ntico (mesmo modo/nivel/canal ou RAW id├¬ntico)
     if (key === lastKey && lastLineEl) {
       lastCount += 1;
       setDupCounter(lastLineEl, lastCount);
@@ -756,7 +894,7 @@
       line.appendChild(document.createTextNode(" "));
     }
 
-    // Direcao RX/TX com Font Awesome
+    // Dire├º├úo RX/TX com Font Awesome
     const dirSpan = document.createElement("span");
     dirSpan.className = `sm-dir ${dir === "out" ? "sm-tx" : "sm-rx"}`;
 
@@ -768,14 +906,14 @@
     line.appendChild(dirSpan);
     line.appendChild(document.createTextNode(" "));
 
-    // Conteudo normalizado
+    // Conte├║do normalizado
     const normalizedText = stripInlineCounter(normalizeIncoming(text));
     const tuple = parseTuple(normalizedText);
 
     if (tuple) {
       const meta = cmdMeta(tuple.mode);
 
-      // Prefixo (OK, etc.) preservado quando possivel
+      // Prefixo (OK, etc.) preservado quando poss├¡vel
       const cleaned = normalizeIncoming(text);
       const upper = cleaned.toUpperCase();
       const idx = upper.indexOf(tuple.mode);
@@ -789,7 +927,7 @@
         line.appendChild(pre);
       }
 
-      // Icone + label com cor
+      // ├ìcone + label com cor
       const cmd = document.createElement("span");
       cmd.className = meta.cls;
 
@@ -845,14 +983,9 @@
     const eolVal = selEOL.value
       .replaceAll("\\n", "\n")
       .replaceAll("\\r", "\r");
-    const mirrorHelper = window.__SERIAL_MIRROR__;
-    const shouldMirror = !!(mirrorHelper && typeof mirrorHelper.shouldMirrorOpposite === "function" && mirrorHelper.shouldMirrorOpposite());
-    const mirrored = shouldMirror && typeof mirrorHelper.mirrorCommandToOppositeChannel === "function"
-      ? mirrorHelper.mirrorCommandToOppositeChannel(raw)
-      : null;
-    const lines = (mirrored && mirrored !== raw) ? [raw, mirrored] : [raw];
+    const payload = raw + eolVal;
 
-    // Somente envia se a porta ja estiver aberta; nao tenta abrir sozinho
+    // Somente envia se a porta já estiver aberta; não tenta abrir sozinho
     let useWriter = (typeof writer !== "undefined" && writer) ? writer : null;
     if (!useWriter && window.port?.writable) {
       try { useWriter = await window.port.writable.getWriter(); } catch(_) {}
@@ -864,11 +997,8 @@
     }
 
     try {
-      for (const line of lines) {
-        const payload = line + eolVal;
-        await useWriter.write(new TextEncoder().encode(payload));
-        appendLine(line, "out");
-      }
+      await useWriter.write(new TextEncoder().encode(payload));
+      appendLine(raw, "out");
     } catch (e) {
       appendLine(`ERRO envio: ${e?.message || e}`, "out");
     } finally {
@@ -894,7 +1024,7 @@
 
   // Hook RX
   const prevLogSerialLine = window.logSerialLine;
-  const wrappedLogSerialLine = function(line) {
+  window.logSerialLine = function(line) {
     try {
       if (line != null && line !== "") {
         const parts = String(line)
@@ -906,172 +1036,10 @@
     } catch(_) {}
     if (typeof prevLogSerialLine === "function") prevLogSerialLine(line);
   };
-  wrappedLogSerialLine._orig = prevLogSerialLine;
-  window.logSerialLine = wrappedLogSerialLine;
-
-  window.addEventListener?.("serial-tx", (ev) => {
-    const line = ev?.detail?.line;
-    if (line != null && line !== "") appendLine(line, "out");
-  });
 
   window.addEventListener?.("serial-connected", () => appendLine("Porta conectada.", "in"));
   window.addEventListener?.("serial-disconnected", () => appendLine("Porta desconectada.", "in"));
 
   view.style.whiteSpace = cbWrap.checked ? "pre-wrap" : "pre";
-})();
-</script>
-
-<script>
-(() => {
-  const $ = s => document.querySelector(s);
-  const view = $("#lmView");
-  const btnPause = $("#lmPause");
-  const btnClear = $("#lmClear");
-  const btnCopy  = $("#lmCopy");
-  const btnSave  = $("#lmSave");
-  const cbTs   = $("#lmTimestamps");
-  const cbWrap = $("#lmWrap");
-  const selLvl = $("#lmLevel");
-
-  let paused = false;
-  let autoscroll = true;
-  let filterLevel = "all";
-  const buffer = []; // mant├®m texto para copiar/salvar
-
-  function nowTs() {
-    const d = new Date();
-    const pad = n => String(n).padStart(2, "0");
-    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-  }
-
-  function levelAllows(level) {
-    if (filterLevel === "all") return true;
-    return level === filterLevel;
-  }
-
-  function colorFor(level) {
-    if (level === "error") return "#ff6b6b";
-    if (level === "warn")  return "#ffd166";
-    return "#9ad1ff";
-  }
-
-  function appendLine(text, level="info") {
-    if (!levelAllows(level)) return;
-    if (paused) return;
-
-    const line = document.createElement("div");
-    line.className = "lm-line";
-    const ts = cbTs.checked ? `[${nowTs()}] ` : "";
-    line.textContent = `${ts}${level.toUpperCase()}: ${text}`;
-    line.style.color = colorFor(level);
-    view.appendChild(line);
-
-    // guarda vers├úo ÔÇ£cruaÔÇØ (sem cor) para export/copy
-    buffer.push(`${ts}${level.toUpperCase()}: ${text}`);
-
-    if (autoscroll) view.scrollTop = view.scrollHeight;
-  }
-
-  // Controles UI
-  btnPause.addEventListener("click", () => {
-    paused = !paused;
-    btnPause.textContent = paused ? "Continuar" : "Pausar";
-  });
-  btnClear.addEventListener("click", () => { view.innerHTML = ""; buffer.length = 0; });
-  btnCopy.addEventListener("click", async () => {
-    try { await navigator.clipboard.writeText(buffer.join("\n")); btnCopy.textContent = "Copiado!"; setTimeout(()=>btnCopy.textContent="Copiar",1200); }
-    catch { /* ignore */ }
-  });
-  btnSave.addEventListener("click", () => {
-    const blob = new Blob([buffer.join("\n")], {type:"text/plain"});
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `log_${new Date().toISOString().replace(/[:.]/g,"-")}.txt`;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
-  });
-  cbWrap.addEventListener("change", () => {
-    view.style.whiteSpace = cbWrap.checked ? "pre-wrap" : "pre";
-  });
-  selLvl.addEventListener("change", () => {
-    filterLevel = selLvl.value;
-    // Re-render simples (limpa e repopula do buffer conforme filtro)
-    const snapshot = buffer.slice();
-    view.innerHTML = "";
-    for (const line of snapshot) {
-      const level = line.includes("ERROR:") ? "error" : line.includes("WARN:") ? "warn" : "info";
-      if (levelAllows(level)) {
-        const div = document.createElement("div");
-        div.className = "lm-line";
-        div.textContent = line;
-        div.style.color = colorFor(level);
-        view.appendChild(div);
-      }
-    }
-    view.scrollTop = view.scrollHeight;
-  });
-
-  // Autoscroll on/off baseado na rolagem
-  view.addEventListener("scroll", () => {
-    const nearBottom = view.scrollHeight - view.scrollTop - view.clientHeight < 8;
-    autoscroll = nearBottom;
-  });
-
-  // ===== API Global =====
-  // appLog(msg, level="info") ÔÇö n├¡vel: "info"|"warn"|"error"
-  // Tamb├®m aceita CustomEvent('app-log', {detail:{msg, level}})
-  const originalConsole = {
-    log:   console.log.bind(console),
-    warn:  console.warn.bind(console),
-    error: console.error.bind(console),
-  };
-
-  function appLog(msg, level="info") {
-    try {
-      let text = "";
-      if (msg instanceof Error) {
-        text = `${msg.name || "Error"}: ${msg.message}`;
-      } else if (typeof msg === "object") {
-        text = JSON.stringify(msg);
-      } else {
-        text = String(msg);
-      }
-      appendLine(text, level);
-    } catch(_) {}
-  }
-
-  // exp├Áe global
-  window.appLog = appLog;
-
-  // escuta eventos personalizados
-  window.addEventListener("app-log", (ev) => {
-    const d = ev?.detail || {};
-    appLog(d.msg, d.level || "info");
-  });
-
-  // espelha console.* no painel, preservando comportamento original
-  console.log = (...args) => { originalConsole.log(...args); appLog(args.map(String).join(" "), "info"); };
-  console.warn = (...args) => { originalConsole.warn(...args); appLog(args.map(String).join(" "), "warn"); };
-  console.error = (...args) => { originalConsole.error(...args); appLog(args.map(String).join(" "), "error"); };
-
-  // Integra├º├úo opcional: tamb├®m mostra linhas vindas do Serial (se existir)
-  const prevLogSerialLine = window.logSerialLine;
-  const wrappedLogSerialLine = function(line){
-    try {
-      if (line != null && line !== "") {
-        const parts = String(line).replace(/\r\n/g,"\n").replace(/\r/g,"\n").split("\n");
-        for (const p of parts) if (p.length) appLog(`SERIAL: ${p}`, "info");
-      }
-    } catch(_) {}
-    if (typeof prevLogSerialLine === "function") prevLogSerialLine(line);
-  };
-  wrappedLogSerialLine._orig = prevLogSerialLine;
-  window.logSerialLine = wrappedLogSerialLine;
-
-  // Estado inicial
-  view.style.whiteSpace = cbWrap.checked ? "pre-wrap" : "pre";
-
-  // Mensagem inicial
-  appLog("Monitor de LOG iniciado.", "info");
 })();
 </script>

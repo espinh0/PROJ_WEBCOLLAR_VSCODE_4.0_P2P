@@ -52,6 +52,7 @@
     holdSeq: 0,
     tunnelBound: false,
     tunnelUnsub: null,
+    lastTxSig: { sig: "", ts: 0 },
     serialListener: null,
     serialStats: {
       seen: 0,
@@ -192,13 +193,15 @@
     };
   }
 
-  function parseCommand(text) {
+  function parseCommand(text, opts = {}) {
     if (!text) return null;
     const raw = String(text || "").trim();
     const btn = parseBtnState(raw);
     if (btn) return btn;
-    if (!/^OK\b/i.test(raw)) return null;
-    const cleaned = raw.replace(/^OK\s+/i, "").trim();
+    const requireOk = opts.requireOk !== false;
+    const ok = /^OK\b/i.test(raw);
+    if (requireOk && !ok) return null;
+    const cleaned = ok ? raw.replace(/^OK\s+/i, "").trim() : raw;
 
     const isHoldOff = /\bHOLDOFF\b/i.test(cleaned);
     const isHoldOn = /\bHOLDON\b/i.test(cleaned);
@@ -218,6 +221,12 @@
     const channel = Math.max(1, Math.min(2, Number(match[3]) || 1));
 
     return { kind: isHoldOn ? "holdon" : "pulse", mode, level, channel };
+  }
+
+  function makeCmdSig(parsed) {
+    if (!parsed) return "";
+    if (parsed.kind === "holdoff") return "HOLDOFF";
+    return `${parsed.kind || ""}|${parsed.mode || ""}|${parsed.level ?? ""}|${parsed.channel ?? ""}`;
   }
 
   function extractTextFromMessage(detail) {
@@ -255,11 +264,16 @@
       state.serialStats.lastOkSig = text;
       state.serialStats.lastOkTs = now;
     }
-    const parsed = parseCommand(text);
+    const parsed = parseCommand(text, { requireOk: true });
     if (!parsed) {
       state.serialStats.ignored += 1;
       debugLog(`Chart serial ignorado: ${text}`);
       setStatus(`Serial RX ${state.serialStats.seen} (validos: ${state.serialStats.parsed}).`);
+      return;
+    }
+    const sig = makeCmdSig(parsed);
+    if (sig && state.lastTxSig.sig === sig && (Date.now() - state.lastTxSig.ts) < 500) {
+      debugLog(`Chart serial OK duplicado do TX (${sig}).`);
       return;
     }
     state.serialStats.parsed += 1;
@@ -269,6 +283,22 @@
       return;
     }
     enqueuePoint(makePoint(parsed, { ts, source: "serial" }));
+    flushPending();
+  }
+
+  function onSerialBridgeTx(line) {
+    const text = String(line || "").trim();
+    if (!text) return;
+    const parsed = parseCommand(text, { requireOk: false });
+    if (!parsed) return;
+    const ts = Date.now();
+    const sig = makeCmdSig(parsed);
+    if (sig) state.lastTxSig = { sig, ts };
+    if (parsed.kind === "holdoff") {
+      finalizeHold(ts);
+      return;
+    }
+    enqueuePoint(makePoint(parsed, { ts, source: "serialbridge" }));
     flushPending();
   }
 
@@ -317,7 +347,34 @@
     const handler = (line) => onSerialLine(line);
     state.serialListener = handler;
     ensureSerialHook("bind");
+    scheduleSerialBridgeHook();
     setStatus("Escutando monitor serial.");
+  }
+
+  function ensureSerialBridgeHook(reason) {
+    const bridge = window.SerialBridge;
+    if (!bridge || typeof bridge.send !== "function") return false;
+    if (bridge.send._chartBridgeHook) return true;
+    const original = bridge.send;
+    const wrapped = function(line) {
+      try { onSerialBridgeTx(line); } catch(_) {}
+      return original.apply(this, arguments);
+    };
+    wrapped._chartBridgeHook = true;
+    wrapped._orig = original;
+    bridge.send = wrapped;
+    debugLog(`Chart SerialBridge hook aplicado (${reason || "init"}).`);
+    return true;
+  }
+
+  function scheduleSerialBridgeHook() {
+    let tries = 0;
+    const tick = () => {
+      if (ensureSerialBridgeHook("retry")) return;
+      tries += 1;
+      if (tries < 10) setTimeout(tick, 500);
+    };
+    tick();
   }
 
   function setBounds() {
@@ -660,7 +717,10 @@
 
   CLEAR_BTN.addEventListener("click", resetChart);
   bindSerialMonitor();
-  window.addEventListener("serial-connected", () => ensureSerialHook("serial-connected"));
+  window.addEventListener("serial-connected", () => {
+    ensureSerialHook("serial-connected");
+    ensureSerialBridgeHook("serial-connected");
+  });
   window.addEventListener("beforeunload", () => {
     try { if (state.tunnelUnsub) state.tunnelUnsub(); } catch(_){}
     try {

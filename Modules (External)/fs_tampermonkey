@@ -3,7 +3,7 @@
 // @namespace    collar3
 // @version      4.0
 // @description  Monitora Flashscore e envia snapshots do placar via PeerJS (Flowgate).
-// @note         4.0 - migrate trystero/nostr to peerjs public server
+// @note         4.0 - migrate flowgate/nostr to peerjs public server
 // @match        https://www.flashscore.com/*
 // @match        https://www.flashscore.com.br/*
 // @match        https://www.flashscore.*/*
@@ -42,9 +42,9 @@
     return 'peerjs';
   }
   const DEFAULT_ROOM = 'PET998DR';
-  const DEFAULT_PASS = 'trystero-pass-2f1b6d0f9c21419a92f2c0d4';
-  const STABLE_ID_STORAGE = 'trystero_nostr_priv_hex';
-  const TURN_STORE_KEY = 'trystero_turn_servers';
+  const DEFAULT_PASS = 'flowgate-pass-2f1b6d0f9c21419a92f2c0d4';
+  const STABLE_ID_STORAGE = 'flowgate_nostr_priv_hex';
+  const TURN_STORE_KEY = 'flowgate_turn_servers';
   const PRESENCE_INTERVAL_MS = 5000;
   const SCORE_HEARTBEAT_MS = 15000;
   const TURN_DEFAULTS = [
@@ -62,8 +62,9 @@
   ];
 
   function loadTurnServers(){
+    const TRYSTERO_TURN_FALLBACK = 'trystero_turn_servers';
     try {
-      const raw = localStorage.getItem(TURN_STORE_KEY);
+      const raw = localStorage.getItem(TURN_STORE_KEY) || localStorage.getItem(TRYSTERO_TURN_FALLBACK);
       if (!raw) return [];
       const parsed = JSON.parse(raw);
       return Array.isArray(parsed) ? parsed : [];
@@ -641,7 +642,7 @@
 
   function ensureStableId(){
     try {
-      const stored = localStorage.getItem(STABLE_ID_STORAGE);
+      const stored = localStorage.getItem(STABLE_ID_STORAGE) || localStorage.getItem(TRYSTERO_ID_FALLBACK);
       if (stored && /^[0-9a-f]{16,128}$/i.test(stored)) return stored.toLowerCase();
     } catch(_){}
     const hex = generateId(16);
@@ -994,9 +995,9 @@
 
   function reconnectWithTurn(reason){
     iceMode = 'turn';
-    disconnectTrystero();
+    disconnectFlowgate();
     setTimeout(()=> {
-      connectTrystero(`turn-fallback:${reason || 'ice'}`).catch(()=>{});
+      connectFlowgate(`turn-fallback:${reason || 'ice'}`).catch(()=>{});
     }, 250);
   }
 
@@ -1105,7 +1106,7 @@
     replayScore('peer-join', peerId);
   }
 
-  async function connectTrystero(trigger = 'manual'){
+  async function connectFlowgate(trigger = 'manual'){
     if (trConnected || trConnecting) return;
     trConnecting = true;
     pendingTurnFallback = false;
@@ -1202,7 +1203,7 @@
     }
   }
 
-  async function disconnectTrystero(){
+  async function disconnectFlowgate(){
     try { trRoom?.leave?.(); } catch(_){}
     trRoom = null;
     roomHostId = '';
@@ -1515,8 +1516,8 @@
     el('#fs-username').value = S.username;
     el('#fs-autoconnect').checked = !!S.autoConnect;
 
-    el('#fs-open').addEventListener('click', connectTrystero);
-    el('#fs-close').addEventListener('click', disconnectTrystero);
+    el('#fs-open').addEventListener('click', connectFlowgate);
+    el('#fs-close').addEventListener('click', disconnectFlowgate);
     el('#fs-force').addEventListener('click', ()=>{
       try {
         const snap = snapshot();
@@ -1561,7 +1562,7 @@
     ensureLiveFilter();
 
     if (S.autoConnect) {
-      connectTrystero().catch(()=>{});
+      connectFlowgate().catch(()=>{});
     }
 
     setTimeout(scheduleCheck, 600);

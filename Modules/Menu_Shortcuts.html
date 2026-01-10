@@ -1,0 +1,429 @@
+<style>
+  .menu-shortcuts-bar {
+    --menu-collapsed: 80px;
+    --menu-item-size: 64px;
+    --menu-item-gap: 10px;
+    --menu-accent: #4d71ff;
+    --menu-accent-2: #6c8dff;
+    --menu-glow: rgba(77, 113, 255, 0.35);
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 1020;
+    height: 100vh;
+    width: var(--menu-collapsed);
+    max-width: calc(100vw - 0.5rem);
+    background: rgba(20, 22, 28, 0.72);
+    border-right: 1px solid rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(8px);
+    transition: width 180ms ease;
+    overflow-x: hidden;
+    overflow-y: auto;
+    box-shadow: 12px 0 32px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+  .menu-shortcuts-bar {
+    scrollbar-width: none;
+  }
+  .menu-shortcuts-bar::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+  .menu-shortcuts-bar:hover {
+    width: max-content;
+  }
+  .menu-shortcuts-inner {
+    padding: 0.75rem;
+    height: 100%;
+    align-content: flex-start;
+  }
+  .menu-shortcuts-nav .nav-link,
+  .menu-shortcuts-nav summary.nav-link {
+    font-size: 2rem;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #e9edf7;
+    border-radius: 0.6rem;
+    padding: 0.4rem 0.5rem;
+    border: 0;
+    background: transparent;
+    transition: background 120ms ease, color 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+  }
+  .menu-shortcuts-nav .nav-link i,
+  .menu-shortcuts-nav summary.nav-link i {
+    font-size: 2rem;
+  }
+  .menu-shortcuts-nav {
+    gap: var(--menu-item-gap);
+  }
+  .menu-shortcuts-nav .nav-link:hover,
+  .menu-shortcuts-nav .nav-link:focus {
+    background: linear-gradient(135deg, rgba(77, 113, 255, 0.28), rgba(108, 141, 255, 0.12));
+    color: #ffffff;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+    transform: translateY(-1px);
+  }
+  .menu-shortcuts-nav .nav-link i,
+  .menu-shortcuts-nav summary.nav-link i {
+    color: #ffffff;
+  }
+  .menu-shortcuts-nav .nav-link:hover i,
+  .menu-shortcuts-nav .nav-link:focus i,
+  .menu-shortcuts-nav summary.nav-link:hover i,
+  .menu-shortcuts-nav summary.nav-link:focus i {
+    color: var(--menu-accent-2);
+    text-shadow: 0 0 14px var(--menu-glow);
+  }
+  .menu-shortcuts-bar:not(:hover) .menu-shortcuts-inner .menu-label {
+    display: none;
+  }
+  .menu-shortcuts-bar:not(:hover) .menu-shortcuts-nav .nav-link,
+  .menu-shortcuts-bar:not(:hover) .menu-shortcuts-nav summary.nav-link {
+    width: var(--menu-item-size);
+    height: var(--menu-item-size);
+    padding: 0;
+    justify-content: center;
+  }
+  .menu-shortcuts-bar:not(:hover) .menu-shortcuts-nav {
+    align-items: center;
+  }
+  .menu-shortcuts-bar:not(:hover) .menu-shortcuts-nav .nav-link i,
+  .menu-shortcuts-bar:not(:hover) .menu-shortcuts-nav summary.nav-link i {
+    margin-right: 0 !important;
+  }
+  .menu-shortcuts-inner details {
+    width: 100%;
+  }
+  .menu-shortcuts-inner summary {
+    list-style: none;
+  }
+  .menu-shortcuts-inner summary::-webkit-details-marker {
+    display: none;
+  }
+  .menu-shortcuts-bar:not(:hover) .menu-shortcuts-inner details > div {
+    display: none;
+  }
+  .menu-charts-slot {
+    margin-top: 1rem;
+  }
+  .menu-shortcuts-bar:not(:hover) .menu-charts-slot {
+    display: none;
+  }
+  .menu-keepawake-slot {
+    margin-top: 1rem;
+  }
+  .menu-shortcuts-bar:not(:hover) .menu-keepawake-slot {
+    display: none;
+  }
+  .menu-shortcuts-bar:not(:hover) .menu-shortcuts-inner {
+    padding-top: 0.75rem;
+  }
+  .menu-shortcuts-title {
+    letter-spacing: 0.04em;
+  }
+  @supports not (backdrop-filter: blur(8px)) {
+    .menu-shortcuts-bar { background: #111; }
+  }
+</style>
+
+<div class="menu-shortcuts-bar">
+  <div class="menu-shortcuts-inner d-flex align-items-center justify-content-between flex-wrap gap-2">
+    <nav class="nav flex-column menu-shortcuts-nav w-100 gap-1">
+      <button id="mod-flowgate" class="nav-link" type="button">
+        <i class="fa-solid fa-gear me-1"></i><span class="menu-label">Conexao</span>
+      </button>
+      <button id="mod-serial" class="nav-link host-only" type="button">
+        <i class="fa-solid fa-plug me-1"></i><span class="menu-label">Serial</span>
+      </button>
+      <button id="mod-fscore-config" class="nav-link" type="button">
+        <i class="fa-solid fa-sliders me-1"></i><span class="menu-label">Config Placar</span>
+      </button>
+      <div id="menu-charts-slot" class="menu-charts-slot"></div>
+      <div id="menu-keepawake-slot" class="menu-keepawake-slot"></div>
+    </nav>
+  </div>
+</div>
+
+<div class="modal fade" id="serial-module-modal" tabindex="-1" aria-labelledby="serial-module-modal-label" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content" style="background:#111;border:1px solid #333;color:#e5e7eb;">
+      <div class="modal-header" style="border-bottom:1px solid #2a2a2a;">
+        <h5 class="modal-title" id="serial-module-modal-label">
+          <i class="fa-solid fa-plug me-2"></i>Conexao Serial
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body">
+        <div id="serial-module-modal-body"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="flowgate-module-modal" tabindex="-1" aria-labelledby="flowgate-module-modal-label" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content" style="background:#111;border:1px solid #333;color:#e5e7eb;">
+      <div class="modal-header" style="border-bottom:1px solid #2a2a2a;">
+        <h5 class="modal-title" id="flowgate-module-modal-label">
+          <i class="fa-solid fa-gear me-2"></i>Flowgate
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body">
+        <div id="flowgate-module-modal-body"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="fscore-config-modal" tabindex="-1" aria-labelledby="fscore-config-modal-label" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content" style="background:#111;border:1px solid #333;color:#e5e7eb;">
+      <div class="modal-header" style="border-bottom:1px solid #2a2a2a;">
+        <h5 class="modal-title" id="fscore-config-modal-label">
+          <i class="fa-solid fa-sliders me-2"></i>Config Placar
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body">
+        <div id="fscore-config-modal-body"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const targets = {
+    flashscore: { bodyId: "flashscore-browser-body", toggleId: "toggle-flashscore-browser" }
+  };
+
+  function getEl(id) {
+    return id ? document.getElementById(id) : null;
+  }
+
+  function isShown(el) {
+    if (!el) return false;
+    if (el.classList.contains("collapse")) return el.classList.contains("show");
+    if (el.classList.contains("d-none")) return false;
+    const style = window.getComputedStyle ? getComputedStyle(el) : null;
+    if (style && (style.display === "none" || style.visibility === "hidden")) return false;
+    return true;
+  }
+
+  function ensureState(target, open) {
+    const body = getEl(target.bodyId);
+    if (!body) return false;
+    const shown = isShown(body);
+    if (shown === open) return true;
+    const toggle = getEl(target.toggleId);
+    if (toggle && typeof toggle.click === "function") {
+      toggle.click();
+      return true;
+    }
+    if (body.classList.contains("collapse")) {
+      body.classList.toggle("show", open);
+    } else {
+      body.style.display = open ? "block" : "none";
+    }
+    return true;
+  }
+
+  function ensureStateWhenReady(target, open) {
+    if (ensureState(target, open)) return;
+    let tries = 0;
+    const timer = setInterval(() => {
+      tries += 1;
+      if (ensureState(target, open) || tries > 12) clearInterval(timer);
+    }, 200);
+  }
+
+  function toggleWhenReady(target) {
+    const attempt = () => {
+      const body = getEl(target.bodyId);
+      if (!body) return false;
+      ensureState(target, !isShown(body));
+      return true;
+    };
+    if (attempt()) return;
+    let tries = 0;
+    const timer = setInterval(() => {
+      tries += 1;
+      if (attempt() || tries > 12) clearInterval(timer);
+    }, 200);
+  }
+
+  function scrollFallback(id) {
+    const el = getEl(id);
+    if (el && typeof el.scrollIntoView === "function") {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
+  function moveSerialModuleIntoModal() {
+    const modalBody = document.getElementById("serial-module-modal-body");
+    if (!modalBody || modalBody.dataset.bound === "true") return false;
+    const slot = document.querySelector('section[data-module-src="Modules (Host-only)/serialport.html"]');
+    if (!slot || !slot.children.length) return false;
+    const wrapper = document.createElement("div");
+    while (slot.firstChild) wrapper.appendChild(slot.firstChild);
+    modalBody.appendChild(wrapper);
+    modalBody.dataset.bound = "true";
+    slot.style.display = "none";
+    return true;
+  }
+
+  function showSerialModal() {
+    const modalEl = document.getElementById("serial-module-modal");
+    if (!modalEl) {
+      scrollFallback("serialPortCard");
+      return;
+    }
+    moveSerialModuleIntoModal();
+    if (window.bootstrap && typeof window.bootstrap.Modal === "function") {
+      window.bootstrap.Modal.getOrCreateInstance(modalEl).show();
+      return;
+    }
+    modalEl.classList.add("show");
+    modalEl.style.display = "block";
+    modalEl.removeAttribute("aria-hidden");
+  }
+
+  function moveFlowgateModuleIntoModal() {
+    const modalBody = document.getElementById("flowgate-module-modal-body");
+    if (!modalBody || modalBody.dataset.bound === "true") return false;
+    const slot = document.querySelector('section[data-module-src="Modules/Flowgate.html"]');
+    if (!slot || !slot.children.length) return false;
+    const wrapper = document.createElement("div");
+    while (slot.firstChild) wrapper.appendChild(slot.firstChild);
+    modalBody.appendChild(wrapper);
+    modalBody.dataset.bound = "true";
+    slot.style.display = "none";
+    return true;
+  }
+
+  function showFlowgateModal() {
+    const modalEl = document.getElementById("flowgate-module-modal");
+    if (!modalEl) {
+      scrollFallback("flowgate-panel");
+      return;
+    }
+    moveFlowgateModuleIntoModal();
+    if (window.bootstrap && typeof window.bootstrap.Modal === "function") {
+      window.bootstrap.Modal.getOrCreateInstance(modalEl).show();
+      return;
+    }
+    modalEl.classList.add("show");
+    modalEl.style.display = "block";
+    modalEl.removeAttribute("aria-hidden");
+  }
+
+  function moveKeepawakeModuleIntoSidebar() {
+    const keepawakeSlot = document.getElementById("menu-keepawake-slot");
+    if (!keepawakeSlot || keepawakeSlot.dataset.bound === "true") return false;
+    const slot = document.querySelector('section[data-module-src="Modules/Keepawake.html"]');
+    if (!slot || !slot.children.length) return false;
+    const wrapper = document.createElement("div");
+    while (slot.firstChild) wrapper.appendChild(slot.firstChild);
+    keepawakeSlot.appendChild(wrapper);
+    keepawakeSlot.dataset.bound = "true";
+    slot.style.display = "none";
+    return true;
+  }
+
+  function moveFscoreConfigIntoModal() {
+    const modalBody = document.getElementById("fscore-config-modal-body");
+    if (!modalBody || modalBody.dataset.bound === "true") return false;
+    const panel = document.getElementById("fs-remote-card");
+    if (!panel) return false;
+    modalBody.appendChild(panel);
+    modalBody.dataset.bound = "true";
+    return true;
+  }
+
+  function ensureFscoreConfigVisible() {
+    const body = document.getElementById("fsr-body");
+    if (body) {
+      body.classList.remove("d-none");
+    }
+    const toggleBtn = document.getElementById("fsr-toggle");
+    if (toggleBtn) {
+      toggleBtn.setAttribute("aria-expanded", "true");
+      toggleBtn.setAttribute("title", "Ocultar painel");
+      toggleBtn.setAttribute("aria-label", "Ocultar painel");
+    }
+  }
+
+  function showFscoreConfigModal() {
+    const modalEl = document.getElementById("fscore-config-modal");
+    if (!modalEl) {
+      scrollFallback("fs-remote-card");
+      return;
+    }
+    moveFscoreConfigIntoModal();
+    ensureFscoreConfigVisible();
+    if (window.bootstrap && typeof window.bootstrap.Modal === "function") {
+      window.bootstrap.Modal.getOrCreateInstance(modalEl).show();
+      return;
+    }
+    modalEl.classList.add("show");
+    modalEl.style.display = "block";
+    modalEl.removeAttribute("aria-hidden");
+  }
+
+  function moveChartsIntoSidebar() {
+    const slot = document.getElementById("menu-charts-slot");
+    if (!slot || slot.dataset.bound === "true") return false;
+    const chartCard = document.getElementById("collarEventChartCard");
+    if (!chartCard) return false;
+    slot.appendChild(chartCard);
+    slot.dataset.bound = "true";
+    return true;
+  }
+
+  document.getElementById("mod-serial")?.addEventListener("click", showSerialModal);
+  document.getElementById("mod-flowgate")?.addEventListener("click", showFlowgateModal);
+  document.getElementById("mod-fscore-config")?.addEventListener("click", showFscoreConfigModal);
+
+  let serialMoveTries = 0;
+  const serialMoveTimer = setInterval(() => {
+    serialMoveTries += 1;
+    if (moveSerialModuleIntoModal() || serialMoveTries > 15) clearInterval(serialMoveTimer);
+  }, 200);
+
+  let flowgateMoveTries = 0;
+  const flowgateMoveTimer = setInterval(() => {
+    flowgateMoveTries += 1;
+    if (moveFlowgateModuleIntoModal() || flowgateMoveTries > 15) clearInterval(flowgateMoveTimer);
+  }, 200);
+
+  let keepawakeMoveTries = 0;
+  const keepawakeMoveTimer = setInterval(() => {
+    keepawakeMoveTries += 1;
+    if (moveKeepawakeModuleIntoSidebar() || keepawakeMoveTries > 15) clearInterval(keepawakeMoveTimer);
+  }, 200);
+
+  let fscoreMoveTries = 0;
+  const fscoreMoveTimer = setInterval(() => {
+    fscoreMoveTries += 1;
+    if (moveFscoreConfigIntoModal() || fscoreMoveTries > 15) clearInterval(fscoreMoveTimer);
+  }, 200);
+
+  let chartMoveTries = 0;
+  const chartMoveTimer = setInterval(() => {
+    chartMoveTries += 1;
+    if (moveChartsIntoSidebar() || chartMoveTries > 15) clearInterval(chartMoveTimer);
+  }, 200);
+
+  const fsToggleBtn = document.getElementById("fsr-toggle");
+  if (fsToggleBtn) {
+    fsToggleBtn.addEventListener("click", () => {
+      setTimeout(() => {
+        showFscoreConfigModal();
+        ensureFscoreConfigVisible();
+      }, 0);
+    });
+  }
+})();
+</script>

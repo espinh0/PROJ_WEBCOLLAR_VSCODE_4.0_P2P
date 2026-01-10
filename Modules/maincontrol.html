@@ -1,4 +1,4 @@
-﻿<!-- CONTROLE MANUAL v3.3 (Trystero/Chat Bus; clique = comando unico; segurar = HOLD; sem Firebase) -->
+﻿<!-- CONTROLE MANUAL v3.3 (Flowgate/Chat Bus; clique = comando unico; segurar = HOLD; sem Firebase) -->
 <style>
   #remoteControlWrapper {
     position: fixed;
@@ -397,13 +397,6 @@
             <button class="spin-btn" type="button" data-spin="inc" aria-label="Aumentar atraso inicial">+</button>
           </div>
         </div>
-        <div>
-          <label for="advMirrorChan2" class="form-label small text-secondary mb-1">Espelhar canal oposto</label>
-          <div class="form-check form-switch">
-            <input class="form-check-input" type="checkbox" id="advMirrorChan2" title="Duplicar todos os comandos no canal oposto" data-bs-toggle="tooltip"/>
-            <label class="form-check-label small text-secondary" for="advMirrorChan2">Duplicar todos os comandos no canal oposto</label>
-          </div>
-        </div>
       </div>
   </div>
 </div>
@@ -450,26 +443,9 @@
   let levelTooltip = null;
   let levelTooltipAnchor = null;
   const LEVEL_PATCH_REASON = "remote-level";
-  const CONTROL_ORIGIN = (() => {
-    try {
-      if (window.__TRYSTERO_STABLE_ID) return String(window.__TRYSTERO_STABLE_ID);
-    } catch {}
-    try {
-      const key = "remote_control_origin_v1";
-      let cached = localStorage.getItem(key);
-      if (!cached) {
-        cached = `rc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-        localStorage.setItem(key, cached);
-      }
-      return cached;
-    } catch {}
-    return `rc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-  })();
   const lastControlTs = new Map(); // origin -> ts
-  let trysteroControlSend = null;
-  let trysteroControlGen = 0;
   let levelDebounce = null;
-  const ADV_DEFAULTS = { pulses: 1, durationMs: 180, delayMs: 1000, preDelayMs: 0, mirrorChan2: false };
+  const ADV_DEFAULTS = { pulses: 1, durationMs: 180, delayMs: 1000, preDelayMs: 0 };
   const ADV_LIMITS = {
     pulses: { min: 1, max: Infinity },
     durationMs: { min: 50, max: Infinity },
@@ -494,8 +470,7 @@
     pulses: $("#advPulses"),
     duration: $("#advDuration"),
     delay: $("#advDelay"),
-    preDelay: $("#advPreDelay"),
-    mirrorChan2: $("#advMirrorChan2")
+    preDelay: $("#advPreDelay")
   };
   const advLed = $("#advLed");
   const advStatusPill = $("#advStatusPill");
@@ -504,7 +479,7 @@
   const roletaShortcutBtn = $("#roletaShortcutBtn");
   let advCountdownTimer = null;
   let advCountdownEndAt = 0;
-  let advStopSignal = { stop: false };
+  let advStopSignal = { stop: false, holdActive: false };
 
   function log(msg, lvl="info"){
     try { window.appLog ? window.appLog(msg, lvl) : console.log(msg); } catch {}
@@ -535,7 +510,7 @@
     return pre + (pulses * dur) + (Math.max(0, pulses - 1) * gap);
   }
 
-  // ===== Username (mesmo padrao do widget Trystero) =====
+  // ===== Username (mesmo padrao do widget Flowgate) =====
   function getUsername(){
     try {
       const u = new URL(location.href);
@@ -545,88 +520,12 @@
 
     // state do widget de conexao
     try {
-      const keys = ['trystero_widget_state_v5', 'trystero_widget_state_v2'];
-      for (const key of keys) {
-        const st = JSON.parse(localStorage.getItem(key) || '{}') || {};
-        const name = (st.name || '').trim();
-        if (name) return name;
-      }
+      const st = JSON.parse(localStorage.getItem('flowgate_widget_state_v2') || localStorage.getItem('trystero_widget_state_v2') || '{}') || {};
+      const name = (st.name || '').trim();
+      if (name) return name;
     } catch {}
 
     return 'eu';
-  }
-
-  // ===== Trystero Send + Bridge Local =====
-  function makeLocalId(){
-    return `local:${Date.now()}:${Math.random().toString(36).slice(2)}`;
-  }
-
-  function emitChatBridge(detail){
-    // Para widgets/executor locais (contrato do projeto)
-    try { window.dispatchEvent(new CustomEvent('chat:message', { detail })); } catch {}
-  }
-
-  function sendViaTrystero(text){
-    const room = window.__TRYSTERO_ROOM__;
-    if (!room || typeof room.makeAction !== 'function') return false;
-
-    try {
-      const [sendChat] = room.makeAction('chat');
-      if (typeof sendChat !== 'function') return false;
-
-      const username = getUsername();
-      const payload = {
-        text: String(text).slice(0, 400),
-        name: username,
-        timestamp: Date.now(),
-        id: makeLocalId()
-      };
-
-      // 1) envia na rede (Trystero)
-      sendChat(payload);
-
-      // 2) tambem emite no bus local (identico ao bridge do widget de chat)
-      emitChatBridge({
-        id: payload.id,
-        key: payload.id,
-        text: payload.text,
-        peerId: '',
-        username,
-        raw: payload,
-        ts: payload.timestamp,
-        origin: 'widget'
-      });
-
-      log(`CHAT(TRYSTERO) -> ${payload.text}`);
-      return true;
-    } catch (e) {
-      log(`Falha ao enviar via Trystero: ${e && e.message || e}`, "error");
-      return false;
-    }
-  }
-
-  function bindTrysteroControl(room){
-    trysteroControlSend = null;
-    trysteroControlGen += 1;
-    const gen = trysteroControlGen;
-
-    if (!room || typeof room.makeAction !== "function") return;
-
-    try {
-      const pair = room.makeAction('fs-control');
-      if (Array.isArray(pair) && typeof pair[0] === "function") {
-        trysteroControlSend = pair[0];
-      }
-      const getControl = Array.isArray(pair) ? pair[1] : null;
-      if (typeof getControl === "function") {
-        getControl((payload, peerId) => {
-          if (gen !== trysteroControlGen) return;
-          handleControlPayload(payload, { source: "trystero", peerId });
-        });
-      }
-    } catch (e) {
-      log(`fs-control indisponivel (trystero): ${e && e.message || e}`, "warn");
-    }
   }
 
   // ===== Persistencia =====
@@ -650,7 +549,6 @@
     target.durationMs = clampNum(Math.round(target.durationMs || ADV_DEFAULTS.durationMs), ADV_LIMITS.durationMs.min, ADV_LIMITS.durationMs.max);
     target.delayMs = clampNum(Math.round(target.delayMs || ADV_DEFAULTS.delayMs), ADV_LIMITS.delayMs.min, ADV_LIMITS.delayMs.max);
     target.preDelayMs = clampNum(Math.round(target.preDelayMs || ADV_DEFAULTS.preDelayMs), ADV_LIMITS.preDelayMs.min, ADV_LIMITS.preDelayMs.max);
-    target.mirrorChan2 = !!target.mirrorChan2;
     return target;
   }
   function persistState(){
@@ -668,75 +566,24 @@
     }
   }
 
-  function controlSnapshot(reason){
-    return {
-      mode: currentMode,
-      level,
-      channel,
-      gapMs: advanced.delayMs,
-      baseMs: advanced.durationMs,
-      preDelayMs: advanced.preDelayMs,
-      mirrorChan2: advanced.mirrorChan2,
-      reason: reason || "snapshot"
-    };
-  }
-
-  function sendControlSnapshot(reason){
-    emitControlPatch(controlSnapshot(reason));
-  }
-
-  function requestControlSync(reason){
-    const from = reason || "remote-control";
-    try {
-      if (window.__FS_BUS__ && typeof window.__FS_BUS__.send === "function") {
-        window.__FS_BUS__.send({ type: "request-control", origin: CONTROL_ORIGIN, from });
-      }
-    } catch(_){}
-    try {
-      if (trysteroControlSend) {
-        trysteroControlSend({ __fs_req: "control-state", origin: CONTROL_ORIGIN, ts: Date.now(), from });
-      }
-    } catch(_){}
-  }
-
   function emitControlPatch(patch){
     if (!patch || typeof patch !== "object") return;
     const ts = Date.now();
-    const payload = { ...patch, origin: CONTROL_ORIGIN, ts };
     try {
       if (window.__FS_BUS__ && typeof window.__FS_BUS__.send === "function") {
-        window.__FS_BUS__.send({ type: "fs-control", payload });
+        window.__FS_BUS__.send({ type: "fs-control", payload: { ...patch, origin: "remote-control", ts } });
       }
-    } catch(_){}
-    try {
-      if (trysteroControlSend) trysteroControlSend(payload);
     } catch(_){}
   }
 
   function sendCommand(text){
-    if (!text || !String(text).trim()) return;
+    const payload = String(text || '').trim();
+    if (!payload) return;
 
-    // Preferencia: Trystero conectado
-    const ok = sendViaTrystero(text);
-
-    // Se nao estiver conectado, ao menos emite local (util para debug/admin)
-    if (!ok) {
-      const username = getUsername();
-      const ts = Date.now();
-      const id = makeLocalId();
-
-      emitChatBridge({
-        id, key: id,
-        text: String(text).slice(0, 400),
-        peerId: '',
-        username,
-        raw: { text, name: username, timestamp: ts, id },
-        ts,
-        origin: 'widget-local-only'
-      });
-
-      log('Trystero desconectado: comando emitido apenas no bus local (chat:message).', "warn");
+    if (window.SerialBridge && typeof window.SerialBridge.send === 'function') {
+      try { window.SerialBridge.send(payload); return; } catch(e){ log(`Falha SerialBridge: ${e && e.message || e}`, "warn"); }
     }
+    log('SerialBridge indisponivel: comando nao enviado.', "warn");
   }
 
   // ===== Helpers UI =====
@@ -841,7 +688,6 @@
       gapMs: advanced.delayMs,
       baseMs: advanced.durationMs,
       preDelayMs: advanced.preDelayMs,
-      mirrorChan2: advanced.mirrorChan2,
       reason: reason || "remote-basic"
     });
   }
@@ -856,7 +702,6 @@
     if (advancedInputs.duration) advancedInputs.duration.value = msToSecStr(advanced.durationMs, "durationMs");
     if (advancedInputs.delay) advancedInputs.delay.value = msToSecStr(advanced.delayMs, "delayMs");
     if (advancedInputs.preDelay) advancedInputs.preDelay.value = msToSecStr(advanced.preDelayMs, "preDelayMs");
-    if (advancedInputs.mirrorChan2) advancedInputs.mirrorChan2.checked = !!advanced.mirrorChan2;
   }
 
   function getLiveAdvanced(){
@@ -876,9 +721,6 @@
     if (advancedInputs.preDelay && advancedInputs.preDelay.value !== "") {
       const v = parseFloat(advancedInputs.preDelay.value);
       if (Number.isFinite(v)) next.preDelayMs = secToMs(v, "preDelayMs");
-    }
-    if (advancedInputs.mirrorChan2) {
-      next.mirrorChan2 = !!advancedInputs.mirrorChan2.checked;
     }
     return normalizeAdvancedState(next);
   }
@@ -987,13 +829,33 @@
     advLed.classList.add(cls);
   }
 
-  function stopAdvCountdown(done=false){
+  function stopAdvCountdown(done=false, resetSignal=true){
     if (advCountdownTimer) clearInterval(advCountdownTimer);
     advCountdownTimer = null;
     advCountdownEndAt = 0;
-    advStopSignal.stop = false;
     if (advCountdownText) advCountdownText.textContent = "-";
     setAdvStatus(done ? "Concluido" : "Pronto", done ? "done" : "idle");
+    if (resetSignal && advStopSignal) {
+      advStopSignal.stop = false;
+      advStopSignal.holdActive = false;
+    }
+  }
+
+  function ensureAdvHoldOff(){
+    if (!advStopSignal || !advStopSignal.holdActive) return;
+    advStopSignal.holdActive = false;
+    sendCommand("HOLDOFF");
+  }
+
+  function requestAdvStop(){
+    if (!advStopSignal) return;
+    if (!advStopSignal.stop) {
+      advStopSignal.stop = true;
+    }
+    ensureAdvHoldOff();
+    stopAdvCountdown(false, false);
+    setAdvStatus("Parado", "idle");
+    setAdvLedPhase("off");
   }
 
   function startAdvCountdown(plan){
@@ -1036,8 +898,7 @@
       || normalized.preDelayMs !== ADV_DEFAULTS.preDelayMs;
   }
 
-  function setMode(m, opts = {}){
-    const broadcast = opts.broadcast !== false;
+  function setMode(m){
     currentMode = m; window.currentMode = m;
     const showLevel = (m==="SHOCK"||m==="VIBRATION");
     $("#levelRow").classList.toggle("d-none", !showLevel);
@@ -1048,7 +909,7 @@
     syncModeUi();
     log(`Modo: ${m}`);
     persistState();
-    if (broadcast) broadcastBasics("mode-change");
+    broadcastBasics("mode-change");
   }
   function cycleMode(direction=1){
     const idx = MODES.indexOf(currentMode);
@@ -1072,14 +933,13 @@
     if (!changed && broadcast === false) return; // evita refazer tooltip em loop de mesma leitura
   }
 
-  function setChannel(c, opts = {}){
-    const broadcast = opts.broadcast !== false;
+  function setChannel(c){
     channel = c; window.channel = c;
     const sw = $("#chanSwitch");
     if (sw) sw.checked = channel === 2;
     log(`Canal: ${channel}`);
     persistState();
-    if (broadcast) broadcastBasics("channel-change");
+    broadcastBasics("channel-change");
   }
 
   function buildCmdLine(durationOverride){
@@ -1097,19 +957,37 @@
     const dur = clampNum(Math.round(durationMs || 0), ADV_LIMITS.durationMs.min, ADV_LIMITS.durationMs.max);
     if (!useHold) {
       sendCommand(buildCmdLine(dur));
-      await sleep(dur);
+      await waitWithStop(dur);
       return;
     }
+    if (!advStopSignal) {
+      advStopSignal = { stop: false, holdActive: false };
+    }
+    advStopSignal.holdActive = true;
     sendCommand(`HOLDON ${buildCmdLine()}`);
-    await sleep(dur);
-    sendCommand("HOLDOFF");
+    await waitWithStop(dur);
+    ensureAdvHoldOff();
   }
 
   // ===== Envio =====
   const btnSend = $("#btnSend");
   const sleep = (ms)=> new Promise(r => setTimeout(r, Math.max(0, ms || 0)));
+  const ADV_WAIT_SLICE_MS = 60;
+  async function waitWithStop(ms){
+    const total = Math.max(0, Number(ms) || 0);
+    if (!advStopSignal || total === 0) {
+      return advStopSignal ? advStopSignal.stop : false;
+    }
+    let remaining = total;
+    while (remaining > 0 && !advStopSignal.stop) {
+      const chunk = Math.min(ADV_WAIT_SLICE_MS, remaining);
+      await sleep(chunk);
+      remaining -= chunk;
+    }
+    return advStopSignal.stop;
+  }
   function runBurst(cfg){
-    advStopSignal = { stop: false };
+    advStopSignal = { stop: false, holdActive: false };
     const normalized = normalizeAdvancedState(cfg || { ...ADV_DEFAULTS });
     const pulses = clampNum(Math.round(normalized.pulses || 1), ADV_LIMITS.pulses.min, ADV_LIMITS.pulses.max);
     const dur = clampNum(Math.round(normalized.durationMs || ADV_DEFAULTS.durationMs), ADV_LIMITS.durationMs.min, ADV_LIMITS.durationMs.max);
@@ -1119,23 +997,32 @@
     startAdvCountdown({ preDelayMs: preDelay, pulses, durationMs: dur, delayMs: gap });
     (async ()=>{
       try {
-        if (preDelay > 0 && !advStopSignal.stop) {
+        let aborted = false;
+        if (preDelay > 0) {
           setAdvLedPhase("gap");
-          await sleep(preDelay);
+          aborted = await waitWithStop(preDelay);
         }
-        for (let i=0;i<pulses && !advStopSignal.stop;i++){
+        for (let i=0;i<pulses && !aborted;i++){
           setAdvLedPhase("on");
           // usa estado atual (modo/level/canal) a cada pulso
           await pulseForDuration(dur, useHold);
+          if (advStopSignal.stop) {
+            aborted = true;
+            break;
+          }
           const isLast = i === pulses - 1;
-          if (!isLast && gap > 0 && !advStopSignal.stop) {
+          if (!isLast && gap > 0 && !aborted) {
             setAdvLedPhase("gap");
-            await sleep(gap);
+            aborted = await waitWithStop(gap);
           }
         }
-        stopAdvCountdown(!advStopSignal.stop);
+        const completed = !(aborted || advStopSignal.stop);
+        stopAdvCountdown(completed);
       } catch(_){
         stopAdvCountdown(false);
+      } finally {
+        ensureAdvHoldOff();
+        setAdvLedPhase("off");
       }
     })();
   }
@@ -1266,11 +1153,10 @@
   if (advancedInputs.duration) advancedInputs.duration.addEventListener("change", e => updateAdvancedValue("durationMs", parseFloat(e.target.value)));
   if (advancedInputs.delay) advancedInputs.delay.addEventListener("change", e => updateAdvancedValue("delayMs", parseFloat(e.target.value)));
   if (advancedInputs.preDelay) advancedInputs.preDelay.addEventListener("change", e => updateAdvancedValue("preDelayMs", parseFloat(e.target.value)));
-  if (advancedInputs.mirrorChan2) advancedInputs.mirrorChan2.addEventListener("change", e => updateAdvancedValue("mirrorChan2", !!e.target.checked));
   initNumberSpinners();
   const advResetBtn = $("#advResetBtn");
   if (advResetBtn) advResetBtn.addEventListener("click", resetAdvanced);
-  if (advStopBtn) advStopBtn.addEventListener("click", ()=> { advStopSignal.stop = true; stopAdvCountdown(false); setAdvLedPhase("off"); });
+  if (advStopBtn) advStopBtn.addEventListener("click", requestAdvStop);
   initTooltips();
   const levelInputEl = $("#levelValue");
   if (levelInputEl) {
@@ -1391,85 +1277,19 @@
     }
   });
 
-  function applyAdvancedPatch(payload){
-    let changed = false;
-    if (payload.baseMs != null) {
-      advanced.durationMs = clampNum(Math.round(payload.baseMs), ADV_LIMITS.durationMs.min, ADV_LIMITS.durationMs.max);
-      changed = true;
-    }
-    if (payload.gapMs != null) {
-      advanced.delayMs = clampNum(Math.round(payload.gapMs), ADV_LIMITS.delayMs.min, ADV_LIMITS.delayMs.max);
-      changed = true;
-    }
-    if (payload.preDelayMs != null) {
-      advanced.preDelayMs = clampNum(Math.round(payload.preDelayMs), ADV_LIMITS.preDelayMs.min, ADV_LIMITS.preDelayMs.max);
-      changed = true;
-    }
-    if (payload.mirrorChan2 != null) {
-      advanced.mirrorChan2 = !!payload.mirrorChan2;
-      changed = true;
-    }
-    if (changed) {
-      advanced = normalizeAdvancedState(advanced);
-      syncAdvancedUi();
-      persistState();
-    }
-  }
-
-  function handleControlPayload(payload, meta = {}){
-    if (!payload || typeof payload !== "object") return;
-    if (payload.__fs_req === "control-state") {
-      const origin = payload.origin || meta.peerId || "unknown";
-      if (origin === CONTROL_ORIGIN) return;
-      sendControlSnapshot("sync-response");
-      return;
-    }
-    const ts = Number.isFinite(payload.ts) ? payload.ts : (payload.ts ? Number(payload.ts) : 0);
-    const origin = payload.origin || meta.peerId || "unknown";
-    if (origin === CONTROL_ORIGIN) return;
+  function handleControlPatch(msg){
+    if (!msg || msg.type !== "fs-control" || !msg.payload) return;
+    const ts = Number.isFinite(msg.payload.ts) ? msg.payload.ts : (msg.payload.ts ? Number(msg.payload.ts) : 0);
+    const origin = msg.payload.origin || "unknown";
     const prev = lastControlTs.get(origin) || 0;
     if (ts && ts <= prev) return;
     if (ts) lastControlTs.set(origin, ts);
-
-    if (payload.mode && MODES.includes(payload.mode)) {
-      setMode(payload.mode, { broadcast:false });
-    }
-    if (payload.channel != null) {
-      const ch = Number(payload.channel);
-      if (Number.isFinite(ch)) setChannel(ch === 2 ? 2 : 1, { broadcast:false });
-    }
-    const allowLevel = currentMode === "SHOCK" || currentMode === "VIBRATION";
-    if (payload.level != null && (allowLevel || Number(payload.level) === 0)) {
-      setLevel(payload.level, { broadcast:false, reason:"bus-sync" });
-    }
-    applyAdvancedPatch(payload);
-  }
-
-  function handleControlMessage(msg){
-    if (!msg || typeof msg !== "object") return;
-    if (msg.type === "fs-control" && msg.payload) {
-      handleControlPayload(msg.payload, { source: "bus" });
-      return;
-    }
-    if (msg.type === "request-control") {
-      if (msg.origin && msg.origin === CONTROL_ORIGIN) return;
-      sendControlSnapshot("request-control");
-    }
+    if (msg.payload.level == null) return;
+    setLevel(msg.payload.level, { broadcast:false, reason:"bus-sync" });
   }
   if (window.__FS_BUS__ && typeof window.__FS_BUS__.on === "function") {
-    window.__FS_BUS__.on(handleControlMessage);
-    requestControlSync("remote-control");
-  }
-
-  function bindTrysteroRoom(ev){
-    const room = ev?.detail?.room || null;
-    bindTrysteroControl(room);
-    if (room) requestControlSync("trystero-connect");
-  }
-  window.addEventListener("trystero:room", bindTrysteroRoom);
-  if (window.__TRYSTERO_ROOM__) {
-    bindTrysteroControl(window.__TRYSTERO_ROOM__);
-    requestControlSync("trystero-boot");
+    window.__FS_BUS__.on(handleControlPatch);
+    try { window.__FS_BUS__.send({ type:"request-control", from:"remote-control" }); } catch(_){}
   }
 
   // Inicial

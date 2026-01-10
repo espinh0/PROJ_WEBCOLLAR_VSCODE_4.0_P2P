@@ -14,46 +14,100 @@
   <style>
     body { background-color: #0f0f12 !important;}
     .page-title { letter-spacing: .04em; }
+    body { padding-top: 0; padding-left: 80px; }
+    .status-navbar {
+      background: linear-gradient(135deg, rgba(17, 19, 26, 0.95), rgba(27, 32, 46, 0.85));
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 0.85rem;
+      padding: 0.65rem 1rem;
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.25);
+    }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.35rem 0.7rem;
+      border-radius: 999px;
+      font-size: 0.9rem;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #e5e7eb;
+    }
+    .status-pill[data-status="ok"] { border-color: rgba(34, 197, 94, 0.6); color: #bbf7d0; }
+    .status-pill[data-status="warn"] { border-color: rgba(249, 115, 22, 0.6); color: #fed7aa; }
+    .status-pill[data-status="off"] { border-color: rgba(239, 68, 68, 0.6); color: #fecaca; }
+    .status-label {
+      font-size: 0.75rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #94a3b8;
+    }
+    .peer-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.25rem 0.6rem;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      background: rgba(77, 113, 255, 0.16);
+      border: 1px solid rgba(77, 113, 255, 0.35);
+      color: #e0e7ff;
+      white-space: nowrap;
+    }
   </style>
 </head>
 <body class="pb-5">
   <header class="container py-4">
-    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
-      <div>
-        <p class="text-uppercase text-secondary fw-semibold mb-1 small">Integration</p>
-        <h1 class="h3 m-0 page-title">Modulos + Bibliotecas</h1>
+    <!-- Título -->
+    <div class="text-center mb-4">
+      <h1 class="mb-1"><i class="fa-solid fa-bolt"></i> Petrainer PET998DR</h1>
+      <p class="text-secondary m-0">Interface web responsiva que simula o controle e envia comandos via Web Serial para transmissor 433&nbsp;MHz.</p>
+    </div>
+    <div class="status-navbar d-flex align-items-center justify-content-between flex-wrap gap-3 mb-4">
+      <div class="d-flex align-items-center flex-wrap gap-3">
+        <div id="fg-status-pill" class="status-pill" data-status="off">
+          Flowgate: <span id="fg-conn-state">desconectado</span>
+        </div>
+        <div class="status-pill">
+          Conectados: <span id="fg-peer-count">0</span>
+        </div>
+        <div id="serial-status-pill" class="status-pill" data-status="off">
+          Serial: <span id="serial-conn-state">fechada</span>
+        </div>
       </div>
-      <div class="text-secondary small text-end">
-        <div>Bootstrap 5.3.3 + Font Awesome 6.5.2</div>
-        <div>Modules carregados individualmente (inline)</div>
+      <div class="d-flex align-items-center flex-wrap gap-2">
+        <span class="status-label">Usuários</span>
+        <div id="fg-peer-list" class="d-flex align-items-center flex-wrap gap-2"></div>
+        <span id="fg-peer-empty" class="text-muted small">nenhum peer</span>
       </div>
     </div>
   </header>
 
   <main class="container">
-    <div class="d-flex flex-column gap-4">
-      <section data-module-src="Modules/Menu_Shortcuts"></section>
-      <section data-module-src="libraries.html"></section>
-      
-      <!-- Widgets -->
+          <section data-module-src="libraries.html"></section>
+                       <section data-module-src="Modules/Flowgate.html"></section>
       <section data-module-src="Modules/maincontrol.html"></section>
-            <section data-module-src="Widgets/fscore"></section>
-      <section data-module-src="Widgets/Roleta"></section>
-            <section data-module-src="Modules/Event_Timeline_Chart"></section>
+    <div class="d-flex flex-column gap-4">
+     
+     <!-- Widgets -->
+      
 
-      <section data-module-src="Widgets/Video_player"></section>
-      <section data-module-src="Widgets/audiolistener"></section>
-      <section data-module-src="Widgets/Games/naval"></section>
+                  <section data-module-src="Widgets/botoespersonalizados.html"></section>
+            <section data-module-src="Widgets/fscore.html"></section>
+      <section data-module-src="Widgets/Games/games_tabs.html"></section>
+            <section data-module-src="Modules/Event_Timeline_Chart.html"></section>
+
+        <section data-module-src="Widgets/Video_player.html"></section>
+
       <!-- Modules -->
       
       <!-- External Modules -->
 
       <!-- Host-only Modules -->
-      <section data-module-src="Modules/PeerJS_Flowgate"></section>
-      <section data-module-src="Modules (Host-only)/serialport"></section>
-      <section data-module-src="Modules (Host-only)/Executor"></section>
-      <section data-module-src="Modules/Keepawake"></section>
-            <section data-module-src="Modules/Notifications"></section>
+
+      <section data-module-src="Modules (Host-only)/serialport.html"></section>
+      <section data-module-src="Modules/Keepawake.html"></section>
+            <section data-module-src="Modules/Notifications.html"></section>
+      <section data-module-src="Modules/Menu_Shortcuts.html"></section>
 
 
 
@@ -70,11 +124,21 @@
   const slots = Array.from(document.querySelectorAll('[data-module-src]'));
   // Carrega módulos externos inline
   function runScripts(container) {
-    container.querySelectorAll('script').forEach((oldScript) => {
-      const s = document.createElement('script');
-      Array.from(oldScript.attributes).forEach((attr) => s.setAttribute(attr.name, attr.value));
-      s.textContent = oldScript.textContent;
-      oldScript.replaceWith(s);
+    const scripts = Array.from(container.querySelectorAll('script'));
+    scripts.forEach((oldScript) => {
+      const newScript = document.createElement('script');
+      Array.from(oldScript.attributes).forEach((attr) => newScript.setAttribute(attr.name, attr.value));
+      // For inline scripts, use textContent
+      if (oldScript.textContent) {
+        newScript.textContent = oldScript.textContent;
+      }
+      // For scripts with src, set the src
+      if (oldScript.src) {
+        newScript.src = oldScript.src;
+      }
+
+      // Replace the old script with the new one to ensure re-execution
+      oldScript.parentNode.replaceChild(newScript, oldScript);
     });
   }
 
@@ -97,7 +161,116 @@
 })();
 </script>
 <script>
+(() => {
+  const flowgatePill = document.getElementById("fg-status-pill");
+  const flowgateStateEl = document.getElementById("fg-conn-state");
+  const peerCountEl = document.getElementById("fg-peer-count");
+  const peerListEl = document.getElementById("fg-peer-list");
+  const peerEmptyEl = document.getElementById("fg-peer-empty");
+  const serialPill = document.getElementById("serial-status-pill");
+  const serialStateEl = document.getElementById("serial-conn-state");
+
+  const setPillState = (pill, state) => {
+    if (!pill) return;
+    pill.dataset.status = state;
+  };
+
+  const setSerialState = (isOpen) => {
+    if (!serialStateEl) return;
+    serialStateEl.textContent = isOpen ? "aberta" : "fechada";
+    setPillState(serialPill, isOpen ? "ok" : "off");
+  };
+
+  const setFlowgateState = (label) => {
+    if (!flowgateStateEl) return;
+    const text = (label || "desconectado").trim();
+    flowgateStateEl.textContent = text;
+    const lower = text.toLowerCase();
+    if (lower.includes("conectado")) setPillState(flowgatePill, "ok");
+    else if (lower.includes("erro")) setPillState(flowgatePill, "warn");
+    else setPillState(flowgatePill, "off");
+  };
+
+  const normalizeLabel = (label) => label.replace(/\s+/g, " ").trim();
+
+  const collectPeers = () => {
+    const list = [];
+    const seen = new Set();
+    const pull = (root) => {
+      if (!root) return;
+      const rows = Array.from(root.children);
+      rows.forEach((row) => {
+        const badge = row.querySelector(".badge");
+        if (!badge) return;
+        const raw = normalizeLabel(badge.textContent || "");
+        if (!raw || /^bot-/i.test(raw)) return;
+        if (seen.has(raw)) return;
+        seen.add(raw);
+        list.push({ label: raw, title: badge.title || raw });
+      });
+    };
+    pull(document.getElementById("tr-host-list"));
+    pull(document.getElementById("tr-peer-list"));
+    return list;
+  };
+
+  const renderPeers = () => {
+    if (!peerListEl || !peerCountEl || !peerEmptyEl) return;
+    const peers = collectPeers();
+    peerListEl.innerHTML = "";
+    if (!peers.length) {
+      peerEmptyEl.classList.remove("d-none");
+    } else {
+      peerEmptyEl.classList.add("d-none");
+      peers.forEach((peer) => {
+        const chip = document.createElement("span");
+        chip.className = "peer-chip";
+        chip.textContent = peer.label;
+        chip.title = peer.title;
+        peerListEl.appendChild(chip);
+      });
+    }
+    peerCountEl.textContent = String(peers.length);
+  };
+
+  const refreshFlowgate = () => {
+    const status = document.getElementById("connection-status");
+    if (status) setFlowgateState(status.textContent || "desconectado");
+    renderPeers();
+  };
+
+  const bindPeerObservers = () => {
+    const hostList = document.getElementById("tr-host-list");
+    const peerList = document.getElementById("tr-peer-list");
+    if (!hostList || !peerList) return false;
+    const observer = new MutationObserver(() => renderPeers());
+    observer.observe(hostList, { childList: true, subtree: true });
+    observer.observe(peerList, { childList: true, subtree: true });
+    return true;
+  };
+
+  window.addEventListener("flowgate:room_changed", (ev) => {
+    setFlowgateState(ev?.detail?.connected ? "conectado" : "desconectado");
+    renderPeers();
+  });
+  window.addEventListener("flowgate:peer_connected", renderPeers);
+  window.addEventListener("flowgate:peer_disconnected", renderPeers);
+
+  window.addEventListener("serial-connected", () => setSerialState(true));
+  window.addEventListener("serial:connected", () => setSerialState(true));
+  window.addEventListener("serial-disconnected", () => setSerialState(false));
+  window.addEventListener("serial:disconnected", () => setSerialState(false));
+
+  setSerialState(false);
+  setFlowgateState("desconectado");
+
+  let tries = 0;
+  const timer = setInterval(() => {
+    tries += 1;
+    refreshFlowgate();
+    if (bindPeerObservers() || tries > 20) clearInterval(timer);
+  }, 300);
+})();
 </script>
 </body>
 </html>
-

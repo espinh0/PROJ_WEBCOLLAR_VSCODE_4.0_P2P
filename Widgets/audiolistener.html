@@ -4,9 +4,8 @@
      - Loopback local (funciona com 1 peer)
      - Bridge: opcionalmente emite chat:message com HOLDON/HOLDOFF (silent) para reaproveitar executor existente
 -->
-<div class="card p-3 mt-3" id="audio-collar-widget"
-     style="background:#111;border:1px solid #333;border-radius:.85rem;color:#e5e7eb;">
-  <div class="d-flex align-items-center gap-2 mb-2">
+<div class="card p-3 mt-3" id="audio-collar-widget">
+  <div class="d-flex align-items-center gap-2 mb-2 audio-card-header">
     <h5 class="m-0"><i class="fa-solid fa-wave-square me-2"></i>Audio</h5>
     <span id="audio-collar-status" class="small ms-auto text-secondary">pronto</span>
     <button id="audio-collar-log-toggle" class="btn btn-sm btn-outline-secondary"
@@ -16,14 +15,16 @@
   </div>
 
   <div>
-    <div id="audio-collar-bar"
-         style="position:relative;height:32px;background:linear-gradient(90deg,rgba(40,199,111,.95),rgba(220,53,69,.95));border-radius:9px;overflow:hidden;cursor:pointer">
-      <div id="audio-collar-fill"
-           style="position:absolute;right:0;top:0;height:100%;width:100%;background:rgba(9,9,12,.75);z-index:1"></div>
+         <div id="audio-collar-bar"
+             style="position:relative;height:32px;border-radius:9px;overflow:hidden;cursor:pointer">
+          <div id="audio-collar-overdrive"
+            style="position:absolute;top:0;bottom:0;left:0;width:0;z-index:1"></div>
+          <div id="audio-collar-fill"
+            style="position:absolute;right:0;top:0;height:100%;width:100%;z-index:2"></div>
       <div id="audio-collar-peak"
-           style="position:absolute;top:0;bottom:0;width:2px;background:#fff;opacity:.95;left:0%;z-index:2"></div>
+         style="position:absolute;top:0;bottom:0;width:2px;opacity:.95;left:0%;z-index:2"></div>
       <div id="audio-collar-threshold"
-           style="position:absolute;top:0;bottom:0;width:10px;height:150%;background:#ffd166;opacity:1;left:20%;z-index:3"></div>
+         style="position:absolute;top:0;bottom:0;width:10px;height:150%;opacity:1;left:20%;z-index:3"></div>
       <div id="audio-collar-th-emoji"
            style="position:absolute;top:-16px;left:20%;transform:translateX(-50%);font-size:16px;line-height:1;z-index:4;">⚡</div>
     </div>
@@ -92,12 +93,173 @@
   </div>
 
   <div id="audio-collar-log-wrap" class="mt-3 d-none">
-    <div id="audio-collar-log"
-         class="small"
-         style="max-height:160px;overflow:auto;background:#0b0b0f;border-radius:6px;padding:6px;font-family:ui-monospace,Menlo,Consolas,monospace;">
+        <div id="audio-collar-log"
+          class="small"
+          style="max-height:160px;overflow:auto;border-radius:6px;padding:6px;font-family:ui-monospace,Menlo,Consolas,monospace;">
     </div>
   </div>
 </div>
+
+  <style>
+    #audio-collar-widget {
+      --audio-accent: #38bdf8;
+      --audio-accent-strong: rgba(14,165,233,0.95);
+      --audio-accent-soft: rgba(56,189,248,0.2);
+      --audio-border: rgba(56,189,248,0.4);
+      --audio-muted: #bae6fd;
+      --audio-text: #e0f2fe;
+      --audio-surface: rgba(1,4,12,0.95);
+      --audio-panel: rgba(5,11,22,0.85);
+      background: radial-gradient(circle at top, rgba(56,189,248,0.25), rgba(1,4,12,0.95));
+      border: 1px solid var(--audio-border);
+      border-radius: .95rem;
+      color: var(--audio-text);
+      box-shadow: 0 20px 40px rgba(0,0,0,0.55);
+    }
+    #audio-collar-widget h5 {
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    #audio-collar-widget .audio-card-header {
+      border-bottom: 1px solid var(--audio-border);
+      padding-bottom: .6rem;
+      margin-bottom: 1.1rem;
+    }
+    #audio-collar-status {
+      color: var(--audio-muted);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    #audio-collar-widget small,
+    #audio-collar-widget label,
+    #audio-collar-widget .form-text,
+    #audio-collar-widget .text-secondary {
+      color: var(--audio-muted) !important;
+    }
+    #audio-collar-widget .btn-outline-light,
+    #audio-collar-widget .btn-outline-secondary,
+    #audio-collar-widget .btn-outline-info {
+      border-color: var(--audio-border);
+      color: var(--audio-text);
+      background: rgba(5,9,20,0.6);
+      box-shadow: 0 6px 16px rgba(0,0,0,0.35);
+      transition: border-color .15s ease, color .15s ease, background .15s ease, box-shadow .15s ease, transform .15s ease;
+    }
+    #audio-collar-widget .btn-outline-light:hover,
+    #audio-collar-widget .btn-outline-secondary:hover,
+    #audio-collar-widget .btn-outline-info:hover,
+    #audio-collar-widget .btn-outline-light:focus-visible,
+    #audio-collar-widget .btn-outline-secondary:focus-visible,
+    #audio-collar-widget .btn-outline-info:focus-visible {
+      border-color: var(--audio-accent);
+      color: #fff;
+      background: var(--audio-accent-soft);
+      box-shadow: 0 0 0 2px rgba(56,189,248,0.3), 0 10px 24px rgba(0,0,0,0.45);
+      transform: translateY(-1px);
+    }
+    #audio-collar-widget .btn-outline-danger {
+      border-color: rgba(248,113,113,0.75);
+      color: #fecaca;
+      background: rgba(60,8,15,0.6);
+    }
+    #audio-collar-widget .btn-outline-danger:hover,
+    #audio-collar-widget .btn-outline-danger:focus-visible {
+      color: #fff;
+      border-color: rgba(248,113,113,0.95);
+      background: rgba(127,29,29,0.8);
+      box-shadow: 0 0 0 2px rgba(248,113,113,0.35);
+    }
+    #audio-collar-widget .form-control,
+    #audio-collar-widget .form-select,
+    #audio-collar-widget .input-group-text {
+      background: var(--audio-panel);
+      border-color: var(--audio-border);
+      color: var(--audio-text);
+    }
+    #audio-collar-widget .form-control:focus,
+    #audio-collar-widget .form-select:focus {
+      border-color: var(--audio-accent);
+      box-shadow: 0 0 0 2px rgba(56,189,248,0.35);
+      color: #fff;
+    }
+    #audio-collar-widget .form-range {
+      accent-color: var(--audio-accent);
+    }
+    #audio-collar-widget .form-range::-webkit-slider-runnable-track {
+      background: linear-gradient(90deg, rgba(56,189,248,0.35), rgba(6,40,70,0.75));
+      height: 6px;
+      border-radius: 999px;
+    }
+    #audio-collar-widget .form-range::-webkit-slider-thumb {
+      background: var(--audio-accent-strong);
+      border: 1px solid rgba(255,255,255,0.45);
+      width: 16px;
+      height: 16px;
+      margin-top: -5px;
+      box-shadow: 0 4px 12px rgba(56,189,248,0.55);
+    }
+    #audio-collar-widget .form-range::-moz-range-track {
+      background: linear-gradient(90deg, rgba(56,189,248,0.35), rgba(6,40,70,0.75));
+      height: 6px;
+      border-radius: 999px;
+    }
+    #audio-collar-widget .form-range::-moz-range-thumb {
+      background: var(--audio-accent-strong);
+      border: 1px solid rgba(255,255,255,0.45);
+      width: 16px;
+      height: 16px;
+      box-shadow: 0 4px 12px rgba(56,189,248,0.55);
+    }
+    #audio-collar-bar {
+      background: linear-gradient(90deg, rgba(56,189,248,0.95), rgba(14,165,233,0.95), rgba(59,130,246,0.85));
+      border: 1px solid var(--audio-border);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05), 0 12px 28px rgba(0,0,0,0.45);
+    }
+    #audio-collar-overdrive {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: 0;
+      background: linear-gradient(90deg, rgba(248,113,113,0.15), rgba(248,113,113,0.65), rgba(239,68,68,0.95));
+      box-shadow: inset 0 0 0 1px rgba(248,113,113,0.35);
+      opacity: 0;
+      z-index: 1;
+      transition: opacity .12s ease;
+    }
+    #audio-collar-overdrive.is-hot {
+      opacity: 1;
+    }
+    #audio-collar-fill {
+      background: linear-gradient(90deg, rgba(0,2,12,0.95), rgba(0,6,18,0.7));
+      z-index: 2;
+    }
+    #audio-collar-peak {
+      background: var(--audio-accent-strong);
+      box-shadow: 0 0 14px rgba(56,189,248,0.9);
+    }
+    #audio-collar-threshold {
+      background: linear-gradient(180deg, #fde047, #facc15);
+      border-radius: 8px;
+      box-shadow: 0 0 18px rgba(250,204,21,0.5);
+    }
+    #audio-collar-th-emoji {
+      color: #fff;
+      text-shadow: 0 6px 16px rgba(0,0,0,0.6);
+    }
+    #audio-collar-log {
+      background: rgba(1,4,12,0.75);
+      border: 1px solid rgba(255,255,255,0.05);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
+    }
+    #audio-collar-widget .form-switch .form-check-input {
+      border-color: var(--audio-border);
+      background-color: rgba(2,8,23,0.8);
+    }
+    #audio-collar-widget .form-switch .form-check-input:checked {
+      background-color: var(--audio-accent);
+    }
+  </style>
 
 <script>
 (function(){
@@ -600,10 +762,15 @@
       envPeakAbs = 0;
       remoteLevel = null;
       const fill    = $('#audio-collar-fill');
+      const over    = $('#audio-collar-overdrive');
       const volEl   = $('#audio-collar-vol');
       const peakEl  = $('#audio-collar-peak');
       const peakLbl = $('#audio-collar-peaklbl');
       if (fill)    fill.style.width = '100%';
+      if (over) {
+        over.style.width = '0%';
+        over.classList.remove('is-hot');
+      }
       if (volEl)   volEl.textContent = '0%';
       if (peakEl)  peakEl.style.left = '0%';
       if (peakLbl) peakLbl.textContent = '0%';
@@ -1005,14 +1172,30 @@
     }
 
     const fill    = $('#audio-collar-fill');
+    const over    = $('#audio-collar-overdrive');
     const volEl   = $('#audio-collar-vol');
     const peakEl  = $('#audio-collar-peak');
     const peakLbl = $('#audio-collar-peaklbl');
 
-    if (fill)    fill.style.width = Math.max(0, 100 - dispPeak) + '%'; // mask que revela gradient do bar
+    const safePeak = clamp(dispPeak, 0, 100);
+    const thresholdPct = clamp(cfg.thresholdPct || 0, 0, 100);
+
+    if (fill)    fill.style.width = Math.max(0, 100 - safePeak) + '%'; // mask que revela gradient do bar
     if (volEl)   volEl.textContent = dispPct + '%';
-    if (peakEl)  peakEl.style.left = clamp(dispPeak, 0, 100) + '%';
-    if (peakLbl) peakLbl.textContent = clamp(dispPeak, 0, 100) + '%';
+    if (peakEl)  peakEl.style.left = safePeak + '%';
+    if (peakLbl) peakLbl.textContent = safePeak + '%';
+    if (over) {
+      const overflow = Math.max(0, safePeak - thresholdPct);
+      const width = Math.min(overflow, Math.max(0, 100 - thresholdPct));
+      if (width > 0) {
+        over.style.left = thresholdPct + '%';
+        over.style.width = width + '%';
+        over.classList.add('is-hot');
+      } else {
+        over.style.width = '0%';
+        over.classList.remove('is-hot');
+      }
+    }
 
     updateDesiredFromPeak(peakPct);
   }

@@ -1,25 +1,15 @@
 <!-- GRAFICO EXECUCOES x INTENSIDADE (SHOCK/VIBRATION/LIGHT/BEEP) -->
-<div class="card shadow-sm" id="collarEventChartCard" style="background:#111;border:1px solid #333;border-radius:.75rem;color:#e5e7eb;">
-  <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2" style="background:#0c0c0e;border-bottom:1px solid #333;color:#e5e7eb;border-top-left-radius:.65rem;border-top-right-radius:.65rem;">
-    <div class="d-flex align-items-center gap-2">
-      <i class="fa-solid fa-wave-square"></i>
-      <div class="fw-semibold">Eventos do Collar - Execucoes x Intensidade</div>
-    </div>
-    <div class="d-flex align-items-center gap-2 flex-wrap">
+<div class="card shadow-sm" id="collarEventChartCard" style="background:transparent;border:none;border-radius:.75rem;color:#e5e7eb;">
+  <div class="card-body">
+    <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap mb-2">
       <span id="collarEventStatus" class="small text-secondary">Carregando Chart.js...</span>
       <button id="collarEventClear" class="btn btn-sm btn-outline-light" type="button">
         <i class="fa-solid fa-eraser me-1"></i>Limpar
       </button>
     </div>
-  </div>
-  <div class="card-body">
-    <div class="small text-secondary mb-2">
-      Escuta o monitor serial e plota SHOCK, VIBRATION, LIGHT, BEEP e BTN STATE (ON/OFF). Eixo X = numero de execucao (0,1,2,...), eixo Y = intensidade.
-    </div>
     <div class="position-relative" style="min-height:280px;">
       <canvas id="collarEventCanvas" height="320" role="img" aria-label="Grafico de eventos do collar"></canvas>
     </div>
-    <div class="d-flex flex-wrap align-items-center gap-2 mt-3" id="collarEventLegend"></div>
   </div>
 </div>
 
@@ -27,10 +17,10 @@
 (() => {
   const STATUS_EL = document.getElementById("collarEventStatus");
   const CANVAS = document.getElementById("collarEventCanvas");
-  const LEGEND = document.getElementById("collarEventLegend");
   const CLEAR_BTN = document.getElementById("collarEventClear");
 
-  if (!CANVAS || !STATUS_EL || !CLEAR_BTN || !LEGEND) return;
+  if (!CANVAS || !STATUS_EL || !CLEAR_BTN) return;
+  CANVAS.style.backgroundColor = "transparent";
 
   const TYPES = {
     SHOCK:     { label: "SHOCK",     color: "#f97316", iconClass: "fa-bolt-lightning", glyph: "\u26A1" },
@@ -87,20 +77,6 @@
       s.onload = () => resolve(window.Chart);
       s.onerror = () => reject(new Error("Falha ao carregar Chart.js"));
       document.head.appendChild(s);
-    });
-  }
-
-  function buildLegend() {
-    LEGEND.innerHTML = "";
-    Object.entries(TYPES).forEach(([key, cfg]) => {
-      const badge = document.createElement("span");
-      badge.className = "badge rounded-pill d-inline-flex align-items-center gap-2";
-      badge.style.background = "rgba(255,255,255,0.05)";
-      badge.style.border = `1px solid ${cfg.color}`;
-      badge.style.color = cfg.color;
-      badge.innerHTML = `<i class="fa-solid ${cfg.iconClass}"></i> ${cfg.label}`;
-      badge.setAttribute("data-mode", key);
-      LEGEND.appendChild(badge);
     });
   }
 
@@ -452,7 +428,6 @@
 
   function initChart(Chart) {
     ensureIcons();
-    buildLegend();
 
     let cursorX = null;
     const crosshairPlugin = {
@@ -513,6 +488,7 @@
       type: "line",
       data: { datasets: makeDatasets() },
       options: {
+        backgroundColor: "transparent",
         responsive: true,
         maintainAspectRatio: false,
         animation: false,

@@ -24,6 +24,11 @@
     box-shadow: 0 0 0 2px rgba(96,165,250,0.4), 0 8px 18px rgba(0,0,0,.35);
   }
 
+  .pulse-card.dragging {
+    opacity: .35;
+    transform: scale(.97);
+  }
+
   .pulse-card.is-active {
     border-width:2px;
     border-color:#ef4444;
@@ -163,6 +168,24 @@
     background: rgba(0,0,0,0.3);
     font-family: ui-monospace, Menlo, Consolas, monospace;
     font-size:.85rem;
+  }
+
+  .pulse-placeholder {
+    border:2px dashed rgba(96,165,250,0.7);
+    background: rgba(37,99,235,0.08);
+    border-radius:12px;
+    min-height:64px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:#60a5fa;
+    font-size:.8rem;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    font-weight:600;
+    padding:0 16px;
+    flex:0 0 auto;
+    pointer-events:none;
   }
 
   .pulse-card .pc-duration {
@@ -346,6 +369,14 @@
   let isPlaying = false, isPaused = false, loop = false;
   let playIndex = 0, playStartedAt = 0, remainingMs = 0, curTimeout = null;
 
+  const dragState = {
+        draggedId: null,
+        draggedEl: null,
+        placeholder: null,
+        width: 0,
+        targetIndex: null
+      };
+
   // ====== UI refs ======
   const timeline  = $("#timeline");
   const btnAddPulse = $("#btnAddPulse");
@@ -478,6 +509,126 @@
         return String(v).replace(".", ",");
       }
 
+  function setPlaceholderWidth(width) {
+        if (!dragState.placeholder) return;
+        const clamped = Math.max(80, Math.round(width));
+        dragState.placeholder.style.minWidth = clamped + "px";
+        dragState.placeholder.style.maxWidth = clamped + "px";
+      }
+
+  function ensurePlaceholder(width) {
+        const resolvedWidth = Number.isFinite(width) ? width : 120;
+        if (!dragState.placeholder) {
+          const ph = document.createElement("div");
+          ph.className = "pulse-placeholder";
+          ph.textContent = "Solte aqui";
+          ph.draggable = false;
+          dragState.placeholder = ph;
+        }
+        setPlaceholderWidth(resolvedWidth);
+        return dragState.placeholder;
+      }
+
+  function cleanupDragState() {
+        if (dragState.placeholder && dragState.placeholder.parentNode) {
+          dragState.placeholder.parentNode.removeChild(dragState.placeholder);
+        }
+        if (dragState.draggedEl) {
+          dragState.draggedEl.classList.remove("dragging");
+        }
+        dragState.draggedId = null;
+        dragState.draggedEl = null;
+        dragState.placeholder = null;
+        dragState.width = 0;
+        dragState.targetIndex = null;
+      }
+
+  function getAvailableCards() {
+        return Array.from(timeline.querySelectorAll(".pulse-card"))
+          .filter((card) => card.dataset.id !== dragState.draggedId);
+      }
+
+  function getDraggedInitialIndex() {
+        let index = 0;
+        for (const node of timeline.children) {
+          if (node.classList && node.classList.contains("pulse-card")) {
+            if (node.dataset.id === dragState.draggedId) {
+              return index;
+            }
+            index++;
+          }
+        }
+        return index;
+      }
+
+  function computeTargetIndexFromPoint(x, y) {
+        const cards = getAvailableCards();
+        if (!cards.length) return 0;
+        let bestCard = null;
+        let minDist = Infinity;
+        for (const card of cards) {
+          const rect = card.getBoundingClientRect();
+          const cx = rect.left + rect.width / 2;
+          const cy = rect.top + rect.height / 2;
+          const dx = x - cx;
+          const dy = y - cy;
+          const dist = Math.hypot(dx, dy);
+          if (dist < minDist) {
+            minDist = dist;
+            bestCard = card;
+          }
+        }
+        if (!bestCard) return cards.length;
+        const rect = bestCard.getBoundingClientRect();
+        const before = x < rect.left + rect.width / 2;
+        const baseIndex = cards.indexOf(bestCard);
+        return before ? baseIndex : baseIndex + 1;
+      }
+
+  function updatePlaceholderPosition(targetIndex, width) {
+        const cards = getAvailableCards();
+        const normalized = Math.max(0, Math.min(targetIndex, cards.length));
+        if (
+          dragState.targetIndex === normalized &&
+          dragState.placeholder &&
+          dragState.placeholder.parentNode
+        ) {
+          return;
+        }
+        const placeholder = ensurePlaceholder(width || dragState.width || 120);
+        dragState.targetIndex = normalized;
+        const reference = cards[normalized];
+        if (reference) {
+          timeline.insertBefore(placeholder, reference);
+        } else {
+          timeline.appendChild(placeholder);
+        }
+      }
+
+  function getPlaceholderIndex() {
+        if (!dragState.placeholder || !dragState.placeholder.parentNode) return -1;
+        const cards = getAvailableCards();
+        const cardSet = new Set(cards);
+        let index = 0;
+        for (const node of timeline.children) {
+          if (node === dragState.placeholder) {
+            return index;
+          }
+          if (cardSet.has(node)) {
+            index++;
+          }
+        }
+        return -1;
+      }
+
+  function finalizeDragPlacement() {
+        const srcId = dragState.draggedId;
+        const targetIndex = dragState.targetIndex ?? getPlaceholderIndex();
+        cleanupDragState();
+        if (!srcId || targetIndex === null || targetIndex < 0) return;
+        reorderBlockToIndex(srcId, targetIndex);
+      }
+
   // Texto simples (para status, sem HTML)
   function formatLabelPlain(b) {
         if (b.type === "PAUSE") {
@@ -549,17 +700,16 @@
           el.addEventListener("click", () => selectBlock(b.id));
 
           el.addEventListener("dragstart", (ev) => {
+            dragState.draggedId = b.id;
+            dragState.draggedEl = el;
+            dragState.width = el.getBoundingClientRect().width;
+            const initialIndex = getDraggedInitialIndex();
+            updatePlaceholderPosition(initialIndex, dragState.width);
+            el.classList.add("dragging");
+            ev.dataTransfer.effectAllowed = "move";
             ev.dataTransfer.setData("text/plain", b.id);
-            el.classList.add("opacity-50");
           });
-          el.addEventListener("dragend", () => el.classList.remove("opacity-50"));
-          el.addEventListener("dragover", (ev) => ev.preventDefault());
-          el.addEventListener("drop", (ev) => {
-            ev.preventDefault();
-            const draggedId = ev.dataTransfer.getData("text/plain");
-            if (!draggedId || draggedId === b.id) return;
-            reorderBlock(draggedId, b.id);
-          });
+          el.addEventListener("dragend", () => cleanupDragState());
 
           if (selectedId === b.id) {
             el.classList.add("selected");
@@ -674,12 +824,12 @@
         render();
       }
 
-  function reorderBlock(srcId, dstId) {
+  function reorderBlockToIndex(srcId, newIndex) {
         const si = blocks.findIndex(x => x.id === srcId);
-        const di = blocks.findIndex(x => x.id === dstId);
-        if (si < 0 || di < 0 || si === di) return;
+        if (si < 0) return;
         const [moved] = blocks.splice(si, 1);
-        blocks.splice(di, 0, moved);
+        const clampedIndex = Math.max(0, Math.min(blocks.length, newIndex));
+        blocks.splice(clampedIndex, 0, moved);
         persistBlocks();
         render();
       }
@@ -942,6 +1092,19 @@
       }
 
   // ====== Eventos ======
+      timeline.addEventListener("dragover", (ev) => {
+        if (!dragState.draggedId) return;
+        ev.preventDefault();
+        const targetIdx = computeTargetIndexFromPoint(ev.clientX, ev.clientY);
+        updatePlaceholderPosition(targetIdx);
+      });
+
+      timeline.addEventListener("drop", (ev) => {
+        if (!dragState.draggedId) return;
+        ev.preventDefault();
+        finalizeDragPlacement();
+      });
+
       btnAddPulse.addEventListener("click", addPulseFromControl);
       btnAddPause.addEventListener("click", addPause);
       btnAddRoulette?.addEventListener("click", addRoulette);

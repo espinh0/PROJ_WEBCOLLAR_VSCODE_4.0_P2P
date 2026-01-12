@@ -294,11 +294,50 @@
       statusBase = text;
       statusEl.textContent = text;
     }
-    const PEER_SOUND_JOIN = 'bell_ring';
+    const PEER_SOUND_JOIN = 'water_droplet_3';
     const PEER_SOUND_LEAVE = 'water_droplet';
+    const PEER_SOUND_CDN = 'https://cdn.jsdelivr.net/gh/IonDen/ion.sound@3.0.7/sounds/';
+    const PEER_JOIN_AUDIO_RATE = 1;
+    const PEER_JOIN_AUDIO_GAIN = 0.68;
     const PEER_SOUND_COOLDOWN_MS = 220;
     const peerSoundLastAt = { join: 0, leave: 0 };
     let ionSoundReady = false;
+    let peerJoinAudioTemplate = null;
+
+    function ensurePeerJoinAudio()
+    {
+      if (peerJoinAudioTemplate) return true;
+      try {
+        const audio = new Audio(`${PEER_SOUND_CDN}${PEER_SOUND_JOIN}.mp3`);
+        audio.preload = 'auto';
+        audio.volume = PEER_JOIN_AUDIO_GAIN;
+        audio.load();
+        peerJoinAudioTemplate = audio;
+        return true;
+      } catch {
+        peerJoinAudioTemplate = null;
+        return false;
+      }
+    }
+
+    function playJoinAudioLowered()
+    {
+      if (!ensurePeerJoinAudio()) return false;
+      try {
+        const instance = peerJoinAudioTemplate.cloneNode(true);
+        instance.volume = PEER_JOIN_AUDIO_GAIN;
+        instance.playbackRate = PEER_JOIN_AUDIO_RATE;
+        if ('preservesPitch' in instance) instance.preservesPitch = false;
+        if ('mozPreservesPitch' in instance) instance.mozPreservesPitch = false;
+        if ('webkitPreservesPitch' in instance) instance.webkitPreservesPitch = false;
+        const playPromise = instance.play();
+        if (playPromise && typeof playPromise.catch === 'function') playPromise.catch(() => {});
+        instance.addEventListener('ended', () => instance.remove());
+        return true;
+      } catch {
+        return false;
+      }
+    }
 
     function ensureIonSoundReady() {
       if (!(window.ion && typeof window.ion.sound === 'function')) return false;
@@ -325,6 +364,9 @@
       peerSoundLastAt[kind] = now;
 
       const name = kind === 'join' ? PEER_SOUND_JOIN : PEER_SOUND_LEAVE;
+      if (kind === 'join' && playJoinAudioLowered()) {
+        return;
+      }
       if (ensureIonSoundReady()) {
         try {
           window.ion.sound.play(name);

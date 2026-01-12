@@ -1,36 +1,10 @@
-<div class="card shadow-sm" id="fs-mirror-card" style="background:#111;border:1px solid #333;border-radius:.75rem;color:#e5e7eb;">
-  <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2" style="background:#0c0c0e;border-bottom:1px solid #333;color:#e5e7eb;border-top-left-radius:.65rem;border-top-right-radius:.65rem;">
-    <div class="d-flex align-items-center gap-2">
+<div class="card shadow-sm" id="fs-mirror-card">
+  <div class="card-header d-flex align-items-center flex-wrap gap-3 justify-content-between">
+    <div class="d-flex align-items-center gap-2 flex-shrink-0">
       <div class="fw-semibold">Placar</div>
       <div class="small text-secondary" id="fsm-status">desconectado</div>
     </div>
-    <div class="btn-group btn-group-sm">
-      <button class="btn btn-sm btn-outline-secondary" id="fsm-sound-toggle" type="button" aria-label="Mutar sons" title="Mutar sons">
-        <i class="fa-solid fa-volume-high"></i>
-      </button>
-      <button class="btn btn-sm btn-outline-secondary" id="fsr-toggle" type="button" aria-label="Mostrar painel" title="Mostrar painel">
-        <i class="fa-solid fa-gear"></i>
-      </button>
-    </div>
-  </div>
-  <div class="card-body">
-    <div class="d-flex flex-wrap align-items-stretch gap-3">
-      <div id="fsm-home-card" class="flex-grow-1 p-3 rounded-3" style="background:#0c0c0e;border:1px solid #2a2a2a;">
-        <div class="text-uppercase text-secondary small mb-1">casa</div>
-        <div class="d-flex align-items-center justify-content-between">
-          <div class="fw-bold" style="font-size:1.2rem;" id="fsm-home-name">-</div>
-          <div class="display-1 text-info mb-0 score-num" id="fsm-home-score">-</div>
-        </div>
-      </div>
-      <div id="fsm-away-card" class="flex-grow-1 p-3 rounded-3" style="background:#0c0c0e;border:1px solid #2a2a2a;">
-        <div class="text-uppercase text-secondary small mb-1 text-end">visitante</div>
-        <div class="d-flex align-items-center justify-content-between">
-          <div class="display-1 text-warning mb-0 score-num" id="fsm-away-score">-</div>
-          <div class="fw-bold text-end" style="font-size:1.2rem;" id="fsm-away-name">-</div>
-        </div>
-      </div>
-    </div>
-    <div class="mt-3 d-flex align-items-center gap-3 flex-wrap justify-content-center">
+    <div class="fsm-header-right d-flex align-items-center gap-3 flex-wrap ms-auto justify-content-end">
       <div class="btn-group btn-group-sm" role="group" aria-label="Selecionar time">
         <button class="btn btn-outline-info" id="fsm-target-home">Casa</button>
         <button class="btn btn-outline-info" id="fsm-target-any" aria-label="Ambos" title="Ambos">
@@ -38,11 +12,34 @@
         </button>
         <button class="btn btn-outline-info" id="fsm-target-away">Fora</button>
       </div>
-      <div class="d-flex flex-column gap-1" style="min-width: 260px;">
+      <div class="fsm-header-search">
         <div class="input-group input-group-sm">
           <input id="fsm-search-team" type="text" class="form-control" placeholder="Digite o time e Enter" aria-label="Pesquisar time" />
           <button id="fsm-search-btn" class="btn btn-outline-secondary" type="button"><i class="fa-solid fa-magnifying-glass"></i></button>
-          <span id="fsm-search-status" class="input-group-text text-muted" style="min-width: 120px;">Aguardando</span>
+          <span id="fsm-search-status" class="input-group-text text-muted">Aguardando</span>
+        </div>
+      </div>
+      <div class="btn-group btn-group-sm flex-shrink-0">
+        <button class="btn btn-sm btn-outline-secondary host-only" id="fsr-toggle" type="button" aria-label="Abrir FS Config" title="Abrir FS Config">
+          <i class="fa-solid fa-gear"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="d-flex flex-wrap align-items-stretch gap-3">
+      <div id="fsm-home-card" class="flex-grow-1 p-3 rounded-3">
+        <div class="text-uppercase text-secondary small mb-1">casa</div>
+        <div class="d-flex align-items-center justify-content-between">
+          <div class="fw-bold" style="font-size:1.2rem;" id="fsm-home-name">-</div>
+          <div class="display-1 mb-0 score-num score-home" id="fsm-home-score">-</div>
+        </div>
+      </div>
+      <div id="fsm-away-card" class="flex-grow-1 p-3 rounded-3">
+        <div class="text-uppercase text-secondary small mb-1 text-end">visitante</div>
+        <div class="d-flex align-items-center justify-content-between">
+          <div class="display-1 mb-0 score-num score-away" id="fsm-away-score">-</div>
+          <div class="fw-bold text-end" style="font-size:1.2rem;" id="fsm-away-name">-</div>
         </div>
       </div>
     </div>
@@ -50,16 +47,100 @@
 </div>
 
 <style>
+  #fs-mirror-card {
+    --fs-accent: var(--cp-color, #a855f7);
+    --fs-accent-strong: rgba(168,85,247,0.9);
+    --fs-accent-soft: rgba(168,85,247,0.2);
+    --fs-border: rgba(168,85,247,0.4);
+    --fs-surface: rgba(17,12,24,0.95);
+    --fs-surface-alt: rgba(26,14,38,0.9);
+    --fs-muted: #d6bcff;
+    --fs-text: #f4edff;
+    --fs-home-color: var(--cp-color, #a855f7);
+    --fs-away-color: #facc15;
+    background: radial-gradient(circle at top, rgba(168,85,247,0.25), rgba(9,6,14,0.95));
+    border: 1px solid var(--fs-border);
+    border-radius: .75rem;
+    color: var(--fs-text);
+    box-shadow: 0 18px 40px rgba(0,0,0,0.55);
+  }
+  #fs-mirror-card .card-header {
+    background: transparent;
+    border-bottom: 1px solid var(--fs-border);
+    border-top-left-radius: .65rem;
+    border-top-right-radius: .65rem;
+    color: var(--fs-text);
+  }
+  #fs-mirror-card .card-body {
+    background: transparent;
+  }
+  #fs-mirror-card .fw-semibold {
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  #fsm-status {
+    color: var(--fs-muted) !important;
+  }
+  .fsm-header-right {
+    flex: 1 1 auto;
+    justify-content: flex-end; 
+  }
+  .fsm-header-search {
+    flex: 0 0 260px;
+    width: 260px;
+    max-width: 260px;
+    min-width: 260px;
+  }
+  .fsm-header-search .input-group { width: 100%; }
+  .fsm-header-search .input-group-text {
+    min-width: 120px;
+  }
   #fsm-home-card,
   #fsm-away-card {
     flex: 1 1 0;
     min-width: 0;
+    background: var(--fs-surface-alt);
+    border: 1px solid var(--fs-border);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02), 0 10px 24px rgba(0,0,0,0.45);
+    transition: border-width .2s ease, box-shadow .2s ease;
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  #fsm-home-card::before,
+  #fsm-away-card::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    background: linear-gradient(135deg, rgba(168,85,247,0.25), rgba(12,8,20,0.95));
+    opacity: 0;
+    transition: opacity .2s ease;
+    pointer-events: none;
+    z-index: 0;
+  }
+  #fsm-home-card.fs-target-active,
+  #fsm-away-card.fs-target-active {
+    border-width: 4px;
+    box-shadow:
+      inset 0 0 0 1px rgba(255,255,255,0.04),
+      0 16px 32px rgba(0,0,0,0.6),
+      0 0 26px rgba(168,85,247,0.35);
+  }
+  #fsm-home-card.fs-last-scorer::before,
+  #fsm-away-card.fs-last-scorer::before {
+    opacity: 1;
+  }
+  #fsm-home-card .text-secondary,
+  #fsm-away-card .text-secondary {
+    color: var(--fs-muted) !important;
   }
   #fsm-home-name,
   #fsm-away-name {
     white-space: normal;
     word-break: break-word;
     overflow-wrap: anywhere;
+    color: var(--fs-text);
   }
   .score-num {
     font-family: 'Anton', sans-serif;
@@ -67,21 +148,94 @@
     font-weight: 100;
     line-height: 1;
   }
+  .score-home {
+    color: var(--fs-home-color);
+    text-shadow: 0 0 20px rgba(168,85,247,0.45);
+  }
+  .score-away {
+    color: var(--fs-away-color);
+    text-shadow: 0 0 18px rgba(250,204,21,0.4);
+  }
   .score-blink { animation: scoreBlink 0.9s ease; }
   @keyframes scoreBlink {
-    0%   { text-shadow: 0 0 0 rgba(0,255,128,0); transform: scale(1); }
-    25%  { text-shadow: 0 0 10px rgba(0,255,128,0.65), 0 0 20px rgba(0,255,128,0.4); transform: scale(1.05); }
-    50%  { text-shadow: 0 0 14px rgba(0,255,128,0.9), 0 0 26px rgba(0,255,128,0.55); transform: scale(1.07); }
-    100% { text-shadow: 0 0 0 rgba(0,255,128,0); transform: scale(1); }
+    0%   { text-shadow: 0 0 0 rgba(168,85,247,0); transform: scale(1); }
+    25%  { text-shadow: 0 0 12px rgba(168,85,247,0.65), 0 0 24px rgba(168,85,247,0.35); transform: scale(1.05); }
+    50%  { text-shadow: 0 0 18px rgba(168,85,247,0.9), 0 0 28px rgba(168,85,247,0.6); transform: scale(1.07); }
+    100% { text-shadow: 0 0 0 rgba(168,85,247,0); transform: scale(1); }
   }
   .fs-last-scorer {
-    background: #102717 !important;
-    border-color: #1f7a3d !important;
-    box-shadow: 0 0 0 1px #1f7a3d inset;
+    background: linear-gradient(135deg, rgba(168,85,247,0.25), rgba(12,8,20,0.95)) !important;
+    border-color: var(--fs-border) !important;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.12) inset, 0 0 12px rgba(168,85,247,0.35);
+  }
+  .fs-last-scorer.fs-target-active {
+    border-width: 4px;
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.12) inset,
+      0 0 12px rgba(168,85,247,0.35),
+      0 0 0 3px rgba(168,85,247,0.45),
+      0 18px 32px rgba(0,0,0,0.65);
   }
   .fs-score-ended {
-    color: #ef4444 !important;
-    text-shadow: 0 0 10px rgba(239, 68, 68, 0.35);
+    color: #f87171 !important;
+    text-shadow: 0 0 10px rgba(248,113,113,0.4);
+  }
+  #fs-mirror-card .btn-outline-info,
+  #fs-mirror-card .btn-outline-secondary {
+    border-color: var(--fs-border);
+    color: var(--fs-text);
+    background: transparent;
+    transition: border-color .15s ease, color .15s ease, background .15s ease, box-shadow .15s ease;
+  }
+  #fs-mirror-card .btn-outline-info:hover,
+  #fs-mirror-card .btn-outline-secondary:hover,
+  #fs-mirror-card .btn-outline-info:focus-visible,
+  #fs-mirror-card .btn-outline-secondary:focus-visible {
+    color: #fff;
+    border-color: var(--fs-accent);
+    background: var(--fs-accent-soft);
+    box-shadow: 0 0 0 2px rgba(168,85,247,0.25);
+  }
+  #fs-mirror-card .btn-outline-info.active,
+  #fs-mirror-card .btn-outline-info:active {
+    color: #fff;
+    border-color: var(--fs-accent);
+    background: linear-gradient(135deg, var(--fs-accent), var(--fs-accent-strong));
+    box-shadow: 0 10px 20px rgba(168,85,247,0.35);
+  }
+  #fsm-target-any.active i {
+    color: #fff;
+  }
+  #fs-mirror-card .btn-outline-info i,
+  #fs-mirror-card .btn-outline-secondary i {
+    color: inherit;
+  }
+  #fs-mirror-card .input-group .form-control,
+  #fs-mirror-card .input-group .input-group-text {
+    background: rgba(12,8,18,0.9);
+    border-color: var(--fs-border);
+    color: var(--fs-text);
+  }
+  #fs-mirror-card .input-group .form-control::placeholder {
+    color: rgba(244,237,255,0.45);
+  }
+  #fs-mirror-card .input-group .form-control:focus {
+    border-color: var(--fs-accent);
+    box-shadow: 0 0 0 2px rgba(168,85,247,0.2);
+  }
+  #fsm-search-status {
+    color: var(--fs-muted) !important;
+    background: rgba(14,10,20,0.8);
+    border-color: var(--fs-border);
+  }
+  #fs-mirror-card .fw-bold {
+    color: var(--fs-text);
+  }
+  #fs-mirror-card .text-secondary {
+    color: var(--fs-muted) !important;
+  }
+  :root:not(.host-on) .host-only {
+    display: none !important;
   }
 </style>
 
@@ -135,11 +289,6 @@
   const awayCardEl = $('fsm-away-card');
   const lastEl = $('fsm-last');
   const sourceEl = $('fsm-source');
-  const soundToggleBtn = document.getElementById('fsm-sound-toggle');
-  const SOUND_PREF_KEY = 'fs_score_sound_pref_v1';
-  const SOUND_PREF_CHANNEL = 'fs-score:sound-pref';
-  const SOUND_PREF_REQUEST = 'fs-score:sound-pref:request';
-  const SOUND_PREF_ORIGIN = 'fs-score-mirror-' + Math.random().toString(36).slice(2);
   
   const targetButtons = {
     home: $('fsm-target-home'),
@@ -155,7 +304,6 @@
   let sendTargetFn = null;
   let getControlFn = null;
   let boundRoom = null;
-  let scoreSoundMuted = typeof window.__FS_SCORE_SOUND_MUTED__ === 'boolean' ? window.__FS_SCORE_SOUND_MUTED__ : null;
 
   function setStatus(text){ if (statusEl) statusEl.textContent = text; }
   function log(msg){ try { console.log('[fs-mirror]', msg); } catch(_){} }
@@ -175,103 +323,54 @@
     const nextKey = explicit || nameMatch || fallback;
     setActiveTarget(nextKey);
   }
+  function updateScoreCardHighlight(key){
+    const highlightHome = key === 'home' || key === 'any';
+    const highlightAway = key === 'away' || key === 'any';
+    if (homeCardEl) homeCardEl.classList.toggle('fs-target-active', highlightHome);
+    if (awayCardEl) awayCardEl.classList.toggle('fs-target-active', highlightAway);
+  }
+  updateScoreCardHighlight(currentTargetKey);
   function setActiveTarget(key){
     currentTargetKey = key;
     Object.entries(targetButtons).forEach(([k, btn])=>{
       if (!btn) return;
       btn.classList.toggle('active', k === key);
     });
+    updateScoreCardHighlight(key);
   }
   window.__FS_SCORE_MIRROR__ = window.__FS_SCORE_MIRROR__ || {};
   window.__FS_SCORE_MIRROR__.setActiveTarget = setActiveTarget;
   window.__FS_SCORE_MIRROR__.getCurrentTargetKey = () => currentTargetKey;
-
-  function flashScore(el){
-    if (!el) return;
-    el.classList.remove('score-blink');
-    // force reflow to restart animation
-    void el.offsetWidth; // eslint-disable-line no-unused-expressions
-    el.classList.add('score-blink');
-  }
-
-  function updateSoundToggleVisual(muted){
-    if (!soundToggleBtn) return;
-    let icon = soundToggleBtn.querySelector('i');
-    if (!icon) {
-      icon = document.createElement('i');
-      soundToggleBtn.textContent = '';
-      soundToggleBtn.appendChild(icon);
-    }
-    icon.className = muted ? 'fa-solid fa-volume-xmark' : 'fa-solid fa-volume-high';
-    soundToggleBtn.setAttribute('aria-label', muted ? 'Reativar sons' : 'Mutar sons');
-    soundToggleBtn.setAttribute('title', muted ? 'Reativar sons' : 'Mutar sons');
-    soundToggleBtn.classList.toggle('btn-outline-danger', muted);
-    soundToggleBtn.classList.toggle('btn-outline-secondary', !muted);
-  }
-
-  function setScoreSoundMuted(muted, opts){
-    const { persist = true, broadcast = false } = opts || {};
-    scoreSoundMuted = !!muted;
-    window.__FS_SCORE_SOUND_MUTED__ = scoreSoundMuted;
-    updateSoundToggleVisual(scoreSoundMuted);
-    if (persist) {
-      try { localStorage.setItem(SOUND_PREF_KEY, scoreSoundMuted ? 'muted' : 'audible'); } catch(_){ }
-    }
-    if (broadcast && window.__FS_BUS__ && typeof window.__FS_BUS__.send === 'function') {
-      try {
-        window.__FS_BUS__.send({ type: SOUND_PREF_CHANNEL, muted: scoreSoundMuted, origin: SOUND_PREF_ORIGIN, ts: Date.now() });
-      } catch(_){ }
-    }
-  }
-
-  (function initSoundToggle(){
-    let savedMuted = scoreSoundMuted;
-    if (typeof savedMuted !== 'boolean') {
-      try {
-        const stored = localStorage.getItem(SOUND_PREF_KEY);
-        savedMuted = stored === 'muted' ? true : stored === 'audible' ? false : savedMuted;
-      } catch(_){ savedMuted = null; }
-    }
-    setScoreSoundMuted(!!savedMuted, { persist: false, broadcast: false });
-
-    if (soundToggleBtn && !soundToggleBtn.__fs_sound_attached) {
-      soundToggleBtn.addEventListener('click', ()=> setScoreSoundMuted(!scoreSoundMuted, { persist: true, broadcast: true }));
-      soundToggleBtn.__fs_sound_attached = true;
-    }
-
-    if (!window.__FS_SCORE_SOUND_BUS_BOUND__ && window.__FS_BUS__ && typeof window.__FS_BUS__.on === 'function') {
-      window.__FS_SCORE_SOUND_BUS_BOUND__ = true;
-      try {
-        window.__FS_BUS__.on((msg)=>{
-          if (!msg) return;
-          if (msg.type === SOUND_PREF_CHANNEL) {
-            if (msg.origin && msg.origin === SOUND_PREF_ORIGIN) return;
-            if (typeof msg.muted === 'boolean') setScoreSoundMuted(msg.muted, { persist: true, broadcast: false });
-          }
-          if (msg.type === SOUND_PREF_REQUEST) {
-            if (msg.origin && msg.origin === SOUND_PREF_ORIGIN) return;
-            try {
-              window.__FS_BUS__.send({ type: SOUND_PREF_CHANNEL, muted: scoreSoundMuted, origin: SOUND_PREF_ORIGIN, ts: Date.now() });
-            } catch(_){ }
-          }
-        });
-        window.__FS_BUS__.send({ type: SOUND_PREF_REQUEST, origin: SOUND_PREF_ORIGIN, ts: Date.now() });
-      } catch(_){ }
-    }
-
+  function detectHostFlag(){
     try {
-      window.addEventListener('storage', (ev)=>{
-        if (ev.key !== SOUND_PREF_KEY) return;
-        const muted = ev.newValue === 'muted';
-        setScoreSoundMuted(muted, { persist: false, broadcast: false });
-      });
+      const peer = (window.Flowgate && window.Flowgate.localPeer) ? window.Flowgate.localPeer : window.__TRYSTERO_PEER__;
+      const tags = (peer && typeof peer.getLocalTags === 'function') ? peer.getLocalTags() : [];
+      if (Array.isArray(tags) && tags.some((t)=> String(t || '').toLowerCase() === 'host')) return true;
     } catch(_){ }
-  })();
-
+    return document.documentElement.classList.contains('host-on');
+  }
+  function syncHostOnlyVisibility(){
+    const isHostFlag = detectHostFlag();
+    document.documentElement.classList.toggle('host-on', isHostFlag);
+    document.querySelectorAll('.host-only').forEach((el)=>{
+      if (!el) return;
+      el.classList.toggle('d-none', !isHostFlag);
+    });
+  }
+  syncHostOnlyVisibility();
+  window.addEventListener('flowgate:local_tags_changed', syncHostOnlyVisibility);
+  window.addEventListener('trystero:localTags', syncHostOnlyVisibility);
+  let hostVisibilityTries = 0;
+  const hostVisibilityTimer = setInterval(()=>{
+    hostVisibilityTries += 1;
+    syncHostOnlyVisibility();
+    if (document.documentElement.classList.contains('host-on') || hostVisibilityTries > 15) {
+      clearInterval(hostVisibilityTimer);
+    }
+  }, 1000);
   let lastScoreSoundAt = 0;
   let ionSoundReady = false;
   function playScoreSound(){
-    if (scoreSoundMuted) return;
     const now = Date.now();
     if (now - lastScoreSoundAt < 200) return;
     lastScoreSoundAt = now;
@@ -661,59 +760,58 @@
 
 <script>
 (() => {
-  function setToggleVisual(btn, open){
-    if (!btn) return;
-    let icon = btn.querySelector('i');
-    if (!icon) {
-      icon = document.createElement('i');
-      icon.className = 'fa-solid fa-gear';
-      btn.textContent = '';
-      btn.appendChild(icon);
-    } else {
-      icon.className = 'fa-solid fa-gear';
-    }
-    btn.setAttribute('aria-label', open ? 'Ocultar painel' : 'Mostrar painel');
-    btn.setAttribute('title', open ? 'Ocultar painel' : 'Mostrar painel');
-    btn.classList.toggle('btn-success', open);
-    btn.classList.toggle('btn-outline-secondary', !open);
+  function ensureFsConfigPanelVisible(){
+    const body = document.getElementById('fsr-body');
+    if (body) body.classList.remove('d-none');
   }
-  // attach expand toggle early and defensively (won't depend on other initialization)
-  try {
-    const _TOGGLE_KEY = 'fs_remote_ui_state_v3';
-    const _toggleBtn = document.getElementById('fsr-toggle');
-    const _body = document.getElementById('fsr-body');
-    if (_toggleBtn && _body) {
-      let _saved = null;
-      try { _saved = localStorage.getItem(_TOGGLE_KEY); } catch(_) { _saved = null; }
-      const _wantOpen = _saved === 'open';
-      try { _body.classList.toggle('d-none', !_wantOpen); } catch(_){}
-      try { setToggleVisual(_toggleBtn, _wantOpen); } catch(_){}
-      if (!_toggleBtn.__fs_toggle_attached) {
-        _toggleBtn.addEventListener('click', ()=>{
-          try {
-            const hidden = _body.classList.toggle('d-none');
-            setToggleVisual(_toggleBtn, !hidden);
-            try { localStorage.setItem(_TOGGLE_KEY, hidden ? 'closed' : 'open'); } catch(_){}
-          } catch(_){}
-        });
-        _toggleBtn.__fs_toggle_attached = true;
-      }
+  function moveFsConfigIntoModal(){
+    const modalBody = document.getElementById('fscore-config-modal-body');
+    const panel = document.getElementById('fs-remote-card');
+    if (!modalBody || !panel) return false;
+    if (!modalBody.contains(panel)) {
+      modalBody.appendChild(panel);
     }
-    // Delegated click handler as last-resort: works even if elements are re-rendered
-    try {
-      document.addEventListener('click', function _fsrDelegateClick(ev){
-        try {
-          const btn = ev.target && ev.target.closest ? ev.target.closest('#fsr-toggle') : null;
-          if (!btn) return;
-          const bodyEl = document.getElementById('fsr-body');
-          if (!bodyEl) return;
-          const hidden = bodyEl.classList.toggle('d-none');
-          const tb = document.getElementById('fsr-toggle'); if (tb) setToggleVisual(tb, !hidden);
-          try { localStorage.setItem(_TOGGLE_KEY, hidden ? 'closed' : 'open'); } catch(_){}
-        } catch(_){}
-      }, { capture: true });
-    } catch(_){}
-  } catch(_){}
+    try { modalBody.dataset.bound = 'true'; } catch(_){ }
+    return true;
+  }
+  function revealFsConfigModal(modal){
+    if (!modal) return false;
+    if (window.bootstrap && typeof window.bootstrap.Modal === 'function') {
+      window.bootstrap.Modal.getOrCreateInstance(modal).show();
+      return true;
+    }
+    modal.classList.add('show');
+    modal.style.display = 'block';
+    modal.removeAttribute('aria-hidden');
+    return true;
+  }
+  function openFsConfigModal(){
+    ensureFsConfigPanelVisible();
+    moveFsConfigIntoModal();
+    const modal = document.getElementById('fscore-config-modal');
+    if (modal && revealFsConfigModal(modal)) return true;
+    const card = document.getElementById('fs-remote-card');
+    if (card) {
+      try { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch(_){ card.scrollIntoView(); }
+    }
+    return false;
+  }
+  function bindFsConfigButton(){
+    const btn = document.getElementById('fsr-toggle');
+    if (!btn || btn.__fs_cfg_attached) return;
+    btn.classList.add('host-only');
+    btn.setAttribute('aria-label', 'Abrir FS Config');
+    btn.setAttribute('title', 'Abrir FS Config');
+    btn.addEventListener('click', (ev)=>{
+      ev.preventDefault();
+      openFsConfigModal();
+    });
+    btn.__fs_cfg_attached = true;
+  }
+  moveFsConfigIntoModal();
+  bindFsConfigButton();
+  window.__bindFsConfigButton = bindFsConfigButton;
+  window.__openFsConfigModal = openFsConfigModal;
   try {
   // lightweight cross-document bus (BroadcastChannel + postMessage + storage fallback)
   if (!window.__FS_BUS__) {
@@ -748,7 +846,6 @@
   if (window.__FS_REMOTE_READY__) return;
   window.__FS_REMOTE_READY__ = true;
 
-  const STORAGE_KEY_UI = 'fs_remote_ui_state_v3';
   const STORAGE_KEY_STATE = 'fs_remote_state_v1';
   const DEFAULTS = {
     team: '',
@@ -1487,18 +1584,8 @@ function mountProfileRows(){
     });
   }
 
-  const toggleBtn = document.getElementById('fsr-toggle');
-  const body = document.getElementById('fsr-body');
-  if (toggleBtn && body) {
-    const saved = localStorage.getItem(STORAGE_KEY_UI);
-    const wantOpen = saved === 'open';
-    body.classList.toggle('d-none', !wantOpen);
-    setToggleVisual(toggleBtn, wantOpen);
-    toggleBtn.addEventListener('click', ()=>{
-      const hidden = body.classList.toggle('d-none');
-      setToggleVisual(toggleBtn, !hidden);
-      try { localStorage.setItem(STORAGE_KEY_UI, hidden ? 'closed' : 'open'); } catch(_){}
-    });
+  if (typeof window.__bindFsConfigButton === 'function') {
+    window.__bindFsConfigButton();
   }
   } catch (e) {
     try { console.error('fs_remote init error', e); } catch(_){}

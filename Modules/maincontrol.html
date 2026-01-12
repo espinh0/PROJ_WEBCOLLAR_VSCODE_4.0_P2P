@@ -19,11 +19,18 @@
     transform: none;
     padding: 0;
     pointer-events: auto;
+    align-items: stretch;
+    width: 100%;
+    max-width: 100%;
   }
   #remoteControlWrapper.inline-mode #controlShell {
     flex-direction: column;
     align-items: stretch;
     max-width: none;
+    max-height: none;
+    overflow: visible;
+    width: 100%;
+    min-width: 0;
   }
   #remoteControlWrapper.inline-mode #remoteControlCard {
     width: 100%;
@@ -37,22 +44,25 @@
     min-width: 32%;
     max-width: 100%;
     position: relative;
+    max-height: calc(100vh - 80px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
   @media (max-height: 900px) {
     #controlShell {
-      max-height: calc(100vh - 80px);
+      max-height: calc(100vh - 56px);
       overflow-y: auto;
     }
   }
   @media (max-height: 720px) {
     #controlShell {
-      max-height: calc(100vh - 40px);
+      max-height: calc(100vh - 32px);
     }
   }
   #remoteControlCard {
     width: auto;
     min-width: 300px;
-    max-width: 1100px;
+    max-width: 100%;
     border-radius: 16px;
     position: relative;
     display: flex;
@@ -127,9 +137,146 @@
     width: 100%;
     margin-top: 18px;
   }
+  .control-scoreboard-block,
+  .control-audio-block {
+    width: 100%;
+    transition: max-height .24s ease, opacity .18s ease, margin .18s ease, padding .18s ease;
+    max-height: 2000px;
+    border-radius: 18px;
+    margin-bottom: 0;
+  }
+  .control-scoreboard-block.collapsed,
+  .control-audio-block.collapsed {
+    max-height: 0;
+    opacity: 0;
+      .control-scoreboard-block:not(.collapsed),
+      .control-audio-block:not(.collapsed) {
+        margin-bottom: 18px;
+      }
+    margin-top: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    padding-left: 0;
+    padding-right: 0;
+    border-width: 0;
+    pointer-events: none;
+  }
+  .control-scoreboard-mount,
+  .control-audio-mount {
+    width: 100%;
+  }
+  .scoreboard-embed-state,
+  .audio-embed-state {
+    border-radius: 16px;
+    padding: 20px 16px;
+    text-align: center;
+    font-size: 0.9rem;
+  }
+  .scoreboard-loading-state,
+  .audio-loading-state {
+    border: 1px dashed rgba(255,255,255,0.18);
+    color: #94a3b8;
+    background: rgba(8,10,18,0.45);
+  }
+  .scoreboard-error-state,
+  .audio-error-state {
+    border: 1px solid rgba(239,68,68,0.4);
+    color: #fecaca;
+    background: rgba(63,0,0,0.45);
+  }
   .event-canvas-slot {
     width: 100%;
     margin-top: 18px;
+  }
+  .control-status-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+  }
+  .control-status-groups {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .control-peer-list {
+    margin-left: auto;
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.35rem;
+    min-height: 38px;
+    text-align: right;
+  }
+  .control-peer-list #fg-peer-list {
+    display: inline-flex;
+    justify-content: flex-end;
+  }
+  #remoteControlCard .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.9rem;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #e5e7eb;
+  }
+  #remoteControlCard .status-pill[data-status="ok"] { border-color: rgba(34, 197, 94, 0.6); color: #bbf7d0; }
+  #remoteControlCard .status-pill[data-status="warn"] { border-color: rgba(249, 115, 22, 0.6); color: #fed7aa; }
+  #remoteControlCard .status-pill[data-status="off"] { border-color: rgba(239, 68, 68, 0.6); color: #fecaca; }
+  #remoteControlCard .status-label {
+    font-size: 0.75rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #94a3b8;
+  }
+  #remoteControlCard .peer-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    background: rgba(77, 113, 255, 0.16);
+    border: 1px solid rgba(77, 113, 255, 0.35);
+    color: #e0e7ff;
+    white-space: nowrap;
+  }
+  .serial-device-list {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem;
+    min-width: 0;
+  }
+  .serial-device-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    background: rgba(34, 197, 94, 0.18);
+    border: 1px solid rgba(34, 197, 94, 0.35);
+    color: #d1fae5;
+    white-space: nowrap;
+  }
+  .serial-device-empty {
+    font-size: 0.78rem;
+    color: #94a3b8;
+  }
+  #remoteControlCard .status-pill .status-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    color: #cbd5f5;
   }
   .event-canvas-card {
     position: relative;
@@ -139,25 +286,18 @@
     border: none;
     overflow: hidden;
   }
-  .event-canvas-meta-badge {
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    font-size: 0.75rem;
-    color: #cbd5f5;
-    background: rgba(10,12,18,0.65);
-    border: 1px solid rgba(255,255,255,0.08);
-    padding: 2px 10px;
-    border-radius: 999px;
-    pointer-events: none;
-  }
-  #collarEventMirrorCanvas {
-    width: 100%;
-    height: auto;
-    display: block;
+  .chart-embed-placeholder {
+    border: 1px dashed rgba(255,255,255,0.25);
     border-radius: 16px;
-    background: transparent;
-    border: 1px solid rgba(255,255,255,0.05);
+    padding: 24px;
+    text-align: center;
+    color: #94a3b8;
+    font-size: 0.9rem;
+    background: rgba(10,12,18,0.35);
+  }
+  .embedded-event-chart {
+    width: 100%;
+    margin: 0;
   }
   #remoteControlCard #customPads {
     width: 100%;
@@ -369,10 +509,90 @@
   .btn-advanced-toggle[aria-expanded="true"] i {
     color: #f9fafb;
   }
+  .btn-scoreboard-toggle {
+    --sb-color: var(--cp-color, #a855f7);
+    --sb-tint: rgba(168,85,247,0.18);
+    --sb-tint-strong: rgba(168,85,247,0.32);
+    min-width: 48px;
+    min-height: 48px;
+    padding: 10px;
+    border-radius: 14px;
+    border: 1px solid rgba(168,85,247,0.35);
+    background: linear-gradient(120deg, var(--sb-tint), rgba(12,12,14,0.92));
+    color: #f0fdfa;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 8px 18px rgba(0,0,0,0.28);
+    transition: transform .15s ease, box-shadow .2s ease, border-color .15s ease, background .15s ease, color .12s ease;
+  }
+  .btn-scoreboard-toggle i {
+    color: var(--sb-color);
+    transition: color .12s ease;
+  }
+  .btn-scoreboard-toggle:hover {
+    border-color: rgba(168,85,247,0.6);
+    background: linear-gradient(120deg, var(--sb-tint-strong), rgba(18,19,24,0.95));
+    color: #ecfeff;
+    box-shadow: 0 10px 22px rgba(0,0,0,0.32);
+    transform: translateY(-1px);
+  }
+  .btn-scoreboard-toggle:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.12), 0 0 0 6px rgba(168,85,247,0.3);
+  }
+  .btn-scoreboard-toggle.active {
+    border-color: rgba(168,85,247,0.75);
+    background: linear-gradient(120deg, rgba(168,85,247,0.28), rgba(50,54,65,0.95));
+    color: #ecfeff;
+    box-shadow: 0 0 0 2px rgba(34,211,238,0.28), 0 8px 20px rgba(0,0,0,0.35);
+  }
+  .btn-scoreboard-toggle.active i {
+    color: #ecfeff;
+  }
+  .btn-audio-toggle {
+    --audio-color: #38bdf8;
+    --audio-tint: rgba(56,189,248,0.18);
+    --audio-tint-strong: rgba(56,189,248,0.32);
+    min-width: 48px;
+    min-height: 48px;
+    padding: 10px;
+    border-radius: 14px;
+    border: 1px solid rgba(56,189,248,0.35);
+    background: linear-gradient(120deg, var(--audio-tint), rgba(12,12,14,0.92));
+    color: #f0fdfa;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 8px 18px rgba(0,0,0,0.28);
+    transition: transform .15s ease, box-shadow .2s ease, border-color .15s ease, background .15s ease, color .12s ease;
+  }
+  .btn-audio-toggle i {
+    color: var(--audio-color);
+    transition: color .12s ease;
+  }
+  .btn-audio-toggle:hover {
+    border-color: rgba(56,189,248,0.6);
+    background: linear-gradient(120deg, var(--audio-tint-strong), rgba(18,19,24,0.95));
+    color: #ecfeff;
+    box-shadow: 0 10px 22px rgba(0,0,0,0.32);
+    transform: translateY(-1px);
+  }
+  .btn-audio-toggle:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.12), 0 0 0 6px rgba(56,189,248,0.3);
+  }
+  .btn-audio-toggle.active {
+    border-color: rgba(56,189,248,0.75);
+    background: linear-gradient(120deg, rgba(56,189,248,0.28), rgba(50,54,65,0.95));
+    color: #ecfeff;
+    box-shadow: 0 0 0 2px rgba(56,189,248,0.28), 0 8px 20px rgba(0,0,0,0.35);
+  }
+  .btn-audio-toggle.active i {
+    color: #ecfeff;
+  }
   .control-collapse-btn {
-    position: absolute;
-    top: 16px;
-    right: 16px;
+    position: relative;
     width: 38px;
     height: 38px;
     border-radius: 50%;
@@ -384,7 +604,7 @@
     justify-content: center;
     box-shadow: 0 10px 20px rgba(0,0,0,0.35);
     transition: transform .12s ease, box-shadow .15s ease, background .15s ease, color .12s ease;
-    z-index: 2;
+    flex-shrink: 0;
   }
   .control-collapse-btn i {
     font-size: 1rem;
@@ -398,6 +618,23 @@
   .control-collapse-btn:focus-visible {
     outline: none;
     box-shadow: 0 0 0 2px rgba(255,255,255,0.25), 0 0 0 6px rgba(239,68,68,0.25);
+  }
+  .control-collapse-btn.is-muted {
+    background: rgba(234,179,8,0.32);
+    color: #fff7ed;
+    box-shadow: 0 12px 26px rgba(202,138,4,0.45);
+  }
+  .control-collapse-btn.is-muted:hover {
+    background: rgba(217,119,6,0.48);
+    color: #fff;
+  }
+  .control-status-actions {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    flex-wrap: wrap;
   }
   .level-tooltip .tooltip-inner { font-weight: 700; }
   .glass-background {
@@ -492,7 +729,7 @@
     pointer-events: none;
   }
   .advanced-panel.adv-open {
-    max-height: 1200px;
+    max-height: 2000px;
     opacity: 1;
     transform: translateY(0);
     pointer-events: auto;
@@ -501,6 +738,22 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 12px;
+  }
+  .advanced-chart-block {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .advanced-chart-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #f3f4f6;
+  }
+  .advanced-panel .event-canvas-slot {
+    margin-top: 0;
   }
   .advanced-note {
     font-size: .85rem;
@@ -545,7 +798,7 @@
     border-radius: 14px;
     overflow: hidden;
     border: 1px solid rgba(255,255,255,0.08);
-    background: linear-gradient(180deg, #1c202d 0%, #131722 100%);
+    background: transparent;
     box-shadow: 0 6px 12px rgba(0,0,0,0.28);
   }
   .number-spinner:focus-within {
@@ -554,7 +807,7 @@
   }
   .number-spinner .spin-btn {
     border: none;
-    background: #2b3040;
+    background: transparent;
     color: #d1d5db;
     font-size: 1.2rem;
     font-weight: 700;
@@ -563,17 +816,24 @@
     justify-content: center;
     transition: background 0.12s ease, color 0.12s ease;
   }
-  .number-spinner .spin-btn:first-child { border-right: 1px solid rgba(255,255,255,0.08); }
-  .number-spinner .spin-btn:last-child { border-left: 1px solid rgba(255,255,255,0.08); }
-  .number-spinner .spin-btn:hover { background: #343a4d; color: #ffffff; }
-  .number-spinner .spin-btn:active { background: #41495e; }
+  .number-spinner .spin-btn:first-child,
+  .number-spinner .spin-btn:last-child {
+    border: none;
+  }
+  .number-spinner .spin-btn:hover {
+    color: #ffffff;
+  }
+  .number-spinner .spin-btn:active {
+    color: #ffffff;
+    transform: translateY(1px);
+  }
   .number-spinner input[type="number"] {
     border: none;
-    background: #0f131d;
+    background: transparent;
     color: #e7eaee;
     text-align: center;
     font-weight: 700;
-    font-size: 1rem;
+    font-size: 2rem;
     width: 100%;
     padding: 8px 6px;
     box-shadow: none;
@@ -592,12 +852,62 @@
     box-shadow: none;
   }
 </style>
-<div id="remoteControlWrapper">
+<div id="remoteControlWrapper" class="inline-mode">
   <div id="controlShell">
     <div id="remoteControlCard" class="card p-3 p-lg-4 shadow-lg flex-grow-1 glass-background">
-      <button id="toggleControl" class="control-collapse-btn" aria-label="Voltar para layout normal" title="Voltar para layout normal" data-bs-toggle="tooltip">
-        <i class="fa-solid fa-xmark"></i>
-      </button>
+      <div class="control-status-bar mb-2">
+        <div class="control-status-groups">
+          <div class="d-flex align-items-center flex-wrap gap-2">
+          <div id="fg-status-pill" class="status-pill" data-status="off">
+            <span class="status-icon"><i class="fa-solid fa-tower-broadcast" aria-hidden="true"></i></span>
+            <span class="visually-hidden">Flowgate:</span>
+            <span id="fg-conn-state">desconectado</span>
+          </div>
+          <div class="status-pill" aria-label="Peers conectados" title="Peers conectados">
+            <span class="status-icon"><i class="fa-solid fa-user-group"></i></span>
+            <span id="fg-peer-count">0</span>
+          </div>
+          <div id="serial-devices-pill" class="status-pill" data-status="off" aria-label="Peers com serial aberta" title="Peers com serial aberta">
+            <span class="status-icon"><i class="fa-solid fa-microchip"></i></span>
+            <span>Dispositivos:</span>
+            <div id="serial-device-list" class="serial-device-list"></div>
+            <span id="serial-device-empty" class="serial-device-empty">nenhum</span>
+          </div>
+          <div id="serial-status-pill" class="status-pill host-only" data-status="off">
+            Serial: <span id="serial-conn-state">fechada</span>
+          </div>
+        </div>
+          <div class="control-peer-list">
+            <span class="status-label">Usuários</span>
+            <div id="fg-peer-list" class="d-flex align-items-center flex-wrap gap-2"></div>
+            <span id="fg-peer-empty" class="text-muted small">nenhum peer</span>
+          </div>
+        </div>
+        <div class="control-status-actions">
+          <button id="serialModalBtn" class="control-collapse-btn host-only" aria-label="Abrir Serial" title="Abrir Serial" data-bs-toggle="tooltip">
+            <i class="fa-solid fa-plug"></i>
+          </button>
+          <button id="flowgateModalBtn" class="control-collapse-btn" aria-label="Abrir Flowgate" title="Abrir Flowgate" data-bs-toggle="tooltip">
+            <i class="fa-solid fa-tower-broadcast"></i>
+          </button>
+          <button id="interfaceSoundToggle" class="control-collapse-btn" aria-label="Mutar sons" title="Mutar sons" data-bs-toggle="tooltip" aria-pressed="false">
+            <i class="fa-solid fa-volume-high"></i>
+          </button>
+          <button id="toggleControl" class="control-collapse-btn" aria-label="Fixar controle na tela" title="Fixar controle na tela" data-bs-toggle="tooltip">
+            <i class="fa-solid fa-thumbtack"></i>
+          </button>
+        </div>
+      </div>
+      <div class="control-scoreboard-block collapsed" aria-hidden="true">
+        <div id="controlScoreboardMount" class="control-scoreboard-mount">
+          <div class="scoreboard-embed-state scoreboard-loading-state">Carregando placar...</div>
+        </div>
+      </div>
+      <div class="control-audio-block collapsed" aria-hidden="true">
+        <div id="controlAudioMount" class="control-audio-mount">
+          <div class="audio-embed-state audio-loading-state">Carregando audio...</div>
+        </div>
+      </div>
       <div class="control-readouts">
         <div class="control-readout">
           <div class="control-readout-label">Modo</div>
@@ -638,6 +948,14 @@
         <span class="mode-icon"><i class="fa-solid fa-dice"></i></span>
       </button>
     </div>
+
+    <button id="btnScoreboardToggle" class="btn btn-scoreboard-toggle" title="Mostrar placar" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
+      <i class="fa-solid fa-flag-checkered"></i>
+    </button>
+
+    <button id="btnAudioToggle" class="btn btn-audio-toggle" title="Mostrar audio" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
+      <i class="fa-solid fa-headphones"></i>
+    </button>
 
     <div class="ms-auto d-flex align-items-center gap-2 justify-content-end host-only">
       <div class="form-check form-switch m-0">
@@ -717,15 +1035,20 @@
           </div>
         </div>
       </div>
+        <div class="advanced-chart-block">
+          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div class="advanced-chart-title">Timeline de eventos</div>
+            <div class="advanced-note">Monitor de comandos recentes</div>
+          </div>
+          <div class="event-canvas-slot">
+            <div class="event-canvas-card">
+              <div id="collarEventChartHolder" class="chart-embed-placeholder">Carregando grafico…</div>
+            </div>
+          </div>
+        </div>
   </div>
   <div class="custom-buttons-slot">
     <div id="customButtonsMount"></div>
-  </div>
-  <div class="event-canvas-slot">
-    <div class="event-canvas-card" id="collarEventMirror">
-      <canvas id="collarEventMirrorCanvas" height="220"></canvas>
-      <div class="event-canvas-meta-badge" id="collarEventMirrorMeta">Sincronizando…</div>
-    </div>
   </div>
 </div>
 </div>
@@ -803,17 +1126,14 @@
   };
   let advanced = { ...ADV_DEFAULTS };
   let advancedOpen = false;
+  let scoreboardOpen = false;
+  let audioOpen = false;
+  let lastScoreboardArmedState = null;
   const ROULETTE_DEFAULT_HOLD_MS = 220;
   const ROULETTE_HOLD_LIMITS = { min: 200, max: 20000 };
   let roulettePointerActive = false;
   let rouletteAutoReleaseTimer = null;
-  const eventMirrorState = {
-    interval: null,
-    resizeObserver: null,
-    retryTimer: null,
-    listeners: [],
-    active: false
-  };
+  const ROULETTE_RESULT_TIMEOUT_MS = 20000;
 
   const HOLD_THRESHOLD_MS = 220; // abaixo disso: clique unico; acima: HOLD
   const GLOBAL_HARD_LIMIT = 15;  // failsafe geral (mantido)
@@ -845,6 +1165,10 @@
   const pulsesReadoutEl = $("#pulsesReadout");
   const sliderRowEl = $("#sliderRow");
   const rouletteRowEl = $("#rouletteRow");
+  const scoreboardBlockEl = $(".control-scoreboard-block");
+  const scoreboardToggleBtn = $("#btnScoreboardToggle");
+  const audioBlockEl = $(".control-audio-block");
+  const audioToggleBtn = $("#btnAudioToggle");
   let advCountdownTimer = null;
   let advCountdownEndAt = 0;
   let advStopSignal = { stop: false, holdActive: false };
@@ -907,6 +1231,8 @@
       if (!parsed || typeof parsed !== "object") return null;
       parsed.advanced = { ...ADV_DEFAULTS, ...(parsed.advanced || {}) };
       parsed.advancedOpen = !!parsed.advancedOpen;
+      parsed.scoreboardOpen = !!parsed.scoreboardOpen;
+      parsed.audioOpen = !!parsed.audioOpen;
       return parsed;
     } catch(e){
       log(`Falha ao carregar estado: ${e && e.message || e}`, "warn");
@@ -929,151 +1255,96 @@
         level,
         channel,
         advanced,
-        advancedOpen
+        advancedOpen,
+        scoreboardOpen,
+        audioOpen
       }));
     } catch(e){
       log(`Falha ao salvar estado: ${e && e.message || e}`, "warn");
     }
   }
 
-      function destroyEventCanvasMirror(){
-        if (eventMirrorState.interval) {
-          clearInterval(eventMirrorState.interval);
-          eventMirrorState.interval = null;
-        }
-        if (eventMirrorState.resizeObserver) {
-          try { eventMirrorState.resizeObserver.disconnect(); } catch(_){ }
-          eventMirrorState.resizeObserver = null;
-        }
-        if (Array.isArray(eventMirrorState.listeners)) {
-          eventMirrorState.listeners.forEach(({ target, type, handler }) => {
-            try { target.removeEventListener(type, handler); } catch(_){ }
-          });
-          eventMirrorState.listeners.length = 0;
-        }
-        eventMirrorState.active = false;
-      }
-
-      function initEventCanvasMirror(){
-        const container = document.getElementById("collarEventMirror");
-        const mirrorCanvas = document.getElementById("collarEventMirrorCanvas");
-        const statusEl = document.getElementById("collarEventMirrorMeta");
-        const sourceCanvas = document.getElementById("collarEventCanvas");
-        if (!container || !mirrorCanvas || !statusEl || !sourceCanvas) return false;
-        const ctx = mirrorCanvas.getContext("2d");
-        if (!ctx) return false;
-
-        destroyEventCanvasMirror();
-
-        function syncSize(){
-          const width = sourceCanvas.width || sourceCanvas.clientWidth || 320;
-          const height = sourceCanvas.height || sourceCanvas.clientHeight || 200;
-          if (mirrorCanvas.width !== width) mirrorCanvas.width = width;
-          if (mirrorCanvas.height !== height) mirrorCanvas.height = height;
-        }
-        syncSize();
-
-        if (window.ResizeObserver) {
-          const ro = new ResizeObserver(() => syncSize());
-          ro.observe(sourceCanvas);
-          eventMirrorState.resizeObserver = ro;
-        } else {
-          const resizeHandler = () => syncSize();
-          window.addEventListener("resize", resizeHandler);
-          eventMirrorState.resizeObserver = {
-            disconnect(){ window.removeEventListener("resize", resizeHandler); }
-          };
-        }
-
-        function registerMirrorListener(type, handler, opts){
-          mirrorCanvas.addEventListener(type, handler, opts || { passive: false });
-          eventMirrorState.listeners.push({ target: mirrorCanvas, type, handler });
-        }
-
-        function forwardMirrorInteraction(type, evt){
-          if (!sourceCanvas.isConnected) return;
-          const srcRect = sourceCanvas.getBoundingClientRect();
-          const mirrorRect = mirrorCanvas.getBoundingClientRect();
-          const relX = (evt.clientX || 0) - mirrorRect.left;
-          const relY = (evt.clientY || 0) - mirrorRect.top;
-          const clientX = srcRect.left + relX;
-          const clientY = srcRect.top + relY;
-          const common = {
-            bubbles: true,
-            cancelable: true,
-            clientX,
-            clientY,
-            buttons: evt.buttons || 0,
-            pointerId: evt.pointerId || 1,
-            pointerType: evt.pointerType || "mouse",
-            pressure: evt.pressure || 0,
-            altKey: evt.altKey,
-            ctrlKey: evt.ctrlKey,
-            metaKey: evt.metaKey,
-            shiftKey: evt.shiftKey
-          };
-          const pointerType = type || evt.type;
-          if (window.PointerEvent) {
-            try { sourceCanvas.dispatchEvent(new PointerEvent(pointerType, common)); } catch(_){ }
+      function initEventChartEmbed(){
+        const holder = document.getElementById("collarEventChartHolder");
+        if (!holder) return;
+        const tryAttach = () => {
+          const chartCard = document.getElementById("collarEventChartCard");
+          if (!chartCard || holder.contains(chartCard)) return !!chartCard;
+          holder.innerHTML = "";
+          holder.classList.remove("chart-embed-placeholder");
+          chartCard.classList.add("embedded-event-chart");
+          const prevParent = chartCard.parentElement;
+          const prevNext = chartCard.nextElementSibling;
+          if (prevParent && !document.getElementById("collarEventChartEmbedNotice")) {
+            const notice = document.createElement("div");
+            notice.id = "collarEventChartEmbedNotice";
+            notice.className = "alert alert-secondary small mt-3";
+            notice.textContent = "Grafico movido para o painel remoto.";
+            prevParent.insertBefore(notice, prevNext);
           }
-          const mouseType = pointerType.replace("pointer", "mouse");
-          try { sourceCanvas.dispatchEvent(new MouseEvent(mouseType, common)); } catch(_){ }
-        }
-
-        const pointerEvents = [
-          "pointermove",
-          "pointerdown",
-          "pointerup",
-          "pointerenter",
-          "pointerleave",
-          "pointercancel",
-          "click"
-        ];
-        pointerEvents.forEach(type => {
-          registerMirrorListener(type, evt => {
-            evt.preventDefault();
-            forwardMirrorInteraction(type, evt);
-          });
-        });
-        eventMirrorState.interval = setInterval(() => {
-          if (!sourceCanvas.isConnected) {
-            destroyEventCanvasMirror();
-            statusEl.textContent = "Aguardando grafico…";
-            scheduleEventCanvasMirror();
-            return;
-          }
-          try {
-            syncSize();
-            ctx.clearRect(0, 0, mirrorCanvas.width, mirrorCanvas.height);
-            ctx.drawImage(sourceCanvas, 0, 0, mirrorCanvas.width, mirrorCanvas.height);
-          } catch(_){ }
-        }, 250);
-
-        statusEl.textContent = "Atualizado em tempo real";
-        container.classList.add("mirror-ready");
-        eventMirrorState.active = true;
-        return true;
-      }
-
-      function scheduleEventCanvasMirror(){
-        if (eventMirrorState.retryTimer) return;
-        let attempts = 0;
-        const tick = () => {
-          if (initEventCanvasMirror()) {
-            clearInterval(eventMirrorState.retryTimer);
-            eventMirrorState.retryTimer = null;
-            return;
-          }
-          attempts += 1;
-          if (attempts >= 40 && eventMirrorState.retryTimer) {
-            clearInterval(eventMirrorState.retryTimer);
-            eventMirrorState.retryTimer = null;
-          }
+          holder.appendChild(chartCard);
+          return true;
         };
-        tick();
-        eventMirrorState.retryTimer = setInterval(tick, 600);
+        if (tryAttach()) return;
+        let attempts = 0;
+        const timer = setInterval(() => {
+          attempts += 1;
+          if (tryAttach() || attempts >= 40) clearInterval(timer);
+        }, 400);
       }
-      scheduleEventCanvasMirror();
+      initEventChartEmbed();
+
+  const SCOREBOARD_SRC = "Widgets/fscore.html";
+  const AUDIO_LISTENER_SRC = "Widgets/audiolistener.html";
+  function runInlineScriptsIn(container){
+    if (!container) return;
+    const scripts = Array.from(container.querySelectorAll('script'));
+    scripts.forEach((oldScript) => {
+      const newScript = document.createElement('script');
+      Array.from(oldScript.attributes).forEach((attr) => newScript.setAttribute(attr.name, attr.value));
+      if (oldScript.textContent) newScript.textContent = oldScript.textContent;
+      oldScript.parentNode?.replaceChild(newScript, oldScript);
+    });
+  }
+  function loadControlScoreboard(){
+    const mount = document.getElementById('controlScoreboardMount');
+    if (!mount) return;
+    mount.innerHTML = '<div class="scoreboard-embed-state scoreboard-loading-state">Carregando placar...</div>';
+    fetch(SCOREBOARD_SRC)
+      .then((res) => {
+        if (!res.ok) throw new Error('Falha ao carregar Widgets/fscore.html: ' + res.status);
+        return res.text();
+      })
+      .then((html) => {
+        mount.innerHTML = html;
+        runInlineScriptsIn(mount);
+      })
+      .catch((err) => {
+        try { console.error(err); } catch(_){ }
+        mount.innerHTML = '<div class="scoreboard-embed-state scoreboard-error-state">Nao foi possivel carregar o placar.</div>';
+      });
+  }
+  loadControlScoreboard();
+
+  function loadControlAudio(){
+    const mount = document.getElementById('controlAudioMount');
+    if (!mount) return;
+    mount.innerHTML = '<div class="audio-embed-state audio-loading-state">Carregando audio...</div>';
+    fetch(AUDIO_LISTENER_SRC)
+      .then((res) => {
+        if (!res.ok) throw new Error('Falha ao carregar Widgets/audiolistener.html: ' + res.status);
+        return res.text();
+      })
+      .then((html) => {
+        mount.innerHTML = html;
+        runInlineScriptsIn(mount);
+      })
+      .catch((err) => {
+        try { console.error(err); } catch(_){ }
+        mount.innerHTML = '<div class="audio-embed-state audio-error-state">Nao foi possivel carregar o audio.</div>';
+      });
+  }
+  loadControlAudio();
 
   function emitControlPatch(patch){
     if (!patch || typeof patch !== "object") return;
@@ -1263,6 +1534,97 @@
     if (advancedInputs.preDelay) advancedInputs.preDelay.value = msToSecStr(advanced.preDelayMs, "preDelayMs");
   }
 
+  function updateScoreboardToggleTooltip(label){
+    if (!scoreboardToggleBtn) return;
+    scoreboardToggleBtn.setAttribute("title", label);
+    scoreboardToggleBtn.setAttribute("aria-label", label);
+    scoreboardToggleBtn.setAttribute("data-bs-original-title", label);
+    const tipInstance = (window.bootstrap && window.bootstrap.Tooltip)
+      ? window.bootstrap.Tooltip.getInstance(scoreboardToggleBtn)
+      : null;
+    if (tipInstance) {
+      if (typeof tipInstance.setContent === "function") {
+        tipInstance.setContent({ ".tooltip-inner": label });
+      } else if (tipInstance.tip) {
+        const inner = tipInstance.tip.querySelector(".tooltip-inner");
+        if (inner) inner.textContent = label;
+      }
+    }
+  }
+
+  function syncScoreboardArmedState(visible, opts){
+    const armed = !!visible;
+    if (!opts?.force && lastScoreboardArmedState === armed) return;
+    lastScoreboardArmedState = armed;
+    emitControlPatch({
+      armed,
+      reason: armed ? "scoreboard-visible" : "scoreboard-hidden"
+    });
+  }
+
+  function setScoreboardOpen(next, opts){
+    const desired = !!next;
+    if (!opts?.force && scoreboardOpen === desired) {
+      if (opts?.persist === false) return;
+    }
+    scoreboardOpen = desired;
+    if (scoreboardBlockEl) {
+      scoreboardBlockEl.classList.toggle("collapsed", !scoreboardOpen);
+      scoreboardBlockEl.setAttribute("aria-hidden", scoreboardOpen ? "false" : "true");
+    }
+    if (scoreboardToggleBtn) {
+      scoreboardToggleBtn.classList.toggle("active", scoreboardOpen);
+      scoreboardToggleBtn.setAttribute("aria-pressed", scoreboardOpen ? "true" : "false");
+      scoreboardToggleBtn.setAttribute("aria-expanded", scoreboardOpen ? "true" : "false");
+      const icon = scoreboardToggleBtn.querySelector("i");
+      if (icon) icon.className = scoreboardOpen ? "fa-solid fa-trophy" : "fa-solid fa-flag-checkered";
+      updateScoreboardToggleTooltip(scoreboardOpen ? "Ocultar placar" : "Mostrar placar");
+    }
+    if (opts?.persist !== false) persistState();
+    if (opts?.signalArmed !== false) {
+      syncScoreboardArmedState(scoreboardOpen, { force: opts?.force });
+    }
+  }
+
+  function updateAudioToggleTooltip(label){
+    if (!audioToggleBtn) return;
+    audioToggleBtn.setAttribute("title", label);
+    audioToggleBtn.setAttribute("aria-label", label);
+    audioToggleBtn.setAttribute("data-bs-original-title", label);
+    const tipInstance = (window.bootstrap && window.bootstrap.Tooltip)
+      ? window.bootstrap.Tooltip.getInstance(audioToggleBtn)
+      : null;
+    if (tipInstance) {
+      if (typeof tipInstance.setContent === "function") {
+        tipInstance.setContent({ ".tooltip-inner": label });
+      } else if (tipInstance.tip) {
+        const inner = tipInstance.tip.querySelector(".tooltip-inner");
+        if (inner) inner.textContent = label;
+      }
+    }
+  }
+
+  function setAudioOpen(next, opts){
+    const desired = !!next;
+    if (!opts?.force && audioOpen === desired) {
+      if (opts?.persist === false) return;
+    }
+    audioOpen = desired;
+    if (audioBlockEl) {
+      audioBlockEl.classList.toggle("collapsed", !audioOpen);
+      audioBlockEl.setAttribute("aria-hidden", audioOpen ? "false" : "true");
+    }
+    if (audioToggleBtn) {
+      audioToggleBtn.classList.toggle("active", audioOpen);
+      audioToggleBtn.setAttribute("aria-pressed", audioOpen ? "true" : "false");
+      audioToggleBtn.setAttribute("aria-expanded", audioOpen ? "true" : "false");
+      const icon = audioToggleBtn.querySelector("i");
+      if (icon) icon.className = audioOpen ? "fa-solid fa-wave-square" : "fa-solid fa-headphones";
+      updateAudioToggleTooltip(audioOpen ? "Ocultar audio" : "Mostrar audio");
+    }
+    if (opts?.persist !== false) persistState();
+  }
+
   function getLiveAdvanced(){
     const next = { ...advanced };
     if (advancedInputs.pulses && advancedInputs.pulses.value !== "") {
@@ -1414,6 +1776,8 @@
       advStopSignal.stop = true;
     }
     ensureAdvHoldOff();
+    clearRouletteAutoTimer();
+    releaseRoulettePointer();
     stopAdvCountdown(false, false);
     setAdvStatus("Parado", "idle");
     setAdvLedPhase("off");
@@ -1448,7 +1812,9 @@
     }
     persistState();
     syncAdvancedReadouts();
-    if (!advancedOpen) stopAdvCountdown(false);
+    if (!advancedOpen) {
+      requestAdvStop();
+    }
   }
 
   function shouldUseAdvancedBurst(cfg){
@@ -1456,6 +1822,14 @@
     const normalized = normalizeAdvancedState(cfg || { ...advanced });
     return normalized.pulses > 1
       || normalized.durationMs !== ADV_DEFAULTS.durationMs
+      || normalized.delayMs !== ADV_DEFAULTS.delayMs
+      || normalized.preDelayMs !== ADV_DEFAULTS.preDelayMs;
+  }
+
+  function shouldUseRouletteSequence(cfg){
+    if (!advancedOpen) return false;
+    const normalized = normalizeAdvancedState(cfg || { ...advanced });
+    return normalized.pulses > 1
       || normalized.delayMs !== ADV_DEFAULTS.delayMs
       || normalized.preDelayMs !== ADV_DEFAULTS.preDelayMs;
   }
@@ -1474,9 +1848,7 @@
     const sliderEl = $("#levelSlider");
     if (sliderEl) sliderEl.disabled = !showLevel;
     setSectionVisibility(rouletteRowEl, m === "ROULETTE");
-    if (!showLevel){
-      setLevel(0, { broadcast:false, reason:"mode-no-level" });
-    }
+    // Mantem o nivel atual mesmo quando o modo nao usa slider; o collar ignora o valor.
     if (m !== "ROULETTE") {
       clearRouletteAutoTimer();
       releaseRoulettePointer();
@@ -1604,13 +1976,69 @@
       }
     })();
   }
+  function runRouletteBurst(cfg){
+    advStopSignal = { stop: false, holdActive: false };
+    const normalized = normalizeAdvancedState({ ...ADV_DEFAULTS, ...(cfg || {}) });
+    const pulses = clampNum(Math.round(normalized.pulses || 1), ADV_LIMITS.pulses.min, ADV_LIMITS.pulses.max);
+    const gap = clampNum(Math.round(normalized.delayMs || ADV_DEFAULTS.delayMs), ADV_LIMITS.delayMs.min, ADV_LIMITS.delayMs.max);
+    const preDelay = clampNum(Math.round(normalized.preDelayMs || ADV_DEFAULTS.preDelayMs), ADV_LIMITS.preDelayMs.min, ADV_LIMITS.preDelayMs.max);
+    const holdMs = getRouletteSpinDurationMs(normalized);
+    startAdvCountdown({ preDelayMs: preDelay, pulses, durationMs: holdMs, delayMs: gap });
+    (async () => {
+      try {
+        clearRouletteAutoTimer();
+        releaseRoulettePointer();
+        let aborted = false;
+        if (preDelay > 0) {
+          setAdvLedPhase("gap");
+          aborted = await waitWithStop(preDelay);
+        }
+        for (let i = 0; i < pulses && !aborted; i++) {
+          if (advStopSignal.stop) { aborted = true; break; }
+          setAdvLedPhase("on");
+          if (!startRoulettePointer()) {
+            aborted = true;
+            break;
+          }
+          const finishPromise = waitForRouletteResult();
+          const holdStopped = await waitWithStop(holdMs);
+          releaseRoulettePointer();
+          const finishInfo = await finishPromise;
+          if (holdStopped || advStopSignal.stop || finishInfo.reason === "stopped") {
+            aborted = true;
+            break;
+          }
+          if (finishInfo.reason === "timeout") {
+            log("Roleta nao sinalizou conclusao; prosseguindo apos timeout.", "warn");
+          }
+          const isLast = i === pulses - 1;
+          if (!isLast && gap > 0) {
+            setAdvLedPhase("gap");
+            aborted = await waitWithStop(gap);
+          }
+        }
+        const completed = !(aborted || advStopSignal.stop);
+        stopAdvCountdown(completed);
+      } catch(_){
+        stopAdvCountdown(false);
+      } finally {
+        releaseRoulettePointer();
+        clearRouletteAutoTimer();
+        setAdvLedPhase("off");
+      }
+    })();
+  }
   function sendOnce(){
     const liveCfg = getLiveAdvanced();
     advanced = liveCfg;
     persistState();
     if (currentMode === "ROULETTE") {
-      stopAdvCountdown(false);
-      triggerRouletteAutoSpin(liveCfg);
+      if (shouldUseRouletteSequence(liveCfg)) {
+        runRouletteBurst(liveCfg);
+      } else {
+        stopAdvCountdown(false);
+        triggerRouletteAutoSpin(liveCfg);
+      }
       return;
     }
     if (!advancedOpen) {
@@ -1731,40 +2159,267 @@
 
   // Toggle de exibicao
   const toggleBtn = $("#toggleControl");
+  const flowgateModalBtn = $("#flowgateModalBtn");
+  const serialModalBtn = $("#serialModalBtn");
+  const interfaceSoundBtn = $("#interfaceSoundToggle");
   const wrapperEl = $("#remoteControlWrapper");
+  const PIN_STATE_KEY = "remoteControlInlineState";
+  const SOUND_STORAGE_KEY = "interfaceSoundMuted";
+  const SOUND_EVENT_NAME = "interface:sound_toggle";
+  let pendingHowlerSyncTimer = null;
+
+  function readInlinePreference(){
+    try {
+      const stored = localStorage.getItem(PIN_STATE_KEY);
+      if (stored === null) return true;
+      return stored === "inline";
+    } catch(_) {
+      return true;
+    }
+  }
+
+  function persistInlinePreference(isInline){
+    try {
+      localStorage.setItem(PIN_STATE_KEY, isInline ? "inline" : "pinned");
+    } catch(_) {}
+  }
+  function refreshTooltipContent(target, label){
+    if (!target || !(window.bootstrap && window.bootstrap.Tooltip)) return;
+    const tooltipInstance = window.bootstrap.Tooltip.getInstance(target);
+    if (!tooltipInstance) return;
+    if (typeof tooltipInstance.setContent === "function") {
+      tooltipInstance.setContent({ ".tooltip-inner": label });
+    } else if (tooltipInstance.tip) {
+      const inner = tooltipInstance.tip.querySelector(".tooltip-inner");
+      if (inner) inner.textContent = label;
+    }
+  }
   function updateToggleBtnUi(isInline){
     if (!toggleBtn) return;
     const icon = toggleBtn.querySelector("i");
-    const label = isInline ? "Fixar controle na tela" : "Voltar para layout normal";
+    const label = isInline ? "Fixar controle na tela" : "Fechar";
     if (icon) {
       icon.className = isInline ? "fa-solid fa-thumbtack" : "fa-solid fa-xmark";
     }
     toggleBtn.setAttribute("aria-label", label);
     toggleBtn.setAttribute("title", label);
     toggleBtn.setAttribute("data-bs-original-title", label);
-    if (window.bootstrap && window.bootstrap.Tooltip) {
-      const tooltipInstance = window.bootstrap.Tooltip.getInstance(toggleBtn);
-      if (tooltipInstance) {
-        if (typeof tooltipInstance.setContent === "function") {
-          tooltipInstance.setContent({ ".tooltip-inner": label });
-        } else if (tooltipInstance.tip) {
-          const inner = tooltipInstance.tip.querySelector(".tooltip-inner");
-          if (inner) inner.textContent = label;
-        }
-      }
+    refreshTooltipContent(toggleBtn, label);
+  }
+  function setInlineMode(state, opts={}){
+    if (!wrapperEl) return;
+    const nextState = !!state;
+    wrapperEl.classList.toggle("inline-mode", nextState);
+    updateToggleBtnUi(nextState);
+    if (!opts.skipPersist) {
+      persistInlinePreference(nextState);
     }
   }
-  function setInlineMode(state){
-    if (!wrapperEl) return;
-    wrapperEl.classList.toggle("inline-mode", !!state);
-    updateToggleBtnUi(!!state);
+
+  function readSoundPreference(){
+    try {
+      const stored = localStorage.getItem(SOUND_STORAGE_KEY);
+      if (stored === null) return false;
+      return stored === "muted";
+    } catch(_) {
+      return false;
+    }
+  }
+
+  function persistSoundPreference(isMuted){
+    try {
+      localStorage.setItem(SOUND_STORAGE_KEY, isMuted ? "muted" : "unmuted");
+    } catch(_) {}
+  }
+
+  function updateSoundBtnUi(muted){
+    if (!interfaceSoundBtn) return;
+    const icon = interfaceSoundBtn.querySelector("i");
+    const label = muted ? "Ativar sons" : "Mutar sons";
+    if (icon) {
+      icon.className = muted ? "fa-solid fa-volume-xmark" : "fa-solid fa-volume-high";
+    }
+    interfaceSoundBtn.classList.toggle("is-muted", muted);
+    interfaceSoundBtn.setAttribute("aria-label", label);
+    interfaceSoundBtn.setAttribute("title", label);
+    interfaceSoundBtn.setAttribute("aria-pressed", muted ? "true" : "false");
+    interfaceSoundBtn.setAttribute("data-bs-original-title", label);
+    refreshTooltipContent(interfaceSoundBtn, label);
+  }
+
+  function syncHowlerMuteState(muted){
+    if (window.Howler && typeof window.Howler.mute === "function") {
+      try { window.Howler.mute(muted); } catch(_) {}
+      return true;
+    }
+    return false;
+  }
+
+  function ensureHowlerSync(){
+    if (pendingHowlerSyncTimer) return;
+    let tries = 0;
+    pendingHowlerSyncTimer = setInterval(() => {
+      tries += 1;
+      if (syncHowlerMuteState(window.__INTERFACE_SOUND_MUTED__) || tries > 15) {
+        clearInterval(pendingHowlerSyncTimer);
+        pendingHowlerSyncTimer = null;
+      }
+    }, 400);
+  }
+
+  function syncSoundOutputs(muted){
+    document.querySelectorAll("audio").forEach((audioEl) => {
+      audioEl.muted = muted;
+      if (muted) {
+        try {
+          audioEl.pause();
+          audioEl.currentTime = 0;
+        } catch(_) {}
+      }
+    });
+    if (!syncHowlerMuteState(muted)) ensureHowlerSync();
+  }
+
+  function ensureAudioMuteGuard(){
+    if (window.__INTERFACE_AUDIO_PATCHED__) return;
+    const proto = (window.Audio && window.Audio.prototype) || (window.HTMLAudioElement && window.HTMLAudioElement.prototype);
+    if (!proto) return;
+    const nativePlay = proto.play;
+    if (typeof nativePlay !== "function") return;
+    window.__INTERFACE_AUDIO_PATCHED__ = true;
+    proto.play = function(...args){
+      if (window.__INTERFACE_SOUND_MUTED__) {
+        try {
+          this.pause();
+          this.currentTime = 0;
+        } catch(_) {}
+        return typeof Promise !== "undefined" ? Promise.resolve() : undefined;
+      }
+      const result = nativePlay.apply(this, args);
+      if (result && typeof result.catch === "function") {
+        result.catch(() => {});
+      }
+      return result;
+    };
+  }
+
+  function setInterfaceSoundMuted(muted, opts={}){
+    const nextState = !!muted;
+    const prevState = typeof window.__INTERFACE_SOUND_MUTED__ === "boolean" ? window.__INTERFACE_SOUND_MUTED__ : false;
+    window.__INTERFACE_SOUND_MUTED__ = nextState;
+    if (document.documentElement && document.documentElement.classList) {
+      document.documentElement.classList.toggle("interface-sound-muted", nextState);
+    }
+    updateSoundBtnUi(nextState);
+    window.__FS_SCORE_SOUND_MUTED__ = nextState;
+    if (!opts.skipPersist) {
+      persistSoundPreference(nextState);
+    }
+    syncSoundOutputs(nextState);
+    if (opts.force || prevState !== nextState) {
+      try { window.dispatchEvent(new CustomEvent(SOUND_EVENT_NAME, { detail: { muted: nextState } })); } catch(_) {}
+    }
+    return nextState;
+  }
+  if (wrapperEl) {
+    setInlineMode(readInlinePreference(), { skipPersist: true });
   }
   if (toggleBtn && wrapperEl) {
     toggleBtn.addEventListener("click", () => {
       const nextState = !wrapperEl.classList.contains("inline-mode");
       setInlineMode(nextState);
     });
-    updateToggleBtnUi(wrapperEl.classList.contains("inline-mode"));
+  }
+
+  ensureAudioMuteGuard();
+  setInterfaceSoundMuted(readSoundPreference(), { skipPersist: true, force: true });
+
+  function openFlowgateModalFromControl(){
+    const navTrigger = document.getElementById("mod-flowgate");
+    if (navTrigger && typeof navTrigger.click === "function") {
+      navTrigger.click();
+      return true;
+    }
+    const modalEl = document.getElementById("flowgate-module-modal");
+    if (!modalEl) {
+      const panel = document.getElementById("flowgate-panel");
+      if (panel && typeof panel.scrollIntoView === "function") {
+        panel.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      return false;
+    }
+    const modalBody = document.getElementById("flowgate-module-modal-body");
+    if (modalBody && modalBody.dataset.bound !== "true") {
+      const slot = document.querySelector('section[data-module-src="Modules/Flowgate.html"]');
+      if (slot && slot.children.length) {
+        const wrapper = document.createElement("div");
+        while (slot.firstChild) wrapper.appendChild(slot.firstChild);
+        modalBody.appendChild(wrapper);
+        modalBody.dataset.bound = "true";
+        slot.style.display = "none";
+      }
+    }
+    if (window.bootstrap && typeof window.bootstrap.Modal === "function") {
+      window.bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    } else {
+      modalEl.classList.add("show");
+      modalEl.style.display = "block";
+      modalEl.removeAttribute("aria-hidden");
+    }
+    return true;
+  }
+
+  function openSerialModalFromControl(){
+    const navTrigger = document.getElementById("mod-serial");
+    if (navTrigger && typeof navTrigger.click === "function") {
+      navTrigger.click();
+      return true;
+    }
+    const modalEl = document.getElementById("serial-module-modal");
+    if (!modalEl) {
+      const card = document.getElementById("serialPortCard");
+      if (card && typeof card.scrollIntoView === "function") {
+        card.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      return false;
+    }
+    const modalBody = document.getElementById("serial-module-modal-body");
+    if (modalBody && modalBody.dataset.bound !== "true") {
+      const slot = document.querySelector('section[data-module-src="Modules (Host-only)/serialport.html"]');
+      if (slot && slot.children.length) {
+        const wrapper = document.createElement("div");
+        while (slot.firstChild) wrapper.appendChild(slot.firstChild);
+        modalBody.appendChild(wrapper);
+        modalBody.dataset.bound = "true";
+        slot.style.display = "none";
+      }
+    }
+    if (window.bootstrap && typeof window.bootstrap.Modal === "function") {
+      window.bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    } else {
+      modalEl.classList.add("show");
+      modalEl.style.display = "block";
+      modalEl.removeAttribute("aria-hidden");
+    }
+    return true;
+  }
+
+  if (flowgateModalBtn) {
+    flowgateModalBtn.addEventListener("click", () => {
+      openFlowgateModalFromControl();
+    });
+  }
+
+  if (serialModalBtn) {
+    serialModalBtn.addEventListener("click", () => {
+      openSerialModalFromControl();
+    });
+  }
+
+  if (interfaceSoundBtn) {
+    interfaceSoundBtn.addEventListener("click", () => {
+      setInterfaceSoundMuted(!window.__INTERFACE_SOUND_MUTED__);
+    });
   }
 
   // Controles
@@ -1776,6 +2431,8 @@
   $("#levelSlider").addEventListener("focus", showSliderTooltip);
   $("#levelSlider").addEventListener("blur", hideSliderTooltip);
   if (advancedToggleBtn) advancedToggleBtn.addEventListener("click", () => setAdvancedOpen(!advancedOpen));
+  if (scoreboardToggleBtn) scoreboardToggleBtn.addEventListener("click", () => setScoreboardOpen(!scoreboardOpen));
+  if (audioToggleBtn) audioToggleBtn.addEventListener("click", () => setAudioOpen(!audioOpen));
   if (advancedInputs.pulses) advancedInputs.pulses.addEventListener("change", e => updateAdvancedValue("pulses", parseInt(e.target.value,10)));
   if (advancedInputs.duration) advancedInputs.duration.addEventListener("change", e => updateAdvancedValue("durationMs", parseFloat(e.target.value)));
   if (advancedInputs.delay) advancedInputs.delay.addEventListener("change", e => updateAdvancedValue("delayMs", parseFloat(e.target.value)));
@@ -1859,6 +2516,140 @@
   }
   initCustomButtonsEmbed();
 
+  function initStatusNavbar(){
+    const flowgatePill = document.getElementById("fg-status-pill");
+    const flowgateStateEl = document.getElementById("fg-conn-state");
+    const peerCountEl = document.getElementById("fg-peer-count");
+    const peerListEl = document.getElementById("fg-peer-list");
+    const peerEmptyEl = document.getElementById("fg-peer-empty");
+    const serialPill = document.getElementById("serial-status-pill");
+    const serialStateEl = document.getElementById("serial-conn-state");
+    const serialDevicesPill = document.getElementById("serial-devices-pill");
+    const serialDeviceListEl = document.getElementById("serial-device-list");
+    const serialDeviceEmptyEl = document.getElementById("serial-device-empty");
+    if (!flowgateStateEl || !peerCountEl || !peerListEl || !peerEmptyEl || !serialStateEl) return;
+
+    const setPillState = (pill, state) => {
+      if (!pill) return;
+      pill.dataset.status = state;
+    };
+
+    const setSerialState = (isOpen) => {
+      serialStateEl.textContent = isOpen ? "aberta" : "fechada";
+      setPillState(serialPill, isOpen ? "ok" : "off");
+    };
+
+    const setFlowgateState = (label) => {
+      const text = (label || "desconectado").trim();
+      flowgateStateEl.textContent = text;
+      const lower = text.toLowerCase();
+      if (lower.includes("conectado")) setPillState(flowgatePill, "ok");
+      else if (lower.includes("erro")) setPillState(flowgatePill, "warn");
+      else setPillState(flowgatePill, "off");
+    };
+
+    const normalizeLabel = (label) => label.replace(/\s+/g, " ").trim();
+
+    const collectPeerMeta = () => {
+      const metaList = [];
+      const seen = new Set();
+      const pull = (root) => {
+        if (!root) return;
+        Array.from(root.children).forEach((row) => {
+          const badges = Array.from(row.querySelectorAll(".badge"));
+          if (!badges.length) return;
+          const mainBadge = badges[0];
+          const raw = normalizeLabel(mainBadge.textContent || "");
+          if (!raw || /^bot-/i.test(raw) || seen.has(raw)) return;
+          seen.add(raw);
+          const tags = badges
+            .slice(1)
+            .map((b) => normalizeLabel(b.textContent || "").toLowerCase())
+            .filter(Boolean);
+          metaList.push({ label: raw, title: mainBadge.title || raw, tags });
+        });
+      };
+      pull(document.getElementById("tr-host-list"));
+      pull(document.getElementById("tr-peer-list"));
+      return metaList;
+    };
+
+    const renderSerialDevices = (entries) => {
+      if (!serialDevicesPill || !serialDeviceListEl) return;
+      serialDeviceListEl.innerHTML = "";
+      const hasDevices = Array.isArray(entries) && entries.length > 0;
+      serialDevicesPill.dataset.status = hasDevices ? "ok" : "off";
+      if (serialDeviceEmptyEl) serialDeviceEmptyEl.classList.toggle("d-none", hasDevices);
+      if (!hasDevices) return;
+      entries.forEach((peer) => {
+        const chip = document.createElement("span");
+        chip.className = "serial-device-chip";
+        chip.textContent = peer.label;
+        chip.title = peer.title;
+        serialDeviceListEl.appendChild(chip);
+      });
+    };
+
+    const renderPeers = () => {
+      const metaList = collectPeerMeta();
+      const peers = metaList.map(({ label, title }) => ({ label, title }));
+      peerListEl.innerHTML = "";
+      if (!peers.length) {
+        peerEmptyEl.classList.remove("d-none");
+      } else {
+        peerEmptyEl.classList.add("d-none");
+        peers.forEach((peer) => {
+          const chip = document.createElement("span");
+          chip.className = "peer-chip";
+          chip.textContent = peer.label;
+          chip.title = peer.title;
+          peerListEl.appendChild(chip);
+        });
+      }
+      renderSerialDevices(metaList.filter((entry) => entry.tags.includes("serial")));
+      peerCountEl.textContent = String(peers.length);
+    };
+
+    const refreshFlowgate = () => {
+      const status = document.getElementById("connection-status");
+      if (status) setFlowgateState(status.textContent || "desconectado");
+      renderPeers();
+    };
+
+    const bindPeerObservers = () => {
+      const hostList = document.getElementById("tr-host-list");
+      const peerList = document.getElementById("tr-peer-list");
+      if (!hostList || !peerList) return false;
+      const observer = new MutationObserver(() => renderPeers());
+      observer.observe(hostList, { childList: true, subtree: true });
+      observer.observe(peerList, { childList: true, subtree: true });
+      return true;
+    };
+
+    window.addEventListener("flowgate:room_changed", (ev) => {
+      setFlowgateState(ev?.detail?.connected ? "conectado" : "desconectado");
+      renderPeers();
+    });
+    window.addEventListener("flowgate:peer_connected", renderPeers);
+    window.addEventListener("flowgate:peer_disconnected", renderPeers);
+
+    window.addEventListener("serial-connected", () => setSerialState(true));
+    window.addEventListener("serial:connected", () => setSerialState(true));
+    window.addEventListener("serial-disconnected", () => setSerialState(false));
+    window.addEventListener("serial:disconnected", () => setSerialState(false));
+
+    setSerialState(false);
+    setFlowgateState("desconectado");
+
+    let tries = 0;
+    const pollTimer = setInterval(() => {
+      tries += 1;
+      refreshFlowgate();
+      if (bindPeerObservers() || tries > 20) clearInterval(pollTimer);
+    }, 300);
+  }
+  initStatusNavbar();
+
   function getRoletaBtn(){
     return document.getElementById("r3Btn");
   }
@@ -1904,6 +2695,31 @@
     }
     roulettePointerActive = true;
     return true;
+  }
+  function waitForRouletteResult(timeoutMs = ROULETTE_RESULT_TIMEOUT_MS){
+    return new Promise(resolve => {
+      let settled = false;
+      const safeTimeout = Math.max(0, Number(timeoutMs) || ROULETTE_RESULT_TIMEOUT_MS);
+      let stopWatcher = null;
+      let timerId = null;
+      const cleanup = () => {
+        window.removeEventListener("roulette:finished", onFinish);
+        if (stopWatcher) clearInterval(stopWatcher);
+        if (timerId) clearTimeout(timerId);
+      };
+      const settle = (reason, detail) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve({ reason, detail });
+      };
+      const onFinish = (ev) => settle("event", ev?.detail || null);
+      timerId = setTimeout(() => settle("timeout"), safeTimeout);
+      stopWatcher = setInterval(() => {
+        if (advStopSignal?.stop) settle("stopped");
+      }, 80);
+      window.addEventListener("roulette:finished", onFinish, { once: true });
+    });
   }
   function getRouletteSpinDurationMs(cfg){
     if (!advancedOpen) return ROULETTE_DEFAULT_HOLD_MS;
@@ -1985,9 +2801,13 @@
   const initialMode = savedState?.mode || "SHOCK";
   const initialLevel = savedState?.level ?? 0;
   const initialChannel = savedState?.channel || 1;
+  const initialScoreboardOpen = savedState?.scoreboardOpen ?? false;
+  const initialAudioOpen = savedState?.audioOpen ?? false;
   setMode(initialMode);
   setLevel(initialLevel, { broadcast:false });
   setChannel(initialChannel);
+  setScoreboardOpen(initialScoreboardOpen, { persist:false, force:true });
+  setAudioOpen(initialAudioOpen, { persist:false, force:true });
   syncAdvancedUi();
   setAdvancedOpen(advancedOpen);
   stopAdvCountdown(false);

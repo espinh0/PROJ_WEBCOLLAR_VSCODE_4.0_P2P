@@ -40,6 +40,18 @@
           <i class="fa-solid fa-lock-open"></i> Bloquear
         </button>
       </div>
+
+      <div class="r3-wrap" id="r3WrapChan">
+        <div class="r3-pointer" aria-hidden="true"></div>
+        <div class="r3-wheel" id="r3WheelChan">
+          <div class="r3-sel" aria-hidden="true"></div>
+          <div class="r3-labels"></div>
+          <div class="r3-centericon"><i class="fa-solid fa-hashtag"></i></div>
+        </div>
+        <button class="r3-lock-below" id="lockChanBtn" aria-pressed="false">
+          <i class="fa-solid fa-lock-open"></i> Bloquear
+        </button>
+      </div>
     </div>
 
     <div class="r3-readouts">
@@ -54,6 +66,10 @@
       <div class="r3-readout">
         <div class="text-secondary small">Duração (s)</div>
         <div id="r3DurRes" class="fw-semibold">—</div>
+      </div>
+      <div class="r3-readout">
+        <div class="text-secondary small">Canal</div>
+        <div id="r3ChanRes" class="fw-semibold">—</div>
       </div>
     </div>
   </div>
@@ -195,7 +211,7 @@
   const CHARGE_RATE_PCT_PER_MS  = CHARGE_RATE_PCT_PER_SEC / 1000;
 
   // Velocidades determinísticas por roda (deg/s) durante HOLD (host manda também)
-  const DEFAULT_DPS = { m: 720, i: 860, d: 640 };
+  const DEFAULT_DPS = { m: 720, i: 860, d: 640, c: 540 };
   const MODE_STORAGE_KEY = 'r3_modes_enabled_v1';
   const MIN_ACTIVE_MODES = 2;
 
@@ -205,16 +221,20 @@
   const wM = document.getElementById('r3WheelMode');
   const wI = document.getElementById('r3WheelInt');
   const wD = document.getElementById('r3WheelDur');
+  const wC = document.getElementById('r3WheelChan');
   const selM = wM.querySelector('.r3-sel');
   const selI = wI.querySelector('.r3-sel');
   const selD = wD.querySelector('.r3-sel');
+  const selC = wC.querySelector('.r3-sel');
   const labelsM = wM.querySelector('.r3-labels');
   const labelsI = wI.querySelector('.r3-labels');
   const labelsD = wD.querySelector('.r3-labels');
+  const labelsC = wC.querySelector('.r3-labels');
 
   const rM = document.getElementById('r3ModeRes');
   const rI = document.getElementById('r3IntRes');
   const rD = document.getElementById('r3DurRes');
+  const rC = document.getElementById('r3ChanRes');
 
   const btn = document.getElementById('r3Btn');
   const btnText = document.getElementById('r3BtnText');
@@ -224,10 +244,12 @@
   const lockModeBtn = document.getElementById('lockModeBtn');
   const lockIntBtn  = document.getElementById('lockIntBtn');
   const lockDurBtn  = document.getElementById('lockDurBtn');
+  const lockChanBtn = document.getElementById('lockChanBtn');
 
   const wrapM = document.getElementById('r3WrapMode');
   const wrapI = document.getElementById('r3WrapInt');
   const wrapD = document.getElementById('r3WrapDur');
+  const wrapC = document.getElementById('r3WrapChan');
   const modeToggleEls = {
     BEEP: document.getElementById('r3ModeToggleBeep'),
     VIBRATION: document.getElementById('r3ModeToggleVibration'),
@@ -238,16 +260,16 @@
   // =========================
   // Estado visual local (ângulos CSS)
   // =========================
-  let angleM = 0, angleI = 0, angleD = 0;
+  let angleM = 0, angleI = 0, angleD = 0, angleC = 0;
   let suppressModeToggle = false;
   let suppressCfgBroadcast = false;
   let lastCfgTs = 0;
   let lastCfgFrom = '';
 
   // Lock UI local (será “autoridade” apenas quando você for host)
-  let lockM = false, lockI = false, lockD = false;
-  let manualIdxM = 0, manualIdxI = 0, manualIdxD = 0;
-  const spinAnims = { m: null, i: null, d: null };
+  let lockM = false, lockI = false, lockD = false, lockC = false;
+  let manualIdxM = 0, manualIdxI = 0, manualIdxD = 0, manualIdxC = 0;
+  const spinAnims = { m: null, i: null, d: null, c: null };
   let btnGradVisible = false;
   let controlDelayMs = null;
 
@@ -267,6 +289,31 @@
     btn.style.setProperty('--gOpacity', shouldShow ? 1 : 0);
   }
   function getChannel(){ try{ return (window.channel|0) || 1; }catch{ return 1; } }
+  const DEFAULT_CHANNEL_VALUES = [1,2];
+  function resolveChannelValues(){
+    let override = null;
+    try {
+      if (Array.isArray(window?.ROULETTE_CHANNELS)) override = window.ROULETTE_CHANNELS;
+      else if (Array.isArray(window?.R3_CHANNELS)) override = window.R3_CHANNELS;
+    } catch(_){ override = null; }
+    const base = (override && override.length ? override : DEFAULT_CHANNEL_VALUES).slice(0, 24);
+    const seen = new Set();
+    const sanitized = [];
+    base.forEach((val)=>{
+      const n = Number(val);
+      if (!Number.isFinite(n)) return;
+      const normalized = Math.max(1, Math.min(99, Math.round(n)));
+      if (seen.has(normalized)) return;
+      seen.add(normalized);
+      sanitized.push(normalized);
+    });
+    if (!sanitized.length) {
+      const fallback = Math.max(1, Math.min(99, Math.round(getChannel())));
+      sanitized.push(fallback);
+    }
+    return sanitized;
+  }
+  const CHANNEL_VALUES = resolveChannelValues();
   function getMainDelayMs(){
     if (controlDelayMs != null) return controlDelayMs;
     try {
@@ -471,16 +518,19 @@
     const nextLockM = (lock && lock.m != null) ? !!lock.m : lockM;
     const nextLockI = (lock && lock.i != null) ? !!lock.i : lockI;
     const nextLockD = (lock && lock.d != null) ? !!lock.d : lockD;
+    const nextLockC = (lock && lock.c != null) ? !!lock.c : lockC;
 
     if (lockIdx) {
       if (Number.isFinite(lockIdx.m)) manualIdxM = clampIndex(lockIdx.m, MODES.length);
       if (Number.isFinite(lockIdx.i)) manualIdxI = clampIndex(lockIdx.i, INT_STEPS.length);
       if (Number.isFinite(lockIdx.d)) manualIdxD = clampIndex(lockIdx.d, DUR_VALUES.length);
+      if (Number.isFinite(lockIdx.c)) manualIdxC = clampIndex(lockIdx.c, CHANNEL_VALUES.length);
     }
 
     lockM = nextLockM;
     lockI = nextLockI;
     lockD = nextLockD;
+    lockC = nextLockC;
 
     updateManualUI();
 
@@ -488,6 +538,7 @@
       if (lockM) { angleM = angleForIndexEqual(manualIdxM, MODES.length); setAngle(wM, angleM); }
       if (lockI) { angleI = angleForIndexEqual(manualIdxI, INT_STEPS.length); setAngle(wI, angleI); }
       if (lockD) { angleD = angleForIndexWeighted(manualIdxD, slicesDur); setAngle(wD, angleD); }
+      if (lockC) { angleC = angleForIndexEqual(manualIdxC, CHANNEL_VALUES.length); setAngle(wC, angleC); }
       setLiveReadoutsFromAngles();
     }
   }
@@ -504,8 +555,8 @@
       from: SYNC.selfId,
       reason: reason || 'update',
       modeKeys: MODES.map((m)=>m.key),
-      lock: { m: !!lockM, i: !!lockI, d: !!lockD },
-      lockIdx: { m: manualIdxM, i: manualIdxI, d: manualIdxD }
+      lock: { m: !!lockM, i: !!lockI, d: !!lockD, c: !!lockC },
+      lockIdx: { m: manualIdxM, i: manualIdxI, d: manualIdxD, c: manualIdxC }
     };
   }
 
@@ -641,9 +692,11 @@
     const idxM = idxFromAngleEqual(angleM, MODES.length);
     const idxI = idxFromAngleEqual(angleI, INT_STEPS.length);
     const idxD = idxFromAngleWeighted(angleD, slicesDur);
+    const idxC = idxFromAngleEqual(angleC, CHANNEL_VALUES.length);
     rM.textContent = MODES[idxM]?.label ?? '—';
     rI.textContent = INT_STEPS[idxI] ?? '—';
     rD.textContent = DUR_VALUES[idxD] ?? '—';
+    rC.textContent = CHANNEL_VALUES[idxC] ?? '—';
   }
 
   function planSpinAngle(current, target){
@@ -656,7 +709,8 @@
   function spinTo(kind, targetAngle, onDone){
     const ref = kind === 'm' ? { wheel: wM, set: v => angleM = v, cur: angleM }
                : kind === 'i' ? { wheel: wI, set: v => angleI = v, cur: angleI }
-               : { wheel: wD, set: v => angleD = v, cur: angleD };
+               : kind === 'd' ? { wheel: wD, set: v => angleD = v, cur: angleD }
+               : { wheel: wC, set: v => angleC = v, cur: angleC };
     if (!ref.wheel) return;
     if (spinAnims[kind]) cancelAnimationFrame(spinAnims[kind]);
 
@@ -710,16 +764,19 @@
   let slicesMode = makeEqualSlices(MODES.length);
   const slicesInt  = makeEqualSlices(INT_STEPS.length);
   const slicesDur  = makeWeightedSlices(DUR_WEIGHTS);
+  const slicesChan = makeEqualSlices(CHANNEL_VALUES.length);
 
   function buildAll(){
     const modeColors = MODES.map((_, i)=> MODE_SLICE_BG_TONES[i % MODE_SLICE_BG_TONES.length]);
     wM.style.background = buildConicBackgroundPalette(modeColors, "#181c24");
     wI.style.background = buildConicBackgroundEqual(INT_STEPS.length, '#0a1630', '#061126');
     wD.style.background = buildConicBackgroundEqual(DUR_VALUES.length, '#10162c', '#0b1020');
+    wC.style.background = buildConicBackgroundEqual(CHANNEL_VALUES.length, '#0f1a2c', '#080f1d');
 
     populateMode();
     populateNumbers(labelsI, INT_STEPS);
     populateNumbers(labelsD, DUR_VALUES);
+    populateNumbers(labelsC, CHANNEL_VALUES);
 
     layoutLabels(wM, labelsM, slicesMode.centers, slicesMode.spans, true);
     layoutLabels(wI, labelsI, slicesInt.centers,  slicesInt.spans,  false);
@@ -727,6 +784,7 @@
     const durCenters = DUR_VALUES.map((_,i)=> slicesDur.centers[i]);
     const durSpans   = DUR_VALUES.map((_,i)=> slicesDur.spans[i]);
     layoutLabels(wD, labelsD, durCenters, durSpans, false);
+    layoutLabels(wC, labelsC, slicesChan.centers, slicesChan.spans, false);
   }
 
   const storedModeKeys = readModeKeysFromStorage();
@@ -734,7 +792,7 @@
   applyModeKeys(initialModeKeys, { updateToggles: true, preferredKey: initialModeKeys[0], fallbackKey: MODES_ALL[0]?.key });
   if (document.fonts?.ready) { document.fonts.ready.then(()=>buildAll()).catch(()=>{}); }
   const ro = new ResizeObserver(()=>buildAll());
-  ro.observe(wM); ro.observe(wI); ro.observe(wD);
+  [wM, wI, wD, wC].filter(Boolean).forEach((el)=>ro.observe(el));
   window.addEventListener('resize', ()=>buildAll(), {passive:true});
 
   // =========================
@@ -743,7 +801,8 @@
   function updateManualUI(){
     [[wrapM,lockModeBtn,lockM,selM,slicesMode,()=>angleM],
      [wrapI,lockIntBtn, lockI,selI,slicesInt, ()=>angleI ],
-     [wrapD,lockDurBtn, lockD,selD,slicesDur, ()=>angleD]].forEach(([wrap,btnEl,locked,sel,slices,getAngle])=>{
+     [wrapD,lockDurBtn, lockD,selD,slicesDur, ()=>angleD],
+     [wrapC,lockChanBtn,lockC,selC,slicesChan,()=>angleC]].forEach(([wrap,btnEl,locked,sel,slices,getAngle])=>{
       wrap.classList.toggle('manual-on', locked);
       btnEl.setAttribute('aria-pressed', String(locked));
       btnEl.innerHTML = `<i class="fa-solid ${locked? 'fa-lock' : 'fa-lock-open'}"></i> ${locked?'Desbloquear':'Bloquear'}`;
@@ -818,6 +877,15 @@
     broadcastCfg('manual-d');
   });
   attachSliceHover(wrapD, wD, selD, slicesDur, ()=>angleD);
+  attachChipClicks(wrapC, wC, slicesChan, ()=>angleC, (idx)=>{
+    manualIdxC = idx;
+    const targetAngle = angleForIndexEqual(idx, CHANNEL_VALUES.length);
+    spinTo('c', targetAngle, () => {
+      rC.textContent = CHANNEL_VALUES[idx];
+    });
+    broadcastCfg('manual-c');
+  });
+  attachSliceHover(wrapC, wC, selC, slicesChan, ()=>angleC);
 
   lockModeBtn.addEventListener('click', ()=>{
     lockM = !lockM; updateManualUI();
@@ -834,6 +902,11 @@
     if (lockD) { angleD = angleForIndexWeighted(manualIdxD, slicesDur); setAngle(wD, angleD); }
     broadcastCfg('lock-d');
   });
+  lockChanBtn.addEventListener('click', ()=>{
+    lockC = !lockC; updateManualUI();
+    if (lockC) { angleC = angleForIndexEqual(manualIdxC, CHANNEL_VALUES.length); setAngle(wC, angleC); }
+    broadcastCfg('lock-c');
+  });
   updateManualUI();
   Object.values(modeToggleEls).forEach((el)=>{
     if (!el) return;
@@ -844,6 +917,7 @@
     if (which==='mode') return lockM ? manualIdxM : idxFromAngleEqual(angleM, MODES.length);
     if (which==='int')  return lockI ? manualIdxI : idxFromAngleEqual(angleI, INT_STEPS.length);
     if (which==='dur')  return lockD ? manualIdxD : idxFromAngleWeighted(angleD, slicesDur);
+    if (which==='chan') return lockC ? manualIdxC : idxFromAngleEqual(angleC, CHANNEL_VALUES.length);
     return 0;
   }
 
@@ -859,12 +933,13 @@
     }
     setStatus('SerialBridge indisponivel.');
   }
-  function buildCmd(modeKey, intensity){
+  function buildCmd(modeKey, intensity, channelValue){
     const lvl = (modeKey==='SHOCK'||modeKey==='VIBRATION') ? intensity : 0;
-    return `${modeKey},${lvl},${getChannel()}`;
+    const chan = Number.isFinite(channelValue) ? channelValue : getChannel();
+    return `${modeKey},${lvl},${chan}`;
   }
-  async function sendOnce(modeKey, intensity){
-    await pushToChat(buildCmd(modeKey, intensity));
+  async function sendOnce(modeKey, intensity, channelValue){
+    await pushToChat(buildCmd(modeKey, intensity, channelValue));
     setStatus(`Enviado: ${modeKey} • ${intensity}`);
   }
 
@@ -880,10 +955,10 @@
     countdownEl.style.display = 'none';
   }
 
-  async function sendHold(modeKey, intensity, durSec){
+  async function sendHold(modeKey, intensity, channelValue, durSec){
     return new Promise(async (resolve) => { // Return a promise
       stopHoldTimers();
-      await pushToChat(`HOLDON ${buildCmd(modeKey, intensity)}`);
+      await pushToChat(`HOLDON ${buildCmd(modeKey, intensity, channelValue)}`);
 
       const durMs = Math.max(1, Math.round(Number(durSec) * 1000));
       holdEndAtMs = Date.now() + durMs;
@@ -914,29 +989,31 @@
     });
   }
 
-  async function finalizeAndSend(idxM, idxI, idxD){
+  async function finalizeAndSend(idxM, idxI, idxD, idxC){
     const mode = MODES[idxM];
     const inten = INT_STEPS[idxI];
     const dur = DUR_VALUES[idxD];
+    const chan = CHANNEL_VALUES[idxC] ?? getChannel();
 
     rM.textContent = mode.label;
     rI.textContent = inten;
     rD.textContent = dur;
+    rC.textContent = chan;
 
     if (inten === 0 || dur === 0) {
       setStatus('Ignorado: intensidade ou duração zero.');
       countdownEl.style.display = 'none';
-      window.dispatchEvent(new CustomEvent('roulette:finished', { detail: { reason: 'zero' } }));
+      window.dispatchEvent(new CustomEvent('roulette:finished', { detail: { reason: 'zero', channel: chan } }));
       return;
     }
 
     try{
-      if (dur>0) await sendHold(mode.key, inten, dur);
-      else       await sendOnce(mode.key, inten);
+      if (dur>0) await sendHold(mode.key, inten, chan, dur);
+      else       await sendOnce(mode.key, inten, chan);
     } catch(e){
       setStatus('Erro de envio');
     } finally {
-      window.dispatchEvent(new CustomEvent('roulette:finished', { detail: { reason: 'sent' } }));
+      window.dispatchEvent(new CustomEvent('roulette:finished', { detail: { reason: 'sent', channel: chan } }));
     }
   }
 
@@ -1120,9 +1197,9 @@
     if (!SYNC.enabled || !syncBound || !evt || SYNC.phase === 'idle') return;
 
     // Respeita lock efetivo do host (evt.lock.*) durante sync
-    const lockEff = evt.lock || { m:false, i:false, d:false };
+    const lockEff = evt.lock || { m:false, i:false, d:false, c:false };
     const dps = evt.dps  || DEFAULT_DPS;
-    const a0  = evt.a0   || { m: angleM, i: angleI, d: angleD };
+    const a0  = evt.a0   || { m: angleM, i: angleI, d: angleD, c: angleC };
 
     // durante HOLD: angle = a0 + dps * dt
     if (SYNC.phase === 'hold' && evt.startedAt) {
@@ -1131,12 +1208,14 @@
       const aM = lockEff.m ? a0.m : (a0.m + dps.m * dt);
       const aI = lockEff.i ? a0.i : (a0.i + dps.i * dt);
       const aD = lockEff.d ? a0.d : (a0.d + dps.d * dt);
+      const aC = lockEff.c ? a0.c : (a0.c + dps.c * dt);
 
-      angleM = aM; angleI = aI; angleD = aD;
+      angleM = aM; angleI = aI; angleD = aD; angleC = aC;
 
       setAngle(wM, angleM);
       setAngle(wI, angleI);
       setAngle(wD, angleD);
+      setAngle(wC, angleC);
       setLiveReadoutsFromAngles();
 
       // UI de carregar (visual)
@@ -1156,14 +1235,17 @@
         m: lockEff.m ? a0.m : (a0.m + dps.m * dtHold),
         i: lockEff.i ? a0.i : (a0.i + dps.i * dtHold),
         d: lockEff.d ? a0.d : (a0.d + dps.d * dtHold),
+        c: lockEff.c ? a0.c : (a0.c + dps.c * dtHold),
       };
 
-      const spins = evt.spins || { m: 4, i: 5, d: 4 };
+      const spins = evt.spins || { m: 4, i: 5, d: 4, c: 3 };
       const aTgt = evt.aTgt || {
         m: evt.targets.m,
         i: evt.targets.i,
-        d: evt.targets.d
+        d: evt.targets.d,
+        c: evt.targets.c
       };
+      if (!Number.isFinite(aTgt.c)) aTgt.c = angleC;
 
       // targets são ângulos finais “base” (sem voltas)
       const minTravel = 360;
@@ -1171,25 +1253,29 @@
         m: lockEff.m ? aRel.m : ensureForwardEnd(aRel.m, aTgt.m + spins.m*360, minTravel),
         i: lockEff.i ? aRel.i : ensureForwardEnd(aRel.i, aTgt.i + spins.i*360, minTravel),
         d: lockEff.d ? aRel.d : ensureForwardEnd(aRel.d, aTgt.d + spins.d*360, minTravel),
+        c: lockEff.c ? aRel.c : ensureForwardEnd(aRel.c, aTgt.c + (spins.c||3)*360, minTravel),
       };
 
       angleM = aRel.m + (end.m - aRel.m) * e;
       angleI = aRel.i + (end.i - aRel.i) * e;
       angleD = aRel.d + (end.d - aRel.d) * e;
+      angleC = aRel.c + (end.c - aRel.c) * e;
 
       setAngle(wM, angleM);
       setAngle(wI, angleI);
       setAngle(wD, angleD);
+      setAngle(wC, angleC);
       setLiveReadoutsFromAngles();
 
       // acabou: fixa exatamente no alvo base e finaliza fase
       if (t >= 1) {
-        angleM = aTgt.m; angleI = aTgt.i; angleD = aTgt.d;
-        setAngle(wM, angleM); setAngle(wI, angleI); setAngle(wD, angleD);
+        angleM = aTgt.m; angleI = aTgt.i; angleD = aTgt.d; angleC = aTgt.c;
+        setAngle(wM, angleM); setAngle(wI, angleI); setAngle(wD, angleD); setAngle(wC, angleC);
         setBtnProgressPct(0);
         if (typeof evt.idxM === 'number') rM.textContent = MODES[evt.idxM]?.label ?? '--';
         if (typeof evt.idxI === 'number') rI.textContent = INT_STEPS[evt.idxI] ?? '--';
         if (typeof evt.idxD === 'number') rD.textContent = DUR_VALUES[evt.idxD] ?? '--';
+        if (typeof evt.idxC === 'number') rC.textContent = CHANNEL_VALUES[evt.idxC] ?? CHANNEL_VALUES[0];
 
         SYNC.phase = 'idle'; // encerra render de sync
         SYNC.evt = null;
@@ -1212,7 +1298,8 @@
     angleM = msg.a0?.m ?? angleM;
     angleI = msg.a0?.i ?? angleI;
     angleD = msg.a0?.d ?? angleD;
-    setAngle(wM, angleM); setAngle(wI, angleI); setAngle(wD, angleD);
+    angleC = msg.a0?.c ?? angleC;
+    setAngle(wM, angleM); setAngle(wI, angleI); setAngle(wD, angleD); setAngle(wC, angleC);
 
     // loop apenas quando visível
     if (!document.hidden) ensureRenderLoop();
@@ -1251,7 +1338,7 @@
           if (SYNC.lastEventId !== msg.id) return;
 
           setStatus('Sync: parou. Enviando...');
-          finalizeAndSend(msg.idxM, msg.idxI, msg.idxD);
+          finalizeAndSend(msg.idxM, msg.idxI, msg.idxD, msg.idxC);
         }, extraDelay);
       }, spinDelay);
     }
@@ -1277,7 +1364,7 @@
   function computeSpins(durationMs){
     // determinístico (sem random): apenas baseado na duração
     const s = clamp(Math.round(durationMs / 450), 3, 10);
-    return { m: s, i: Math.round(s*1.15), d: Math.round(s*0.95) };
+    return { m: s, i: Math.round(s*1.15), d: Math.round(s*0.95), c: Math.round(s*0.7) };
   }
 
   function computeDurationMs(holdMs){
@@ -1292,21 +1379,23 @@
     const modeKeys = MODES.map((m)=>m.key);
 
     // lock efetivo do host
-    const lockEff = { m: !!lockM, i: !!lockI, d: !!lockD };
-    const lockIdx = { m: manualIdxM, i: manualIdxI, d: manualIdxD };
+    const lockEff = { m: !!lockM, i: !!lockI, d: !!lockD, c: !!lockC };
+    const lockIdx = { m: manualIdxM, i: manualIdxI, d: manualIdxD, c: manualIdxC };
 
     // ângulos iniciais enviados aos peers (todos começam do mesmo)
     const a0 = {
       m: lockEff.m ? angleForIndexEqual(lockIdx.m, MODES.length) : angleM,
       i: lockEff.i ? angleForIndexEqual(lockIdx.i, INT_STEPS.length) : angleI,
       d: lockEff.d ? angleForIndexWeighted(lockIdx.d, slicesDur) : angleD,
+      c: lockEff.c ? angleForIndexEqual(lockIdx.c, CHANNEL_VALUES.length) : angleC,
     };
 
     // dps=0 para lock
     const dps = {
       m: lockEff.m ? 0 : DEFAULT_DPS.m,
       i: lockEff.i ? 0 : DEFAULT_DPS.i,
-      d: lockEff.d ? 0 : DEFAULT_DPS.d
+      d: lockEff.d ? 0 : DEFAULT_DPS.d,
+      c: lockEff.c ? 0 : DEFAULT_DPS.c
     };
 
     return { t:'hold', id, startedAt, a0, dps, lock: lockEff, lockIdx, modeKeys };
@@ -1318,16 +1407,19 @@
     const durationMs = computeDurationMs(holdMs);
     const modeKeys = (Array.isArray(holdEvt.modeKeys) && holdEvt.modeKeys.length) ? holdEvt.modeKeys : MODES.map((m)=>m.key);
     const modeCount = modeKeys.length || MODES.length;
+    const chanCount = CHANNEL_VALUES.length || 1;
 
     // índices finais (host decide). Se lock, fixa.
     const idxM = holdEvt.lock.m ? holdEvt.lockIdx.m : Math.floor(Math.random()*modeCount);
     const idxI = holdEvt.lock.i ? holdEvt.lockIdx.i : Math.floor(Math.random()*INT_STEPS.length);
     const idxD = holdEvt.lock.d ? holdEvt.lockIdx.d : Math.floor(Math.random()*DUR_VALUES.length);
+    const idxC = holdEvt.lock.c ? holdEvt.lockIdx.c : Math.floor(Math.random()*chanCount);
 
     const aTgt = {
       m: angleForIndexEqual(idxM, modeCount),
       i: angleForIndexEqual(idxI, INT_STEPS.length),
       d: angleForIndexWeighted(idxD, slicesDur),
+      c: angleForIndexEqual(idxC, chanCount),
     };
 
     const spins = computeSpins(durationMs);
@@ -1342,7 +1434,7 @@
       lock: holdEvt.lock,
       a0: holdEvt.a0,
       modeKeys,
-      idxM, idxI, idxD,
+      idxM, idxI, idxD, idxC,
       aTgt,
       targets: aTgt,
       spins
@@ -1419,6 +1511,15 @@
   angleM = angleForIndexEqual(initModeIdx, MODES.length); setAngle(wM, angleM); rM.textContent = MODES[initModeIdx]?.label ?? '--';
   angleI = angleForIndexEqual(0, INT_STEPS.length); setAngle(wI, angleI); rI.textContent = INT_STEPS[0];
   angleD = angleForIndexWeighted(0, slicesDur); setAngle(wD, angleD); rD.textContent = DUR_VALUES[0];
+  const chanInitIdx = (()=>{
+    const idx = CHANNEL_VALUES.indexOf(getChannel());
+    if (idx >= 0) return idx;
+    return 0;
+  })();
+  manualIdxC = clamp(chanInitIdx, 0, Math.max(0, CHANNEL_VALUES.length - 1));
+  angleC = angleForIndexEqual(manualIdxC, CHANNEL_VALUES.length);
+  setAngle(wC, angleC);
+  rC.textContent = CHANNEL_VALUES[manualIdxC] ?? '--';
 
   // =========================
   // Bind Flowgate room

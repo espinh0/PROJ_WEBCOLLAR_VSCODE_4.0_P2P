@@ -38,9 +38,6 @@
     gap:14px;
   }
   #customPads .cp-btn:active { transform: translateY(1px); }
-  #customPads .cp-btn.cp-no-level .cp-btn-content {
-    justify-content:flex-start;
-  }
   #customPads .cp-btn-content {
     display:flex;
     align-items:center;
@@ -53,7 +50,25 @@
     line-height: 1;
     color: var(--cp-color, #fcd34d);
     min-width: 64px;
-    text-align:center;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:12px;
+  }
+  #customPads .cp-level.cp-level-no-value {
+    min-width: 56px;
+  }
+  #customPads .cp-level-value {
+    display:block;
+    min-width:48px;
+    text-align:right;
+  }
+  #customPads .cp-level-icon {
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size: inherit;
+    color: var(--cp-color, #fcd34d);
   }
   #customPads .cp-details {
     display:flex;
@@ -67,19 +82,12 @@
     align-items:center;
     gap:8px;
   }
-  #customPads .cp-mode-icon {
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    font-size:1.4rem;
-    color: var(--cp-color, #fcd34d);
-  }
   #customPads .cp-btn.cp-active {
     background: linear-gradient(120deg, rgba(248,113,113,0.22), rgba(127,29,29,0.65));
     color: #ffe5e5;
   }
   #customPads .cp-btn.cp-active .cp-level,
-  #customPads .cp-btn.cp-active .cp-mode-icon,
+  #customPads .cp-btn.cp-active .cp-level-icon,
   #customPads .cp-btn.cp-active .cp-channel-value {
     color: #fda4af;
     border-color: rgba(248,113,113,0.75);
@@ -280,12 +288,10 @@
       wrap.style.setProperty("--cp-color", modeStyle.color);
       wrap.style.borderColor = modeStyle.color;
       wrap.style.background = `linear-gradient(120deg, ${modeStyle.tint}, rgba(12,12,14,0.92))`;
-      if (hideLevel) b.classList.add("cp-no-level");
       b.innerHTML = `<span class="cp-btn-content">
-                        ${hideLevel ? "" : `<span class=\"cp-level\">${it.level}</span>`}
+                        <span class=\"cp-level ${hideLevel ? 'cp-level-no-value' : ''}\">${hideLevel ? '' : `<span class=\"cp-level-value\">${it.level}</span>`}<span class=\"cp-level-icon\"><i class=\"fa-solid ${modeStyle.icon}\"></i></span></span>
                         <span class="cp-details">
                           <strong class="cp-mode">
-                            <span class="cp-mode-icon"><i class="fa-solid ${modeStyle.icon}"></i></span>
                             ${modeLabel}
                           </strong>
                           <span class="cp-channel">
@@ -299,6 +305,18 @@
       // Fallback: se soltar não disparar por algum motivo, corta em 2s.
       let safetyTimer = null;
       let down = false;
+      let suppressClick = false;
+      let suppressTimer = null;
+      const CLICK_SUPPRESS_MS = 80;
+
+      function engagePointerSuppression(){
+        suppressClick = true;
+        clearTimeout(suppressTimer);
+      }
+      function releasePointerSuppression(){
+        clearTimeout(suppressTimer);
+        suppressTimer = setTimeout(() => { suppressClick = false; }, CLICK_SUPPRESS_MS);
+      }
 
       async function holdOn(){
         if (down) return;
@@ -322,6 +340,7 @@
       b.addEventListener("pointerdown", (e) => {
         e.preventDefault();
         b.setPointerCapture?.(e.pointerId);
+        engagePointerSuppression();
         holdOn();
       });
 
@@ -329,12 +348,13 @@
         e.preventDefault();
         try { b.releasePointerCapture?.(e.pointerId); } catch(_){}
         holdOff();
+        releasePointerSuppression();
       });
 
-      b.addEventListener("pointercancel", holdOff);
-      window.addEventListener("blur", holdOff);
+      b.addEventListener("pointercancel", () => { holdOff(); releasePointerSuppression(); });
+      window.addEventListener("blur", () => { holdOff(); releasePointerSuppression(); });
       b.addEventListener("click", (e) => {
-        if (down) return;
+        if (suppressClick) return;
         e.preventDefault();
         holdOn();
         setTimeout(holdOff, 120);

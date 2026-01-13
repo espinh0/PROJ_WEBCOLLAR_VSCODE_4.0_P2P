@@ -826,6 +826,10 @@
     }
   }
 
+  function exposeStopper(){
+    window.__audioCollarStopAllSources = stopAllSources;
+  }
+
   function readLevelsInstant(){
     if (!analyser) return {pct:0, peakPct:0};
 
@@ -1266,6 +1270,7 @@
     setControlState({ mode: window.currentMode, channel: window.channel });
     bindControlBus();
     startControlPolling();
+    exposeStopper();
     setStatus('pronto', false);
     appendLog('Audio→Collar v1.4 inicializado.');
     appendLog('Modo robusto: holdSync (estado + heartbeat + timeout).');

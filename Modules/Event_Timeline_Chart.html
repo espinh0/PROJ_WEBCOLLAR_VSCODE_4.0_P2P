@@ -15,6 +15,33 @@
 
 <script>
 (() => {
+  if (!window.__FS_BUS__) {
+    (function(){
+      const CHANNEL = "fs-score-channel";
+      let bc = null;
+      try { bc = new BroadcastChannel(CHANNEL); } catch (e) { bc = null; }
+      function _onMessage(msg){
+        try {
+          const data = (typeof msg === "string") ? JSON.parse(msg) : msg;
+          window.dispatchEvent(new CustomEvent("fs-score:global", { detail: data }));
+        } catch(_) {}
+      }
+      if (bc) bc.onmessage = (ev)=> _onMessage(ev.data);
+      window.addEventListener("message", (ev)=>{ if (ev.data && ev.data.__fs_score_msg) _onMessage(ev.data.payload); });
+      window.addEventListener("storage", (ev)=>{ if (ev.key === CHANNEL && ev.newValue) _onMessage(JSON.parse(ev.newValue)); });
+      window.__FS_BUS__ = {
+        send(payload){
+          const data = payload || {};
+          if (bc) try { bc.postMessage(data); } catch(_) {}
+          try { if (window.parent && window.parent !== window) window.parent.postMessage({ __fs_score_msg: true, payload: data }, "*"); } catch(_) {}
+          try { (document.querySelectorAll("iframe") || []).forEach((f)=>{ try { f.contentWindow.postMessage({ __fs_score_msg: true, payload: data }, "*"); } catch(_) {} }); } catch(_) {}
+          try { localStorage.setItem(CHANNEL, JSON.stringify(data)); localStorage.removeItem(CHANNEL); } catch(_) {}
+          try { _onMessage(data); } catch(_) {}
+        },
+        on(cb){ if (typeof cb !== "function") return; window.addEventListener("fs-score:global", (ev)=> cb(ev.detail)); }
+      };
+    })();
+  }
   const STATUS_EL = document.getElementById("collarEventStatus");
   const CANVAS = document.getElementById("collarEventCanvas");
   const CLEAR_BTN = document.getElementById("collarEventClear");
@@ -50,6 +77,20 @@
       lastOkTs: 0
     }
   };
+
+  const CHART_ORIGIN_KEY = "chart_origin_v1";
+  const CHART_ORIGIN = (() => {
+    try {
+      let id = sessionStorage.getItem(CHART_ORIGIN_KEY);
+      if (!id) {
+        id = `chart-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+        sessionStorage.setItem(CHART_ORIGIN_KEY, id);
+      }
+      return id;
+    } catch (_) {
+      return `chart-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    }
+  })();
 
   function resetCounters() {
     state.counters = { SHOCK: 0, VIBRATION: 0, LIGHT: 0, BEEP: 0, BTN_STATE: 0 };
@@ -189,6 +230,35 @@
     return { kind: isHoldOn ? "holdon" : "pulse", mode, level, channel };
   }
 
+  function emitChartEvent(payload, meta = {}) {
+    if (!payload || typeof payload !== "object") return;
+    if (!window.__FS_BUS__ || typeof window.__FS_BUS__.send !== "function") return;
+    const ts = Number(meta.ts) || Date.now();
+    const source = meta.source || "serial";
+    const eventPayload = { ...payload, ts, origin: CHART_ORIGIN, source };
+    try { window.__FS_BUS__.send({ type: "fs-chart", payload: eventPayload }); } catch(_) {}
+  }
+
+  function applyChartEvent(payload) {
+    if (!payload || typeof payload !== "object") return;
+    if (payload.origin && payload.origin === CHART_ORIGIN) return;
+    const ts = Number(payload.ts) || Date.now();
+    if (payload.kind === "holdoff") {
+      finalizeHold(ts);
+      return;
+    }
+    if (!payload.mode) return;
+    const parsed = {
+      kind: payload.kind || "pulse",
+      mode: payload.mode,
+      level: payload.level ?? 0,
+      channel: payload.channel ?? "-"
+    };
+    if (payload.btnState) parsed.btnState = payload.btnState;
+    enqueuePoint(makePoint(parsed, { ts, source: payload.source || "peer" }));
+    flushPending();
+  }
+
   function onSerialLine(line) {
     const text = String(line || "").trim();
     if (!text) return;
@@ -213,8 +283,10 @@
     const ts = Date.now();
     if (parsed.kind === "holdoff") {
       finalizeHold(ts);
+      emitChartEvent({ kind: "holdoff" }, { ts, source: "serial" });
       return;
     }
+    emitChartEvent(parsed, { ts, source: "serial" });
     enqueuePoint(makePoint(parsed, { ts, source: "serial" }));
     flushPending();
   }
@@ -593,6 +665,13 @@
       }
     } catch(_){}
   });
+
+  if (window.__FS_BUS__ && typeof window.__FS_BUS__.on === "function") {
+    window.__FS_BUS__.on((msg) => {
+      if (!msg || msg.type !== "fs-chart" || !msg.payload) return;
+      applyChartEvent(msg.payload);
+    });
+  }
 
   loadChartJs()
     .then((Chart) => initChart(Chart))

@@ -100,6 +100,20 @@
       flex-direction: column;
       align-items: stretch;
     }
+    .module-btn-group,
+    .control-action-group {
+      margin-left: 0;
+      width: 100%;
+      justify-content: center;
+    }
+  }
+  @media (max-width: 1024px) {
+    .module-btn-group,
+    .control-action-group {
+      margin-left: 0;
+      width: 100%;
+      justify-content: center;
+    }
   }
   .control-slider-row {
     width: 100%;
@@ -146,7 +160,6 @@
   .chart-block {
     width: 100%;
     transition: max-height .24s ease, opacity .18s ease, margin .18s ease, padding .18s ease;
-    border-radius: 18px;
     margin-bottom: 0;
     overflow: hidden;
   }
@@ -342,6 +355,19 @@
     flex-wrap: wrap;
     gap: 10px;
     justify-content: flex-start;
+  }
+  .module-btn-group {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 10px;
+  }
+  .control-action-group {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 10px;
+    margin-left: auto;
+    justify-content: flex-end;
   }
   .mode-btn {
     --mc-color: #4d71ff;
@@ -549,7 +575,7 @@
     min-height: 48px;
     height: 48px;
     padding: 10px 14px;
-    border-radius: 14px;
+    border-radius: 100%;
     border: 1px solid rgba(250,204,21,0.38);
     background: linear-gradient(120deg, var(--save-tint), rgba(12,12,14,0.92));
     color: #fff7ed;
@@ -1203,16 +1229,6 @@
           </button>
         </div>
       </div>
-      <div class="control-scoreboard-block collapsed mb-3" aria-hidden="true">
-        <div id="controlScoreboardMount" class="control-scoreboard-mount">
-          <div class="scoreboard-embed-state scoreboard-loading-state">Carregando placar...</div>
-        </div>
-      </div>
-      <div class="control-audio-block collapsed mb-3" aria-hidden="true">
-        <div id="controlAudioMount" class="control-audio-mount">
-          <div class="audio-embed-state audio-loading-state">Carregando audio...</div>
-        </div>
-      </div>
       <div class="control-readouts my-3">
         <div class="control-readout">
           <div class="control-readout-label">Modo</div>
@@ -1254,49 +1270,51 @@
       </button>
     </div>
 
-    <button id="btnScoreboardToggle" class="btn btn-scoreboard-toggle" title="Mostrar placar" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
-      <i class="fa-solid fa-flag-checkered"></i>
-    </button>
+    <div class="module-btn-group">
+      <button id="btnScoreboardToggle" class="btn btn-scoreboard-toggle" title="Mostrar placar" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
+        <i class="fa-solid fa-flag-checkered"></i>
+      </button>
 
-    <button id="btnAudioToggle" class="btn btn-audio-toggle" title="Mostrar audio" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
-      <i class="fa-solid fa-headphones"></i>
-    </button>
+      <button id="btnAudioToggle" class="btn btn-audio-toggle" title="Mostrar audio" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
+        <i class="fa-solid fa-headphones"></i>
+      </button>
 
-    <button id="btnNavalToggle" class="btn btn-naval-toggle" title="Mostrar Batalha Naval" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
-      <i class="fa-solid fa-ship"></i>
-    </button>
+      <button id="btnNavalToggle" class="btn btn-naval-toggle" title="Mostrar Batalha Naval" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
+        <i class="fa-solid fa-ship"></i>
+      </button>
 
-    <button id="btnPulseToggle" class="btn btn-pulse-toggle" title="Mostrar Sequenciador" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
-      <i class="fa-solid fa-sliders"></i>
-    </button>
+      <button id="btnPulseToggle" class="btn btn-pulse-toggle" title="Mostrar Sequenciador" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
+        <i class="fa-solid fa-sliders"></i>
+      </button>
 
-    <button id="btnVideoToggle" class="btn btn-video-toggle" title="Mostrar Video" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
-      <i class="fa-solid fa-clapperboard"></i>
-    </button>
-    <button id="btnChartToggle" class="btn btn-chart-toggle" title="Exibir/ocultar gráfico" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
-      <i class="fa-solid fa-chart-line"></i>
-    </button>
+      <button id="btnVideoToggle" class="btn btn-video-toggle" title="Mostrar Video" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
+        <i class="fa-solid fa-clapperboard"></i>
+      </button>
+      <button id="btnChartToggle" class="btn btn-chart-toggle" title="Exibir/ocultar gráfico" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
+        <i class="fa-solid fa-chart-line"></i>
+      </button>
+    </div>
 
-    <div class="ms-auto d-flex align-items-center gap-2 justify-content-end">
+    <div class="control-action-group">
       <div class="channel-switch form-check form-switch m-0">
         <span class="channel-switch-label">Canal</span>
         <span id="channelSwitchValue" class="channel-switch-value">1</span>
-        <input class="form-check-input" type="checkbox" id="chanSwitch" aria-label="Canal 1 ou 2" title="Canal 1 ou 2 (host-only)" data-bs-toggle="tooltip"/>
+        <input class="form-check-input" type="checkbox" id="chanSwitch" aria-label="Canal 1 ou 2" title="Canal 1 ou 2" data-bs-toggle="tooltip"/>
       </div>
+
+      <button id="btnSend" class="btn btn-send" title="Enviar comando" data-bs-toggle="tooltip">
+        <i class="fa-solid fa-power-off"></i>
+      </button>
+
+      <button id="cpAdd" class="btn btn-save-shortcut" type="button" title="Salvar atalho personalizado" data-bs-toggle="tooltip">
+        <i class="fa-solid fa-floppy-disk"></i>
+        <span class="d-none d-md-inline">Salvar</span>
+      </button>
+
+      <button id="btnAdvancedToggle" class="control-collapse-btn" title="Opcoes avancadas" data-bs-toggle="tooltip" aria-expanded="false">
+        <i class="fa-solid fa-chevron-down"></i>
+      </button>
     </div>
-
-    <button id="btnSend" class="btn btn-send" title="Enviar comando" data-bs-toggle="tooltip">
-      <i class="fa-solid fa-power-off"></i>
-    </button>
-
-    <button id="cpAdd" class="btn btn-save-shortcut" type="button" title="Salvar atalho personalizado" data-bs-toggle="tooltip">
-      <i class="fa-solid fa-floppy-disk"></i>
-      <span class="d-none d-md-inline">Salvar</span>
-    </button>
-
-    <button id="btnAdvancedToggle" class="control-collapse-btn" title="Opcoes avancadas" data-bs-toggle="tooltip" aria-expanded="false">
-      <i class="fa-solid fa-chevron-down"></i>
-    </button>
 
   </div>
 
@@ -1356,6 +1374,16 @@
       </div>
         <!-- Chart block removido do painel avançado -->
   </div>
+    <div class="control-scoreboard-block collapsed mb-3" aria-hidden="true">
+      <div id="controlScoreboardMount" class="control-scoreboard-mount">
+        <div class="scoreboard-embed-state scoreboard-loading-state">Carregando placar...</div>
+      </div>
+    </div>
+    <div class="control-audio-block collapsed mb-3" aria-hidden="true">
+      <div id="controlAudioMount" class="control-audio-mount">
+        <div class="audio-embed-state audio-loading-state">Carregando audio...</div>
+      </div>
+    </div>
     <div class="naval-module-slot collapsed mb-3" aria-hidden="true">
       <div id="navalModuleMount">
         <div class="naval-embed-state naval-loading-state">Carregando Batalha Naval...</div>
@@ -1802,14 +1830,57 @@
   }
   loadRouletteWidget();
 
-  function emitControlPatch(patch){
+  let sendControlToRoom = null;
+  let sendChartToRoom = null;
+  let boundControlRoom = null;
+
+  function buildControlSnapshot(reason){
+    return {
+      mode: currentMode,
+      level,
+      channel,
+      advancedOpen,
+      scoreboardOpen,
+      audioOpen,
+      navalOpen,
+      pulseOpen,
+      videoOpen,
+      chartOpen,
+      pulses: advanced.pulses,
+      gapMs: advanced.delayMs,
+      baseMs: advanced.durationMs,
+      preDelayMs: advanced.preDelayMs,
+      reason: reason || "snapshot"
+    };
+  }
+
+  function sendControlPayload(payload, opts = {}){
+    const toBus = opts.toBus !== false;
+    const toRoom = opts.toRoom !== false;
+    if (toBus && window.__FS_BUS__ && typeof window.__FS_BUS__.send === "function") {
+      try { window.__FS_BUS__.send({ type: "fs-control", payload }); } catch(_){}
+    }
+    if (toRoom && typeof sendControlToRoom === "function") {
+      try { sendControlToRoom(payload); } catch(_){}
+    }
+  }
+
+  function sendChartPayload(payload, opts = {}){
+    const toBus = opts.toBus !== false;
+    const toRoom = opts.toRoom !== false;
+    if (toBus && window.__FS_BUS__ && typeof window.__FS_BUS__.send === "function") {
+      try { window.__FS_BUS__.send({ type: "fs-chart", payload }); } catch(_){}
+    }
+    if (toRoom && typeof sendChartToRoom === "function") {
+      try { sendChartToRoom(payload); } catch(_){}
+    }
+  }
+
+  function emitControlPatch(patch, opts = {}){
     if (!patch || typeof patch !== "object") return;
-    const ts = Date.now();
-    try {
-      if (window.__FS_BUS__ && typeof window.__FS_BUS__.send === "function") {
-        window.__FS_BUS__.send({ type: "fs-control", payload: { ...patch, origin: CONTROL_ORIGIN, ts } });
-      }
-    } catch(_){}
+    const ts = Number.isFinite(opts.ts) ? opts.ts : Date.now();
+    const payload = { ...patch, origin: CONTROL_ORIGIN, ts };
+    sendControlPayload(payload, opts);
   }
 
   function sendCommand(text){
@@ -2079,7 +2150,11 @@
       if (icon) icon.className = audioOpen ? "fa-solid fa-wave-square" : "fa-solid fa-headphones";
       updateAudioToggleTooltip(audioOpen ? "Ocultar audio" : "Mostrar audio");
     }
+    if (!audioOpen && typeof window.__audioCollarStopAllSources === "function") {
+      try { window.__audioCollarStopAllSources(); } catch(_){}
+    }
     if (opts?.persist !== false) persistState();
+    if (opts?.broadcast !== false) emitControlPatch({ audioOpen, reason: opts?.reason || "audio-toggle" });
   }
 
   function updateNavalToggleTooltip(label){
@@ -2119,6 +2194,7 @@
       updateNavalToggleTooltip(navalOpen ? "Ocultar Batalha Naval" : "Mostrar Batalha Naval");
     }
     if (opts?.persist !== false) persistState();
+    if (opts?.broadcast !== false) emitControlPatch({ navalOpen, reason: opts?.reason || "naval-toggle" });
   }
 
   function updatePulseToggleTooltip(label){
@@ -2158,6 +2234,7 @@
       updatePulseToggleTooltip(pulseOpen ? "Ocultar Sequenciador" : "Mostrar Sequenciador");
     }
     if (opts?.persist !== false) persistState();
+    if (opts?.broadcast !== false) emitControlPatch({ pulseOpen, reason: opts?.reason || "pulse-toggle" });
   }
 
   function updateVideoToggleTooltip(label){
@@ -2197,6 +2274,7 @@
       updateVideoToggleTooltip(videoOpen ? "Ocultar Video" : "Mostrar Video");
     }
     if (opts?.persist !== false) persistState();
+    if (opts?.broadcast !== false) emitControlPatch({ videoOpen, reason: opts?.reason || "video-toggle" });
   }
 
   function setChartOpen(next, opts){
@@ -2215,6 +2293,7 @@
       chartToggleBtn.setAttribute("aria-expanded", chartOpen ? "true" : "false");
     }
     if (opts?.persist !== false) persistState();
+    if (opts?.broadcast !== false) emitControlPatch({ chartOpen, reason: opts?.reason || "chart-toggle" });
   }
 
   function getLiveAdvanced(){
@@ -2432,7 +2511,7 @@
     advCountdownTimer = setInterval(tick, 120);
   }
 
-  function setAdvancedOpen(open){
+  function setAdvancedOpen(open, opts = {}){
     advancedOpen = !!open;
     window.__ADVANCED_PANEL_OPEN__ = advancedOpen;
     if (advancedPanelEl) {
@@ -2444,10 +2523,13 @@
       const icon = advancedToggleBtn.querySelector("i");
       if (icon) icon.className = open ? "fa-solid fa-chevron-up" : "fa-solid fa-chevron-down";
     }
-    persistState();
+    if (opts.persist !== false) persistState();
     syncAdvancedReadouts();
     if (!advancedOpen) {
       requestAdvStop();
+    }
+    if (opts.broadcast !== false) {
+      emitControlPatch({ advancedOpen, reason: opts.reason || "advanced-toggle" });
     }
   }
 
@@ -3486,30 +3568,13 @@
     }
   });
 
-  function handleBusMessage(msg){
-    if (!msg || !msg.type) return;
-    if (msg.type === "request-control") {
-      if (msg.from && msg.from === CONTROL_ORIGIN) return;
-      emitControlPatch({
-        mode: currentMode,
-        level,
-        channel,
-        pulses: advanced.pulses,
-        gapMs: advanced.delayMs,
-        baseMs: advanced.durationMs,
-        preDelayMs: advanced.preDelayMs,
-        armed: scoreboardOpen,
-        reason: "request-sync"
-      });
-      return;
-    }
-    if (msg.type !== "fs-control" || !msg.payload) return;
-    const payload = msg.payload;
+  function applyControlPayload(payload, opts = {}){
+    if (!payload || typeof payload !== "object") return false;
     const ts = Number.isFinite(payload.ts) ? payload.ts : (payload.ts ? Number(payload.ts) : 0);
     const origin = payload.origin || "unknown";
-    if (origin === CONTROL_ORIGIN) return;
+    if (origin === CONTROL_ORIGIN) return false;
     const prev = lastControlTs.get(origin) || 0;
-    if (ts && ts <= prev) return;
+    if (ts && ts <= prev) return false;
     if (ts) lastControlTs.set(origin, ts);
     if (payload.mode && MODES.includes(payload.mode)) {
       setMode(payload.mode, { broadcast:false, reason:"bus-sync" });
@@ -3523,15 +3588,101 @@
     if (payload.level != null) {
       setLevel(payload.level, { broadcast:false, reason:"bus-sync" });
     }
+    if (payload.advancedOpen != null) {
+      setAdvancedOpen(!!payload.advancedOpen, { broadcast:false });
+    }
+    if (payload.audioOpen != null) {
+      setAudioOpen(!!payload.audioOpen, { force:true, broadcast:false });
+    }
+    if (payload.navalOpen != null) {
+      setNavalOpen(!!payload.navalOpen, { force:true, broadcast:false });
+    }
+    if (payload.pulseOpen != null) {
+      setPulseOpen(!!payload.pulseOpen, { force:true, broadcast:false });
+    }
+    if (payload.videoOpen != null) {
+      setVideoOpen(!!payload.videoOpen, { force:true, broadcast:false });
+    }
+    if (payload.chartOpen != null) {
+      setChartOpen(!!payload.chartOpen, { force:true, broadcast:false });
+    }
     applyAdvancedPatch(payload, { broadcast:false, reason:"bus-sync" });
-    if (payload.armed != null) {
+    if (payload.scoreboardOpen != null) {
+      setScoreboardOpen(!!payload.scoreboardOpen, { force:true, signalArmed:false });
+    } else if (payload.armed != null) {
       setScoreboardOpen(!!payload.armed, { force:true, signalArmed:false });
     }
+    if (opts.relayBus) sendControlPayload(payload, { toBus:true, toRoom:false });
+    if (opts.relayRoom) sendControlPayload(payload, { toBus:false, toRoom:true });
+    return true;
+  }
+
+  function bindControlRoom(nextRoom){
+    boundControlRoom = nextRoom || null;
+    sendControlToRoom = null;
+    sendChartToRoom = null;
+    if (!boundControlRoom || typeof boundControlRoom.makeAction !== "function") return;
+    try {
+      const pair = boundControlRoom.makeAction("fs-control");
+      if (Array.isArray(pair) && pair.length >= 2) {
+        sendControlToRoom = pair[0];
+        const getControl = pair[1];
+        if (typeof getControl === "function") {
+          getControl((payload) => {
+            if (!payload) return;
+            if (payload.__fs_req === "control-state") {
+              if (payload.origin && payload.origin === CONTROL_ORIGIN) return;
+              const tsNow = Date.now();
+              const snap = buildControlSnapshot("request-sync");
+              sendControlPayload({ ...snap, ts: tsNow, origin: CONTROL_ORIGIN }, { toBus:false, toRoom:true });
+              return;
+            }
+            applyControlPayload(payload, { relayBus:true });
+          });
+        }
+      }
+    } catch(_){}
+    try { sendControlPayload({ __fs_req:"control-state", origin: CONTROL_ORIGIN }, { toBus:false, toRoom:true }); } catch(_){}
+    try {
+      const pair = boundControlRoom.makeAction("fs-chart");
+      if (Array.isArray(pair) && pair.length >= 2) {
+        sendChartToRoom = pair[0];
+        const getChart = pair[1];
+        if (typeof getChart === "function") {
+          getChart((payload) => {
+            if (!payload) return;
+            sendChartPayload({ ...payload, via: "room" }, { toBus:true, toRoom:false });
+          });
+        }
+      }
+    } catch(_){}
+  }
+
+  function handleBusMessage(msg){
+    if (!msg || !msg.type) return;
+    if (msg.type === "request-control") {
+      if (msg.from && msg.from === CONTROL_ORIGIN) return;
+      emitControlPatch(buildControlSnapshot("request-sync"), { toRoom:false });
+      return;
+    }
+    if (msg.type === "fs-chart") {
+      if (!msg.payload) return;
+      if (msg.payload.via === "room") return;
+      sendChartPayload({ ...msg.payload, via: "bus" }, { toBus:false, toRoom:true });
+      return;
+    }
+    if (msg.type !== "fs-control" || !msg.payload) return;
+    applyControlPayload(msg.payload, { relayRoom:true });
   }
   if (window.__FS_BUS__ && typeof window.__FS_BUS__.on === "function") {
     window.__FS_BUS__.on(handleBusMessage);
     try { window.__FS_BUS__.send({ type:"request-control", from: CONTROL_ORIGIN }); } catch(_){}
   }
+
+  window.addEventListener("flowgate:room_changed", (ev) => bindControlRoom(ev?.detail?.room || null));
+  window.addEventListener("trystero:room", (ev) => bindControlRoom(ev?.detail?.room || null));
+  if (window.Flowgate && window.Flowgate.room) bindControlRoom(window.Flowgate.room);
+  else if (window.__TRYSTERO_ROOM__) bindControlRoom(window.__TRYSTERO_ROOM__);
 
   // Inicial
   const savedState = loadState();
@@ -3551,14 +3702,14 @@
   setMode(initialMode);
   setLevel(initialLevel, { broadcast:false });
   setChannel(initialChannel);
-  setScoreboardOpen(initialScoreboardOpen, { persist:false, force:true });
-  setAudioOpen(initialAudioOpen, { persist:false, force:true });
-  setNavalOpen(initialNavalOpen, { persist:false, force:true });
-  setPulseOpen(initialPulseOpen, { persist:false, force:true });
-  setVideoOpen(initialVideoOpen, { persist:false, force:true });
-  setChartOpen(initialChartOpen, { persist:false, force:true });
+  setScoreboardOpen(initialScoreboardOpen, { persist:false, force:true, signalArmed:false });
+  setAudioOpen(initialAudioOpen, { persist:false, force:true, broadcast:false });
+  setNavalOpen(initialNavalOpen, { persist:false, force:true, broadcast:false });
+  setPulseOpen(initialPulseOpen, { persist:false, force:true, broadcast:false });
+  setVideoOpen(initialVideoOpen, { persist:false, force:true, broadcast:false });
+  setChartOpen(initialChartOpen, { persist:false, force:true, broadcast:false });
   syncAdvancedUi();
-  setAdvancedOpen(advancedOpen);
+  setAdvancedOpen(advancedOpen, { broadcast:false });
   stopAdvCountdown(false);
   ensureSliderTooltip(`${initialLevel}%`);
   syncLevelInputWidth();

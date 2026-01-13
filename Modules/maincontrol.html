@@ -941,7 +941,7 @@
   .advanced-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 12px;
+    gap: 5rem;
   }
   .advanced-chart-block {
     margin-top: 16px;
@@ -1010,20 +1010,18 @@
     align-items: stretch;
     border-radius: 14px;
     overflow: hidden;
-    border: 1px solid rgba(255,255,255,0.08);
+    border: 0px solid rgba(255,255,255,0.08);
     background: transparent;
-    box-shadow: 0 6px 12px rgba(0,0,0,0.28);
   }
   .number-spinner:focus-within {
     border-color: #4d71ff;
-    box-shadow: 0 0 0 3px rgba(77,113,255,0.18);
   }
   .number-spinner .spin-btn {
     border: none;
     background: transparent;
     color: #d1d5db;
-    font-size: 1.2rem;
-    font-weight: 700;
+    font-size: 2.5rem;
+    font-weight: 600;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1241,38 +1239,30 @@
         <i class="fa-solid fa-stop"></i>
       </button>
     </div>
-      <div class="advanced-grid">
+      <div class="advanced-grid my-3">
         <div>
-          <label for="advPulses" class="form-label small text-secondary mb-1">Numero de pulsos</label>
           <div class="number-spinner">
             <button class="spin-btn" type="button" data-spin="dec" aria-label="Diminuir numero de pulsos">-</button>
             <input id="advPulses" class="form-control form-control-sm" type="number" min="1" step="1" value="1" title="Quantidade de pulsos automaticos ao clicar" data-bs-toggle="tooltip"/>
             <button class="spin-btn" type="button" data-spin="inc" aria-label="Aumentar numero de pulsos">+</button>
           </div>
+          <label for="advPulses" class="form-label small text-secondary mt-1 text-center d-block">Numero de pulsos</label>
         </div>
         <div>
-          <label for="advDuration" class="form-label small text-secondary mb-1">Duracao (s)</label>
           <div class="number-spinner">
             <button class="spin-btn" type="button" data-spin="dec" aria-label="Diminuir duracao">-</button>
-            <input id="advDuration" class="form-control form-control-sm" type="number" min="0.05" step="0.05" value="0.18" title="Duracao de cada pulso (segundos)" data-bs-toggle="tooltip"/>
+            <input id="advDuration" class="form-control form-control-sm" type="number" min="0.05" step="0.5" value="0.18" title="Duracao de cada pulso (segundos)" data-bs-toggle="tooltip"/>
             <button class="spin-btn" type="button" data-spin="inc" aria-label="Aumentar duracao">+</button>
           </div>
+          <label for="advDuration" class="form-label small text-secondary mt-1 text-center d-block">Duracao (s)</label>
         </div>
         <div>
-          <label for="advDelay" class="form-label small text-secondary mb-1">Intervalo entre pulsos (s)</label>
           <div class="number-spinner">
             <button class="spin-btn" type="button" data-spin="dec" aria-label="Diminuir intervalo entre pulsos">-</button>
-            <input id="advDelay" class="form-control form-control-sm" type="number" min="0" step="0.05" value="1.00" title="Intervalo entre pulsos automaticos (segundos)" data-bs-toggle="tooltip"/>
+            <input id="advDelay" class="form-control form-control-sm" type="number" min="0" step="0.5" value="1.00" title="Intervalo entre pulsos automaticos (segundos)" data-bs-toggle="tooltip"/>
             <button class="spin-btn" type="button" data-spin="inc" aria-label="Aumentar intervalo entre pulsos">+</button>
           </div>
-        </div>
-        <div>
-          <label for="advPreDelay" class="form-label small text-secondary mb-1">Atraso inicial (s)</label>
-          <div class="number-spinner">
-            <button class="spin-btn" type="button" data-spin="dec" aria-label="Diminuir atraso inicial">-</button>
-            <input id="advPreDelay" class="form-control form-control-sm" type="number" min="0" step="0.05" value="0.00" title="Tempo antes de iniciar os pulsos (segundos)" data-bs-toggle="tooltip"/>
-            <button class="spin-btn" type="button" data-spin="inc" aria-label="Aumentar atraso inicial">+</button>
-          </div>
+          <label for="advDelay" class="form-label small text-secondary mt-1 text-center d-block">Intervalo entre pulsos (s)</label>
         </div>
       </div>
         <!-- Chart block removido do painel avançado -->
@@ -1305,6 +1295,22 @@
   </div>
 </div>
 </div>
+</div>
+
+<div class="modal fade" id="flowgate-module-modal" tabindex="-1" aria-labelledby="flowgate-module-modal-label" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content" style="background:#111;border:1px solid #333;color:#e5e7eb;">
+      <div class="modal-header" style="border-bottom:1px solid #2a2a2a;">
+        <h5 class="modal-title" id="flowgate-module-modal-label">
+          <i class="fa-solid fa-gear me-2"></i>Flowgate
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body">
+        <div id="flowgate-module-modal-body"></div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -2191,8 +2197,8 @@
         bump(dir); // primeira interação imediata
         clearHoldTimers();
         holdDelayTimer = setTimeout(() => {
-          holdInterval = setInterval(() => bump(dir), 90);
-        }, 320);
+          holdInterval = setInterval(() => bump(dir), 200);
+        }, 450);
       };
       spinner.querySelectorAll("button[data-spin]").forEach(btn => {
         const dir = btn.dataset.spin === "inc" ? 1 : -1;
@@ -2204,7 +2210,7 @@
         ["pointerup","pointerleave","pointercancel"].forEach(ev => {
           btn.addEventListener(ev, () => {
             clearHoldTimers();
-            suppressClick = false;
+            if (ev !== "pointerup") suppressClick = false;
           });
         });
         // fallback para teclado/space/enter
@@ -2215,7 +2221,6 @@
       });
       window.addEventListener("pointerup", () => {
         clearHoldTimers();
-        suppressClick = false;
       }, { passive: true });
     });
   }
@@ -2837,13 +2842,44 @@
   ensureAudioMuteGuard();
   setInterfaceSoundMuted(readSoundPreference(), { skipPersist: true, force: true });
 
+  function ensureFlowgateModal() {
+    let modalEl = document.getElementById("flowgate-module-modal");
+    if (modalEl) {
+      const hiddenHostWrap = modalEl.closest(".host-only");
+      if (hiddenHostWrap && document.body) {
+        document.body.appendChild(modalEl);
+      }
+      return modalEl;
+    }
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = `
+      <div class="modal fade" id="flowgate-module-modal" tabindex="-1" aria-labelledby="flowgate-module-modal-label" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+          <div class="modal-content" style="background:#111;border:1px solid #333;color:#e5e7eb;">
+            <div class="modal-header" style="border-bottom:1px solid #2a2a2a;">
+              <h5 class="modal-title" id="flowgate-module-modal-label">
+                <i class="fa-solid fa-gear me-2"></i>Flowgate
+              </h5>
+              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+              <div id="flowgate-module-modal-body"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(wrapper.firstElementChild);
+    return document.getElementById("flowgate-module-modal");
+  }
+
   function openFlowgateModalFromControl(){
     const navTrigger = document.getElementById("mod-flowgate");
     if (navTrigger && typeof navTrigger.click === "function") {
       navTrigger.click();
       return true;
     }
-    const modalEl = document.getElementById("flowgate-module-modal");
+    const modalEl = ensureFlowgateModal();
     if (!modalEl) {
       const panel = document.getElementById("flowgate-panel");
       if (panel && typeof panel.scrollIntoView === "function") {

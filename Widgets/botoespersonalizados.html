@@ -819,6 +819,24 @@
     const mode = readMode();
     const level = (mode === "SHOCK" || mode === "VIBRATION") ? readLevel() : 0;
     const channel = readChannel();
+    if ((mode === "SHOCK" || mode === "VIBRATION") && level <= 0) {
+      notifyUser("Nivel deve ser maior que 0 para choque/vibracao.", "leave");
+      return;
+    }
+    if (isAdvancedPanelEnabled()) {
+      const elPulses = document.getElementById("advPulses");
+      const elDuration = document.getElementById("advDuration");
+      const rawPulses = parseNumericInput(elPulses);
+      const rawDuration = parseNumericInput(elDuration);
+      if (rawPulses === 0) {
+        notifyUser("Pulsos deve ser maior que 0.", "leave");
+        return;
+      }
+      if (rawDuration === 0) {
+        notifyUser("Duracao deve ser maior que 0.", "leave");
+        return;
+      }
+    }
     const advanced = readAdvancedSnapshot();
 
     const id = "cp_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2,8);
@@ -831,13 +849,20 @@
   }
 
   // ====== Eventos ======
+  function notifyUser(msg, type){
+    if (typeof window.notify === "function") {
+      window.notify({ text: msg, type: type || "info", ttl: 3200 });
+    } else {
+      alert(msg);
+    }
+  }
   function bindAddButton(){
     if (addBound) return true;
     const found = document.getElementById("cpAdd");
     if (!found) return false;
     btnAdd = found;
     btnAdd.addEventListener("click", () => {
-      try { addCurrent(); } catch (e) { alert(e.message || "Falha ao adicionar."); }
+      try { addCurrent(); } catch (e) { notifyUser(e.message || "Falha ao adicionar.", "leave"); }
     });
     addBound = true;
     return true;

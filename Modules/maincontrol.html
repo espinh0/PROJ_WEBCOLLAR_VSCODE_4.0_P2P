@@ -545,7 +545,9 @@
     --save-color: #facc15;
     --save-tint: rgba(250,204,21,0.18);
     --save-tint-strong: rgba(250,204,21,0.32);
+    min-width: 48px;
     min-height: 48px;
+    height: 48px;
     padding: 10px 14px;
     border-radius: 14px;
     border: 1px solid rgba(250,204,21,0.38);
@@ -557,6 +559,7 @@
     gap: 8px;
     box-shadow: 0 8px 18px rgba(0,0,0,0.28);
     transition: transform .15s ease, box-shadow .2s ease, border-color .15s ease, background .15s ease, color .12s ease;
+    line-height: 1;
   }
   .btn-save-shortcut i {
     color: var(--save-color);
@@ -1460,6 +1463,19 @@
   let levelTooltipAnchor = null;
   let levelTooltipVisible = false;
   const LEVEL_PATCH_REASON = "remote-level";
+  const CONTROL_ORIGIN_KEY = "remote_control_origin_v1";
+  const CONTROL_ORIGIN = (() => {
+    try {
+      let id = sessionStorage.getItem(CONTROL_ORIGIN_KEY);
+      if (!id) {
+        id = `rc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+        sessionStorage.setItem(CONTROL_ORIGIN_KEY, id);
+      }
+      return id;
+    } catch (_) {
+      return `rc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    }
+  })();
   const lastControlTs = new Map(); // origin -> ts
   let levelDebounce = null;
   const ADV_DEFAULTS = { pulses: 1, durationMs: 180, delayMs: 1000, preDelayMs: 0 };
@@ -1791,7 +1807,7 @@
     const ts = Date.now();
     try {
       if (window.__FS_BUS__ && typeof window.__FS_BUS__.send === "function") {
-        window.__FS_BUS__.send({ type: "fs-control", payload: { ...patch, origin: "remote-control", ts } });
+        window.__FS_BUS__.send({ type: "fs-control", payload: { ...patch, origin: CONTROL_ORIGIN, ts } });
       }
     } catch(_){}
   }
@@ -1927,6 +1943,7 @@
       mode: currentMode,
       level,
       channel,
+      pulses: advanced.pulses,
       gapMs: advanced.delayMs,
       baseMs: advanced.durationMs,
       preDelayMs: advanced.preDelayMs,
@@ -2221,6 +2238,34 @@
     return normalizeAdvancedState(next);
   }
 
+  function applyAdvancedPatch(payload, opts = {}){
+    if (!payload || typeof payload !== "object") return;
+    const next = { ...advanced };
+    let changed = false;
+    if (payload.pulses != null && Number.isFinite(Number(payload.pulses))) {
+      next.pulses = Number(payload.pulses);
+      changed = true;
+    }
+    if (payload.baseMs != null && Number.isFinite(Number(payload.baseMs))) {
+      next.durationMs = Number(payload.baseMs);
+      changed = true;
+    }
+    if (payload.gapMs != null && Number.isFinite(Number(payload.gapMs))) {
+      next.delayMs = Number(payload.gapMs);
+      changed = true;
+    }
+    if (payload.preDelayMs != null && Number.isFinite(Number(payload.preDelayMs))) {
+      next.preDelayMs = Number(payload.preDelayMs);
+      changed = true;
+    }
+    if (!changed) return;
+    advanced = normalizeAdvancedState(next);
+    syncAdvancedUi();
+    syncAdvancedReadouts();
+    if (opts.persist !== false) persistState();
+    if (opts.broadcast !== false) broadcastBasics(opts.reason || "advanced-sync");
+  }
+
   function updateAdvancedValue(key, raw){
     if (!advanced) advanced = { ...ADV_DEFAULTS };
     if (key === "durationMs" || key === "delayMs" || key === "preDelayMs") {
@@ -2430,7 +2475,7 @@
     el.setAttribute("aria-hidden", show ? "false" : "true");
   }
 
-  function setMode(m){
+  function setMode(m, opts = {}){
     currentMode = m; window.currentMode = m;
     const showLevel = modeSupportsLevel(m);
     setSectionVisibility(sliderRowEl, showLevel);
@@ -2447,8 +2492,8 @@
     syncModeReadout();
     updateLevelUi(level);
     log(`Modo: ${m}`);
-    persistState();
-    broadcastBasics("mode-change");
+    if (opts.persist !== false) persistState();
+    if (opts.broadcast !== false) broadcastBasics(opts.reason || "mode-change");
   }
   function cycleMode(direction=1){
     const idx = MODES.indexOf(currentMode);
@@ -2472,7 +2517,7 @@
     if (!changed && broadcast === false) return; // evita refazer tooltip em loop de mesma leitura
   }
 
-  function setChannel(c){
+  function setChannel(c, opts = {}){
     channel = c; window.channel = c;
     const sw = $("#chanSwitch");
     if (sw) sw.checked = channel === 2;
@@ -2480,8 +2525,8 @@
     if (label) label.textContent = String(channel);
     log(`Canal: ${channel}`);
     syncChannelReadout();
-    persistState();
-    broadcastBasics("channel-change");
+    if (opts.persist !== false) persistState();
+    if (opts.broadcast !== false) broadcastBasics(opts.reason || "channel-change");
   }
 
   function buildCmdLine(durationOverride){
@@ -3441,19 +3486,51 @@
     }
   });
 
-  function handleControlPatch(msg){
-    if (!msg || msg.type !== "fs-control" || !msg.payload) return;
-    const ts = Number.isFinite(msg.payload.ts) ? msg.payload.ts : (msg.payload.ts ? Number(msg.payload.ts) : 0);
-    const origin = msg.payload.origin || "unknown";
+  function handleBusMessage(msg){
+    if (!msg || !msg.type) return;
+    if (msg.type === "request-control") {
+      if (msg.from && msg.from === CONTROL_ORIGIN) return;
+      emitControlPatch({
+        mode: currentMode,
+        level,
+        channel,
+        pulses: advanced.pulses,
+        gapMs: advanced.delayMs,
+        baseMs: advanced.durationMs,
+        preDelayMs: advanced.preDelayMs,
+        armed: scoreboardOpen,
+        reason: "request-sync"
+      });
+      return;
+    }
+    if (msg.type !== "fs-control" || !msg.payload) return;
+    const payload = msg.payload;
+    const ts = Number.isFinite(payload.ts) ? payload.ts : (payload.ts ? Number(payload.ts) : 0);
+    const origin = payload.origin || "unknown";
+    if (origin === CONTROL_ORIGIN) return;
     const prev = lastControlTs.get(origin) || 0;
     if (ts && ts <= prev) return;
     if (ts) lastControlTs.set(origin, ts);
-    if (msg.payload.level == null) return;
-    setLevel(msg.payload.level, { broadcast:false, reason:"bus-sync" });
+    if (payload.mode && MODES.includes(payload.mode)) {
+      setMode(payload.mode, { broadcast:false, reason:"bus-sync" });
+    }
+    if (payload.channel != null) {
+      const nextChannel = Number(payload.channel);
+      if (Number.isFinite(nextChannel)) {
+        setChannel(nextChannel, { broadcast:false, reason:"bus-sync" });
+      }
+    }
+    if (payload.level != null) {
+      setLevel(payload.level, { broadcast:false, reason:"bus-sync" });
+    }
+    applyAdvancedPatch(payload, { broadcast:false, reason:"bus-sync" });
+    if (payload.armed != null) {
+      setScoreboardOpen(!!payload.armed, { force:true, signalArmed:false });
+    }
   }
   if (window.__FS_BUS__ && typeof window.__FS_BUS__.on === "function") {
-    window.__FS_BUS__.on(handleControlPatch);
-    try { window.__FS_BUS__.send({ type:"request-control", from:"remote-control" }); } catch(_){}
+    window.__FS_BUS__.on(handleBusMessage);
+    try { window.__FS_BUS__.send({ type:"request-control", from: CONTROL_ORIGIN }); } catch(_){}
   }
 
   // Inicial

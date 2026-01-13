@@ -1,4 +1,3 @@
-<script>
 // Controle de visibilidade para elementos exclusivos do host
 (function () {
   const HOST_CLASS = 'host-only';
@@ -60,4 +59,3 @@
   window.addEventListener('flowgate:local_tags_changed', () => applyVisibility());
   window.addEventListener('trystero:localTags', () => applyVisibility());
 })();
-</script>

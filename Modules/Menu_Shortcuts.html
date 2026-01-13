@@ -104,12 +104,6 @@
   .menu-shortcuts-bar:not(:hover) .menu-shortcuts-inner details > div {
     display: none;
   }
-  .menu-keepawake-slot {
-    margin-top: 1rem;
-  }
-  .menu-shortcuts-bar:not(:hover) .menu-keepawake-slot {
-    display: none;
-  }
   .menu-shortcuts-bar:not(:hover) .menu-shortcuts-inner {
     padding-top: 0.75rem;
   }
@@ -133,7 +127,6 @@
       <button id="mod-fscore-config" class="nav-link" type="button">
         <i class="fa-solid fa-sliders me-1"></i><span class="menu-label">Config Placar</span>
       </button>
-      <div id="menu-keepawake-slot" class="menu-keepawake-slot"></div>
     </nav>
   </div>
 </div>
@@ -165,6 +158,22 @@
       </div>
       <div class="modal-body">
         <div id="flowgate-module-modal-body"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="keepawake-module-modal" tabindex="-1" aria-labelledby="keepawake-module-modal-label" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content" style="background:#111;border:1px solid #333;color:#e5e7eb;">
+      <div class="modal-header" style="border-bottom:1px solid #2a2a2a;">
+        <h5 class="modal-title" id="keepawake-module-modal-label">
+          <i class="fa-solid fa-moon me-2"></i>Keep-awake
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body">
+        <div id="keepawake-module-modal-body"></div>
       </div>
     </div>
   </div>
@@ -312,15 +321,15 @@
     modalEl.removeAttribute("aria-hidden");
   }
 
-  function moveKeepawakeModuleIntoSidebar() {
-    const keepawakeSlot = document.getElementById("menu-keepawake-slot");
-    if (!keepawakeSlot || keepawakeSlot.dataset.bound === "true") return false;
+  function moveKeepawakeModuleIntoModal() {
+    const modalBody = document.getElementById("keepawake-module-modal-body");
+    if (!modalBody || modalBody.dataset.bound === "true") return false;
     const slot = document.querySelector('section[data-module-src="Modules/Keepawake.html"]');
     if (!slot || !slot.children.length) return false;
     const wrapper = document.createElement("div");
     while (slot.firstChild) wrapper.appendChild(slot.firstChild);
-    keepawakeSlot.appendChild(wrapper);
-    keepawakeSlot.dataset.bound = "true";
+    modalBody.appendChild(wrapper);
+    modalBody.dataset.bound = "true";
     slot.style.display = "none";
     return true;
   }
@@ -365,10 +374,27 @@
     modalEl.removeAttribute("aria-hidden");
   }
 
+  function showKeepawakeModal() {
+    const modalEl = document.getElementById("keepawake-module-modal");
+    if (!modalEl) {
+      scrollFallback("hbka-widget");
+      return;
+    }
+    moveKeepawakeModuleIntoModal();
+    if (window.bootstrap && typeof window.bootstrap.Modal === "function") {
+      window.bootstrap.Modal.getOrCreateInstance(modalEl).show();
+      return;
+    }
+    modalEl.classList.add("show");
+    modalEl.style.display = "block";
+    modalEl.removeAttribute("aria-hidden");
+  }
+
 
   document.getElementById("mod-serial")?.addEventListener("click", showSerialModal);
   document.getElementById("mod-flowgate")?.addEventListener("click", showFlowgateModal);
   document.getElementById("mod-fscore-config")?.addEventListener("click", showFscoreConfigModal);
+  document.getElementById("mod-keepawake")?.addEventListener("click", showKeepawakeModal);
 
   let serialMoveTries = 0;
   const serialMoveTimer = setInterval(() => {
@@ -385,7 +411,7 @@
   let keepawakeMoveTries = 0;
   const keepawakeMoveTimer = setInterval(() => {
     keepawakeMoveTries += 1;
-    if (moveKeepawakeModuleIntoSidebar() || keepawakeMoveTries > 15) clearInterval(keepawakeMoveTimer);
+    if (moveKeepawakeModuleIntoModal() || keepawakeMoveTries > 15) clearInterval(keepawakeMoveTimer);
   }, 200);
 
   let fscoreMoveTries = 0;

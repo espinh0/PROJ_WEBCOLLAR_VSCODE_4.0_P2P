@@ -68,7 +68,6 @@
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    gap: 16px;
     text-align: left;
   }
   @media (max-width: 640px) {
@@ -107,20 +106,15 @@
     display: flex;
     flex-direction: column;
     justify-content: center;
-    margin-top: 8px;
     max-height: 220px;
-  }
-  @media (max-width: 640px) {
-    .control-slider-row {
-      margin-top: 12px;
-    }
+    overflow: hidden;
   }
   #rouletteRow {
     width: 100%;
     display: flex;
     justify-content: center;
-    margin-top: 12px;
     max-height: 1200px;
+    overflow: hidden;
   }
   #remoteControlCard #roletas-widget {
     width: 100%;
@@ -133,53 +127,89 @@
   #remoteControlCard #roletas-widget .r3-layout {
     gap: clamp(0.75rem, 1.5vw, 1.5rem);
   }
+  .naval-module-slot,
+  .pulse-sequencer-slot,
+  .video-player-slot,
   .custom-buttons-slot {
     width: 100%;
-    margin-top: 18px;
+  }
+  #remoteControlCard #navalModuleMount,
+  #remoteControlCard #pulseSequencerMount,
+  #remoteControlCard #videoPlayerMount {
+    width: 100%;
   }
   .control-scoreboard-block,
-  .control-audio-block {
+  .control-audio-block,
+  .naval-module-slot,
+  .pulse-sequencer-slot,
+  .video-player-slot,
+  .chart-block {
     width: 100%;
     transition: max-height .24s ease, opacity .18s ease, margin .18s ease, padding .18s ease;
-    max-height: 2000px;
     border-radius: 18px;
     margin-bottom: 0;
+    overflow: hidden;
+  }
+  .control-scoreboard-block:not(.collapsed),
+  .control-audio-block:not(.collapsed),
+  .naval-module-slot:not(.collapsed),
+  .pulse-sequencer-slot:not(.collapsed),
+  .video-player-slot:not(.collapsed),
+  .chart-block:not(.collapsed) {
+    margin-bottom: 18px;
   }
   .control-scoreboard-block.collapsed,
-  .control-audio-block.collapsed {
+  .control-audio-block.collapsed,
+  .naval-module-slot.collapsed,
+  .pulse-sequencer-slot.collapsed,
+  .video-player-slot.collapsed,
+  .chart-block.collapsed {
     max-height: 0;
     opacity: 0;
-      .control-scoreboard-block:not(.collapsed),
-      .control-audio-block:not(.collapsed) {
-        margin-bottom: 18px;
-      }
     margin-top: 0;
+    margin-bottom: 0 !important;
     padding-top: 0;
     padding-bottom: 0;
     padding-left: 0;
     padding-right: 0;
     border-width: 0;
     pointer-events: none;
+    visibility: hidden;
   }
   .control-scoreboard-mount,
-  .control-audio-mount {
+  .control-audio-mount,
+  #navalModuleMount,
+  #pulseSequencerMount,
+  #videoPlayerMount {
     width: 100%;
   }
   .scoreboard-embed-state,
-  .audio-embed-state {
+  .audio-embed-state,
+  .naval-embed-state,
+  .pulse-embed-state,
+  .video-embed-state,
+  .roulette-embed-state {
     border-radius: 16px;
     padding: 20px 16px;
     text-align: center;
     font-size: 0.9rem;
   }
   .scoreboard-loading-state,
-  .audio-loading-state {
+  .audio-loading-state,
+  .naval-loading-state,
+  .pulse-loading-state,
+  .video-loading-state,
+  .roulette-loading-state {
     border: 1px dashed rgba(255,255,255,0.18);
     color: #94a3b8;
     background: rgba(8,10,18,0.45);
   }
   .scoreboard-error-state,
-  .audio-error-state {
+  .audio-error-state,
+  .naval-error-state,
+  .pulse-error-state,
+  .video-error-state,
+  .roulette-error-state {
     border: 1px solid rgba(239,68,68,0.4);
     color: #fecaca;
     background: rgba(63,0,0,0.45);
@@ -459,13 +489,15 @@
     box-shadow: 0 0 0 2px rgba(255,255,255,0.12), 0 0 0 6px rgba(239,68,68,0.25);
   }
   .btn-send.pressed { transform: translateY(1px); }
-  .btn-send.holding {
+  .btn-send.holding,
+  .btn-send.adv-running {
     background: linear-gradient(120deg, rgba(239,68,68,0.95), rgba(190,18,60,0.9));
     border-color: rgba(239,68,68,0.95) !important;
     color: #fff !important;
     box-shadow: 0 10px 26px rgba(239,68,68,0.45), 0 0 0 0.15rem rgba(239,68,68,0.35);
   }
-  .btn-send.holding i {
+  .btn-send.holding i,
+  .btn-send.adv-running i {
     color: #ffffff;
   }
   .btn-advanced-toggle {
@@ -543,6 +575,7 @@
   }
   .btn-scoreboard-toggle.active {
     border-color: rgba(168,85,247,0.75);
+    border-width: 3px;
     background: linear-gradient(120deg, rgba(168,85,247,0.28), rgba(50,54,65,0.95));
     color: #ecfeff;
     box-shadow: 0 0 0 2px rgba(34,211,238,0.28), 0 8px 20px rgba(0,0,0,0.35);
@@ -584,11 +617,180 @@
   }
   .btn-audio-toggle.active {
     border-color: rgba(56,189,248,0.75);
+    border-width: 3px;
     background: linear-gradient(120deg, rgba(56,189,248,0.28), rgba(50,54,65,0.95));
     color: #ecfeff;
     box-shadow: 0 0 0 2px rgba(56,189,248,0.28), 0 8px 20px rgba(0,0,0,0.35);
   }
   .btn-audio-toggle.active i {
+    color: #ecfeff;
+  }
+  .btn-naval-toggle {
+    --naval-color: #f97316;
+    --naval-tint: rgba(249,115,22,0.18);
+    --naval-tint-strong: rgba(249,115,22,0.32);
+    min-width: 48px;
+    min-height: 48px;
+    padding: 10px;
+    border-radius: 14px;
+    border: 1px solid rgba(249,115,22,0.35);
+    background: linear-gradient(120deg, var(--naval-tint), rgba(12,12,14,0.92));
+    color: #fff7ed;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 8px 18px rgba(0,0,0,0.28);
+    transition: transform .15s ease, box-shadow .2s ease, border-color .15s ease, background .15s ease, color .12s ease;
+  }
+  .btn-naval-toggle i {
+    color: var(--naval-color);
+    transition: color .12s ease;
+  }
+  .btn-naval-toggle:hover {
+    border-color: rgba(249,115,22,0.6);
+    background: linear-gradient(120deg, var(--naval-tint-strong), rgba(18,19,24,0.95));
+    color: #fff7ed;
+    box-shadow: 0 10px 22px rgba(0,0,0,0.32);
+    transform: translateY(-1px);
+  }
+  .btn-naval-toggle:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.12), 0 0 0 6px rgba(249,115,22,0.3);
+  }
+  .btn-naval-toggle.active {
+    border-color: rgba(249,115,22,0.75);
+    border-width: 3px;
+    background: linear-gradient(120deg, rgba(249,115,22,0.28), rgba(50,54,65,0.95));
+    color: #fff7ed;
+    box-shadow: 0 0 0 2px rgba(249,115,22,0.28), 0 8px 20px rgba(0,0,0,0.35);
+  }
+  .btn-naval-toggle.active i {
+    color: #fff7ed;
+  }
+  .btn-pulse-toggle {
+    --pulse-color: #14b8a6;
+    --pulse-tint: rgba(20,184,166,0.18);
+    --pulse-tint-strong: rgba(20,184,166,0.32);
+    min-width: 48px;
+    min-height: 48px;
+    padding: 10px;
+    border-radius: 14px;
+    border: 1px solid rgba(20,184,166,0.35);
+    background: linear-gradient(120deg, var(--pulse-tint), rgba(12,12,14,0.92));
+    color: #ecfdf5;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 8px 18px rgba(0,0,0,0.28);
+    transition: transform .15s ease, box-shadow .2s ease, border-color .15s ease, background .15s ease, color .12s ease;
+  }
+  .btn-pulse-toggle i {
+    color: var(--pulse-color);
+    transition: color .12s ease;
+  }
+  .btn-pulse-toggle:hover {
+    border-color: rgba(20,184,166,0.6);
+    background: linear-gradient(120deg, var(--pulse-tint-strong), rgba(18,19,24,0.95));
+    color: #ecfdf5;
+    box-shadow: 0 10px 22px rgba(0,0,0,0.32);
+    transform: translateY(-1px);
+  }
+  .btn-pulse-toggle:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.12), 0 0 0 6px rgba(20,184,166,0.3);
+  }
+  .btn-pulse-toggle.active {
+    border-color: rgba(20,184,166,0.75);
+    border-width: 3px;
+    background: linear-gradient(120deg, rgba(20,184,166,0.28), rgba(50,54,65,0.95));
+    color: #ecfdf5;
+    box-shadow: 0 0 0 2px rgba(20,184,166,0.28), 0 8px 20px rgba(0,0,0,0.35);
+  }
+  .btn-pulse-toggle.active i {
+    color: #ecfdf5;
+  }
+  .btn-video-toggle {
+    --video-color: #f43f5e;
+    --video-tint: rgba(244,63,94,0.18);
+    --video-tint-strong: rgba(244,63,94,0.32);
+    min-width: 48px;
+    min-height: 48px;
+    padding: 10px;
+    border-radius: 14px;
+    border: 1px solid rgba(244,63,94,0.35);
+    background: linear-gradient(120deg, var(--video-tint), rgba(12,12,14,0.92));
+    color: #ffe4e6;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 8px 18px rgba(0,0,0,0.28);
+    transition: transform .15s ease, box-shadow .2s ease, border-color .15s ease, background .15s ease, color .12s ease;
+  }
+  .btn-video-toggle i {
+    color: var(--video-color);
+    transition: color .12s ease;
+  }
+  .btn-video-toggle:hover {
+    border-color: rgba(244,63,94,0.6);
+    background: linear-gradient(120deg, var(--video-tint-strong), rgba(18,19,24,0.95));
+    color: #ffe4e6;
+    box-shadow: 0 10px 22px rgba(0,0,0,0.32);
+    transform: translateY(-1px);
+  }
+  .btn-video-toggle:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.12), 0 0 0 6px rgba(244,63,94,0.3);
+  }
+  .btn-video-toggle.active {
+    border-color: rgba(244,63,94,0.75);
+    border-width: 3px;
+    background: linear-gradient(120deg, rgba(244,63,94,0.28), rgba(50,54,65,0.95));
+    color: #ffe4e6;
+    box-shadow: 0 0 0 2px rgba(244,63,94,0.28), 0 8px 20px rgba(0,0,0,0.35);
+  }
+  .btn-video-toggle.active i {
+    color: #ffe4e6;
+  }
+  .btn-chart-toggle {
+    --chart-color: #4d71ff;
+    --chart-tint: rgba(77,113,255,0.18);
+    --chart-tint-strong: rgba(77,113,255,0.32);
+    min-width: 48px;
+    min-height: 48px;
+    padding: 10px;
+    border-radius: 14px;
+    border: 1px solid rgba(77,113,255,0.35);
+    background: linear-gradient(120deg, var(--chart-tint), rgba(12,12,14,0.92));
+    color: #f0fdfa;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 8px 18px rgba(0,0,0,0.28);
+    transition: transform .15s ease, box-shadow .2s ease, border-color .15s ease, background .15s ease, color .12s ease;
+  }
+  .btn-chart-toggle i {
+    color: var(--chart-color);
+    transition: color .12s ease;
+  }
+  .btn-chart-toggle:hover {
+    border-color: rgba(77,113,255,0.6);
+    background: linear-gradient(120deg, var(--chart-tint-strong), rgba(18,19,24,0.95));
+    color: #ecfeff;
+    box-shadow: 0 10px 22px rgba(0,0,0,0.32);
+    transform: translateY(-1px);
+  }
+  .btn-chart-toggle:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.12), 0 0 0 6px rgba(77,113,255,0.3);
+  }
+  .btn-chart-toggle.active {
+    border-color: rgba(77,113,255,0.75);
+    border-width: 3px;
+    background: linear-gradient(120deg, rgba(77,113,255,0.28), rgba(50,54,65,0.95));
+    color: #ecfeff;
+    box-shadow: 0 0 0 2px rgba(77,113,255,0.28), 0 8px 20px rgba(0,0,0,0.35);
+  }
+  .btn-chart-toggle.active i {
     color: #ecfeff;
   }
   .control-collapse-btn {
@@ -711,6 +913,7 @@
     padding-top: 0 !important;
     padding-bottom: 0 !important;
     pointer-events: none;
+    visibility: hidden;
   }
   .advanced-panel {
     background: rgba(0, 0, 0, 0.4);
@@ -726,6 +929,7 @@
     transform: translateY(-6px);
     padding-top: 0;
     padding-bottom: 0;
+    visibility: hidden;
     pointer-events: none;
   }
   .advanced-panel.adv-open {
@@ -756,6 +960,15 @@
     margin-top: 0;
   }
   .advanced-note {
+    font-size: .85rem;
+    color: #9ca3af;
+  }
+  .chart-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #f3f4f6;
+  }
+  .chart-note {
     font-size: .85rem;
     color: #9ca3af;
   }
@@ -855,7 +1068,7 @@
 <div id="remoteControlWrapper" class="inline-mode">
   <div id="controlShell">
     <div id="remoteControlCard" class="card p-3 p-lg-4 shadow-lg flex-grow-1 glass-background">
-      <div class="control-status-bar mb-2">
+      <div class="control-status-bar mb-3">
         <div class="control-status-groups">
           <div class="d-flex align-items-center flex-wrap gap-2">
           <div id="fg-status-pill" class="status-pill" data-status="off">
@@ -866,6 +1079,10 @@
           <div class="status-pill" aria-label="Peers conectados" title="Peers conectados">
             <span class="status-icon"><i class="fa-solid fa-user-group"></i></span>
             <span id="fg-peer-count">0</span>
+          </div>
+          <div class="status-pill host-only" aria-label="Bots conectados" title="Bots conectados">
+            <span class="status-icon"><i class="fa-solid fa-robot"></i></span>
+            <span id="fg-bot-count">0</span>
           </div>
           <div id="serial-devices-pill" class="status-pill" data-status="off" aria-label="Peers com serial aberta" title="Peers com serial aberta">
             <span class="status-icon"><i class="fa-solid fa-microchip"></i></span>
@@ -887,6 +1104,9 @@
           <button id="serialModalBtn" class="control-collapse-btn host-only" aria-label="Abrir Serial" title="Abrir Serial" data-bs-toggle="tooltip">
             <i class="fa-solid fa-plug"></i>
           </button>
+          <button id="keepawakeModalBtn" class="control-collapse-btn host-only" aria-label="Abrir Keep-awake" title="Abrir Keep-awake" data-bs-toggle="tooltip">
+            <i class="fa-solid fa-moon"></i>
+          </button>
           <button id="flowgateModalBtn" class="control-collapse-btn" aria-label="Abrir Flowgate" title="Abrir Flowgate" data-bs-toggle="tooltip">
             <i class="fa-solid fa-tower-broadcast"></i>
           </button>
@@ -898,20 +1118,20 @@
           </button>
         </div>
       </div>
-      <div class="control-scoreboard-block collapsed" aria-hidden="true">
+      <div class="control-scoreboard-block collapsed mb-3" aria-hidden="true">
         <div id="controlScoreboardMount" class="control-scoreboard-mount">
           <div class="scoreboard-embed-state scoreboard-loading-state">Carregando placar...</div>
         </div>
       </div>
-      <div class="control-audio-block collapsed" aria-hidden="true">
+      <div class="control-audio-block collapsed mb-3" aria-hidden="true">
         <div id="controlAudioMount" class="control-audio-mount">
           <div class="audio-embed-state audio-loading-state">Carregando audio...</div>
         </div>
       </div>
-      <div class="control-readouts">
+      <div class="control-readouts my-3">
         <div class="control-readout">
           <div class="control-readout-label">Modo</div>
-          <div id="modeReadout" class="control-readout-value">-</div>
+        <div id="modeReadout" class="control-readout-value">Modo Atual</div>
         </div>
         <div class="control-readout">
           <div class="control-readout-label">Intensidade</div>
@@ -919,7 +1139,7 @@
         </div>
         <div class="control-readout">
           <div class="control-readout-label">Canal</div>
-          <div id="channelReadout" class="control-readout-value">1</div>
+        <div id="channelReadout" class="control-readout-value">Canal 1</div>
         </div>
         <div class="control-readout">
           <div class="control-readout-label">Duracao</div>
@@ -930,7 +1150,7 @@
           <div id="pulsesReadout" class="control-readout-value">—</div>
         </div>
       </div>
-      <div id="controlContent" class="control-row">
+      <div id="controlContent" class="control-row mb-3">
     <div class="btn-group mode-toggle" role="group" aria-label="Modo">
       <button class="mode-btn" data-mode="SHOCK" title="Choque" data-bs-toggle="tooltip">
         <span class="mode-icon"><i class="fa-solid fa-bolt-lightning"></i></span>
@@ -957,7 +1177,22 @@
       <i class="fa-solid fa-headphones"></i>
     </button>
 
-    <div class="ms-auto d-flex align-items-center gap-2 justify-content-end host-only">
+    <button id="btnNavalToggle" class="btn btn-naval-toggle" title="Mostrar Batalha Naval" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
+      <i class="fa-solid fa-ship"></i>
+    </button>
+
+    <button id="btnPulseToggle" class="btn btn-pulse-toggle" title="Mostrar Sequenciador" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
+      <i class="fa-solid fa-sliders"></i>
+    </button>
+
+    <button id="btnVideoToggle" class="btn btn-video-toggle" title="Mostrar Video" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
+      <i class="fa-solid fa-clapperboard"></i>
+    </button>
+    <button id="btnChartToggle" class="btn btn-chart-toggle" title="Exibir/ocultar gráfico" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
+      <i class="fa-solid fa-chart-line"></i>
+    </button>
+
+    <div class="ms-auto d-flex align-items-center gap-2 justify-content-end">
       <div class="form-check form-switch m-0">
         <input class="form-check-input" type="checkbox" id="chanSwitch" aria-label="Canal 1 ou 2" title="Canal 1 ou 2 (host-only)" data-bs-toggle="tooltip"/>
       </div>
@@ -967,23 +1202,28 @@
       <i class="fa-solid fa-power-off"></i>
     </button>
 
+    <button id="cpAdd" class="btn btn-save-shortcut" type="button" title="Salvar atalho personalizado" data-bs-toggle="tooltip">
+      <i class="fa-solid fa-floppy-disk"></i>
+      <span class="d-none d-md-inline">Salvar</span>
+    </button>
+
     <button id="btnAdvancedToggle" class="btn btn-advanced-toggle" title="Opcoes avancadas" data-bs-toggle="tooltip" aria-expanded="false">
       <i class="fa-solid fa-chevron-down"></i>
     </button>
 
   </div>
 
-  <div class="control-slider-row collapsible-section" id="sliderRow" aria-hidden="false">
+  <div class="control-slider-row collapsible-section mt-2 mb-3" id="sliderRow" aria-hidden="false">
     <div id="levelRow" class="d-flex align-items-center gap-2 level-wrap">
       <input type="range" class="form-range level-slider" min="0" max="100" step="1" id="levelSlider" data-bs-toggle="tooltip" data-bs-placement="top"/>
       <input id="levelValue" class="form-control form-control-sm level-input" type="text" inputmode="numeric" pattern="[0-9]*" title="Nivel (0 a 100)" data-bs-toggle="tooltip" value="0%"/>
     </div>
   </div>
-  <div id="rouletteRow" class="collapsible-section is-collapsed" aria-hidden="true">
+  <div id="rouletteRow" class="collapsible-section is-collapsed mt-3 mb-3" aria-hidden="true">
     <div id="rouletteMount" class="w-100"></div>
   </div>
 
-  <div id="advancedPanel" class="advanced-panel adv-collapsed">
+  <div id="advancedPanel" class="advanced-panel adv-collapsed mb-3">
     <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap mb-2">
       <div class="fw-semibold text-light">Opcoes avancadas</div>
       <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -1035,19 +1275,32 @@
           </div>
         </div>
       </div>
-        <div class="advanced-chart-block">
-          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-            <div class="advanced-chart-title">Timeline de eventos</div>
-            <div class="advanced-note">Monitor de comandos recentes</div>
-          </div>
-          <div class="event-canvas-slot">
-            <div class="event-canvas-card">
-              <div id="collarEventChartHolder" class="chart-embed-placeholder">Carregando grafico…</div>
-            </div>
-          </div>
-        </div>
+        <!-- Chart block removido do painel avançado -->
   </div>
-  <div class="custom-buttons-slot">
+    <div class="naval-module-slot collapsed mb-3" aria-hidden="true">
+      <div id="navalModuleMount">
+        <div class="naval-embed-state naval-loading-state">Carregando Batalha Naval...</div>
+      </div>
+    </div>
+    <div class="pulse-sequencer-slot collapsed mb-3" aria-hidden="true">
+      <div id="pulseSequencerMount">
+        <div class="pulse-embed-state pulse-loading-state">Carregando Sequenciador de Pulsos...</div>
+      </div>
+    </div>
+    <div class="video-player-slot collapsed mb-3" aria-hidden="true">
+      <div id="videoPlayerMount">
+        <div class="video-embed-state video-loading-state">Carregando Video...</div>
+      </div>
+    </div>
+
+    <div id="chartBlock" class="chart-block collapsed mb-3" aria-hidden="true">
+      <div class="event-canvas-slot">
+        <div class="event-canvas-card">
+          <div id="collarEventChartHolder" class="chart-embed-placeholder">Carregando grafico…</div>
+        </div>
+      </div>
+    </div>
+  <div class="custom-buttons-slot mb-3">
     <div id="customButtonsMount"></div>
   </div>
 </div>
@@ -1128,6 +1381,9 @@
   let advancedOpen = false;
   let scoreboardOpen = false;
   let audioOpen = false;
+  let navalOpen = false;
+  let pulseOpen = false;
+  let videoOpen = false;
   let lastScoreboardArmedState = null;
   const ROULETTE_DEFAULT_HOLD_MS = 220;
   const ROULETTE_HOLD_LIMITS = { min: 200, max: 20000 };
@@ -1141,6 +1397,7 @@
   window.currentMode = currentMode;
   window.level = level;
   window.channel = channel;
+  window.__ADVANCED_PANEL_OPEN__ = advancedOpen;
 
   const $  = s => document.querySelector(s);
   const $$ = s => document.querySelectorAll(s);
@@ -1169,9 +1426,17 @@
   const scoreboardToggleBtn = $("#btnScoreboardToggle");
   const audioBlockEl = $(".control-audio-block");
   const audioToggleBtn = $("#btnAudioToggle");
+  const navalBlockEl = $(".naval-module-slot");
+  const navalToggleBtn = $("#btnNavalToggle");
+  const pulseBlockEl = $(".pulse-sequencer-slot");
+  const pulseToggleBtn = $("#btnPulseToggle");
+  const videoBlockEl = $(".video-player-slot");
+  const videoToggleBtn = $("#btnVideoToggle");
   let advCountdownTimer = null;
   let advCountdownEndAt = 0;
   let advStopSignal = { stop: false, holdActive: false };
+  const chartBlockEl = document.getElementById("chartBlock");
+  const chartToggleBtn = document.getElementById("btnChartToggle");
 
   function log(msg, lvl="info"){
     try { window.appLog ? window.appLog(msg, lvl) : console.log(msg); } catch {}
@@ -1233,6 +1498,10 @@
       parsed.advancedOpen = !!parsed.advancedOpen;
       parsed.scoreboardOpen = !!parsed.scoreboardOpen;
       parsed.audioOpen = !!parsed.audioOpen;
+      parsed.navalOpen = !!parsed.navalOpen;
+      parsed.pulseOpen = !!parsed.pulseOpen;
+      parsed.videoOpen = !!parsed.videoOpen;
+      parsed.chartOpen = !!parsed.chartOpen;
       return parsed;
     } catch(e){
       log(`Falha ao carregar estado: ${e && e.message || e}`, "warn");
@@ -1257,7 +1526,11 @@
         advanced,
         advancedOpen,
         scoreboardOpen,
-        audioOpen
+        audioOpen,
+        navalOpen,
+        pulseOpen,
+        videoOpen,
+        chartOpen
       }));
     } catch(e){
       log(`Falha ao salvar estado: ${e && e.message || e}`, "warn");
@@ -1273,15 +1546,6 @@
           holder.innerHTML = "";
           holder.classList.remove("chart-embed-placeholder");
           chartCard.classList.add("embedded-event-chart");
-          const prevParent = chartCard.parentElement;
-          const prevNext = chartCard.nextElementSibling;
-          if (prevParent && !document.getElementById("collarEventChartEmbedNotice")) {
-            const notice = document.createElement("div");
-            notice.id = "collarEventChartEmbedNotice";
-            notice.className = "alert alert-secondary small mt-3";
-            notice.textContent = "Grafico movido para o painel remoto.";
-            prevParent.insertBefore(notice, prevNext);
-          }
           holder.appendChild(chartCard);
           return true;
         };
@@ -1296,6 +1560,10 @@
 
   const SCOREBOARD_SRC = "Widgets/fscore.html";
   const AUDIO_LISTENER_SRC = "Widgets/audiolistener.html";
+  const NAVAL_WIDGET_SRC = "Widgets/Games/naval.html";
+  const PULSE_SEQUENCER_SRC = "Widgets/sequence.html";
+  const VIDEO_PLAYER_SRC = "Widgets/Video_player.html";
+  const ROULETTE_WIDGET_SRC = "Widgets/Roleta.html";
   function runInlineScriptsIn(container){
     if (!container) return;
     const scripts = Array.from(container.querySelectorAll('script'));
@@ -1345,6 +1613,86 @@
       });
   }
   loadControlAudio();
+
+  function loadControlNaval(){
+    const mount = document.getElementById('navalModuleMount');
+    if (!mount) return;
+    mount.innerHTML = '<div class="naval-embed-state naval-loading-state">Carregando Batalha Naval...</div>';
+    fetch(NAVAL_WIDGET_SRC)
+      .then((res) => {
+        if (!res.ok) throw new Error('Falha ao carregar Widgets/Games/naval.html: ' + res.status);
+        return res.text();
+      })
+      .then((html) => {
+        mount.innerHTML = html;
+        runInlineScriptsIn(mount);
+      })
+      .catch((err) => {
+        try { console.error(err); } catch(_){ }
+        mount.innerHTML = '<div class="naval-embed-state naval-error-state">Nao foi possivel carregar Batalha Naval.</div>';
+      });
+  }
+  loadControlNaval();
+
+  function loadPulseSequencer(){
+    const mount = document.getElementById('pulseSequencerMount');
+    if (!mount) return;
+    mount.innerHTML = '<div class="pulse-embed-state pulse-loading-state">Carregando Sequenciador de Pulsos...</div>';
+    fetch(PULSE_SEQUENCER_SRC)
+      .then((res) => {
+        if (!res.ok) throw new Error('Falha ao carregar Widgets/sequence.html: ' + res.status);
+        return res.text();
+      })
+      .then((html) => {
+        mount.innerHTML = html;
+        runInlineScriptsIn(mount);
+      })
+      .catch((err) => {
+        try { console.error(err); } catch(_){ }
+        mount.innerHTML = '<div class="pulse-embed-state pulse-error-state">Nao foi possivel carregar o Sequenciador de Pulsos.</div>';
+      });
+  }
+  loadPulseSequencer();
+
+  function loadControlVideo(){
+    const mount = document.getElementById('videoPlayerMount');
+    if (!mount) return;
+    mount.innerHTML = '<div class="video-embed-state video-loading-state">Carregando Video...</div>';
+    fetch(VIDEO_PLAYER_SRC)
+      .then((res) => {
+        if (!res.ok) throw new Error('Falha ao carregar Widgets/Video_player.html: ' + res.status);
+        return res.text();
+      })
+      .then((html) => {
+        mount.innerHTML = html;
+        runInlineScriptsIn(mount);
+      })
+      .catch((err) => {
+        try { console.error(err); } catch(_){ }
+        mount.innerHTML = '<div class="video-embed-state video-error-state">Nao foi possivel carregar o Video.</div>';
+      });
+  }
+  loadControlVideo();
+
+  function loadRouletteWidget(){
+    const mount = document.getElementById('rouletteMount');
+    if (!mount) return;
+    mount.innerHTML = '<div class="roulette-embed-state roulette-loading-state">Carregando Roletas...</div>';
+    fetch(ROULETTE_WIDGET_SRC)
+      .then((res) => {
+        if (!res.ok) throw new Error('Falha ao carregar Widgets/Roleta.html: ' + res.status);
+        return res.text();
+      })
+      .then((html) => {
+        mount.innerHTML = html;
+        runInlineScriptsIn(mount);
+      })
+      .catch((err) => {
+        try { console.error(err); } catch(_){ }
+        mount.innerHTML = '<div class="roulette-embed-state roulette-error-state">Nao foi possivel carregar as Roletas.</div>';
+      });
+  }
+  loadRouletteWidget();
 
   function emitControlPatch(patch){
     if (!patch || typeof patch !== "object") return;
@@ -1625,6 +1973,141 @@
     if (opts?.persist !== false) persistState();
   }
 
+  function updateNavalToggleTooltip(label){
+    if (!navalToggleBtn) return;
+    navalToggleBtn.setAttribute("title", label);
+    navalToggleBtn.setAttribute("aria-label", label);
+    navalToggleBtn.setAttribute("data-bs-original-title", label);
+    const tipInstance = (window.bootstrap && window.bootstrap.Tooltip)
+      ? window.bootstrap.Tooltip.getInstance(navalToggleBtn)
+      : null;
+    if (tipInstance) {
+      if (typeof tipInstance.setContent === "function") {
+        tipInstance.setContent({ ".tooltip-inner": label });
+      } else if (tipInstance.tip) {
+        const inner = tipInstance.tip.querySelector(".tooltip-inner");
+        if (inner) inner.textContent = label;
+      }
+    }
+  }
+
+  function setNavalOpen(next, opts){
+    const desired = !!next;
+    if (!opts?.force && navalOpen === desired) {
+      if (opts?.persist === false) return;
+    }
+    navalOpen = desired;
+    if (navalBlockEl) {
+      navalBlockEl.classList.toggle("collapsed", !navalOpen);
+      navalBlockEl.setAttribute("aria-hidden", navalOpen ? "false" : "true");
+    }
+    if (navalToggleBtn) {
+      navalToggleBtn.classList.toggle("active", navalOpen);
+      navalToggleBtn.setAttribute("aria-pressed", navalOpen ? "true" : "false");
+      navalToggleBtn.setAttribute("aria-expanded", navalOpen ? "true" : "false");
+      const icon = navalToggleBtn.querySelector("i");
+      if (icon) icon.className = navalOpen ? "fa-solid fa-anchor" : "fa-solid fa-ship";
+      updateNavalToggleTooltip(navalOpen ? "Ocultar Batalha Naval" : "Mostrar Batalha Naval");
+    }
+    if (opts?.persist !== false) persistState();
+  }
+
+  function updatePulseToggleTooltip(label){
+    if (!pulseToggleBtn) return;
+    pulseToggleBtn.setAttribute("title", label);
+    pulseToggleBtn.setAttribute("aria-label", label);
+    pulseToggleBtn.setAttribute("data-bs-original-title", label);
+    const tipInstance = (window.bootstrap && window.bootstrap.Tooltip)
+      ? window.bootstrap.Tooltip.getInstance(pulseToggleBtn)
+      : null;
+    if (tipInstance) {
+      if (typeof tipInstance.setContent === "function") {
+        tipInstance.setContent({ ".tooltip-inner": label });
+      } else if (tipInstance.tip) {
+        const inner = tipInstance.tip.querySelector(".tooltip-inner");
+        if (inner) inner.textContent = label;
+      }
+    }
+  }
+
+  function setPulseOpen(next, opts){
+    const desired = !!next;
+    if (!opts?.force && pulseOpen === desired) {
+      if (opts?.persist === false) return;
+    }
+    pulseOpen = desired;
+    if (pulseBlockEl) {
+      pulseBlockEl.classList.toggle("collapsed", !pulseOpen);
+      pulseBlockEl.setAttribute("aria-hidden", pulseOpen ? "false" : "true");
+    }
+    if (pulseToggleBtn) {
+      pulseToggleBtn.classList.toggle("active", pulseOpen);
+      pulseToggleBtn.setAttribute("aria-pressed", pulseOpen ? "true" : "false");
+      pulseToggleBtn.setAttribute("aria-expanded", pulseOpen ? "true" : "false");
+      const icon = pulseToggleBtn.querySelector("i");
+      if (icon) icon.className = pulseOpen ? "fa-solid fa-wave-square" : "fa-solid fa-sliders";
+      updatePulseToggleTooltip(pulseOpen ? "Ocultar Sequenciador" : "Mostrar Sequenciador");
+    }
+    if (opts?.persist !== false) persistState();
+  }
+
+  function updateVideoToggleTooltip(label){
+    if (!videoToggleBtn) return;
+    videoToggleBtn.setAttribute("title", label);
+    videoToggleBtn.setAttribute("aria-label", label);
+    videoToggleBtn.setAttribute("data-bs-original-title", label);
+    const tipInstance = (window.bootstrap && window.bootstrap.Tooltip)
+      ? window.bootstrap.Tooltip.getInstance(videoToggleBtn)
+      : null;
+    if (tipInstance) {
+      if (typeof tipInstance.setContent === "function") {
+        tipInstance.setContent({ ".tooltip-inner": label });
+      } else if (tipInstance.tip) {
+        const inner = tipInstance.tip.querySelector(".tooltip-inner");
+        if (inner) inner.textContent = label;
+      }
+    }
+  }
+
+  function setVideoOpen(next, opts){
+    const desired = !!next;
+    if (!opts?.force && videoOpen === desired) {
+      if (opts?.persist === false) return;
+    }
+    videoOpen = desired;
+    if (videoBlockEl) {
+      videoBlockEl.classList.toggle("collapsed", !videoOpen);
+      videoBlockEl.setAttribute("aria-hidden", videoOpen ? "false" : "true");
+    }
+    if (videoToggleBtn) {
+      videoToggleBtn.classList.toggle("active", videoOpen);
+      videoToggleBtn.setAttribute("aria-pressed", videoOpen ? "true" : "false");
+      videoToggleBtn.setAttribute("aria-expanded", videoOpen ? "true" : "false");
+      const icon = videoToggleBtn.querySelector("i");
+      if (icon) icon.className = videoOpen ? "fa-solid fa-circle-play" : "fa-solid fa-clapperboard";
+      updateVideoToggleTooltip(videoOpen ? "Ocultar Video" : "Mostrar Video");
+    }
+    if (opts?.persist !== false) persistState();
+  }
+
+  function setChartOpen(next, opts){
+    const desired = !!next;
+    if (!opts?.force && chartOpen === desired) {
+      if (opts?.persist === false) return;
+    }
+    chartOpen = desired;
+    if (chartBlockEl) {
+      chartBlockEl.classList.toggle("collapsed", !chartOpen);
+      chartBlockEl.setAttribute("aria-hidden", chartOpen ? "false" : "true");
+    }
+    if (chartToggleBtn) {
+      chartToggleBtn.classList.toggle("active", chartOpen);
+      chartToggleBtn.setAttribute("aria-pressed", chartOpen ? "true" : "false");
+      chartToggleBtn.setAttribute("aria-expanded", chartOpen ? "true" : "false");
+    }
+    if (opts?.persist !== false) persistState();
+  }
+
   function getLiveAdvanced(){
     const next = { ...advanced };
     if (advancedInputs.pulses && advancedInputs.pulses.value !== "") {
@@ -1752,6 +2235,20 @@
     advLed.classList.add(cls);
   }
 
+  let advButtonLatchDepth = 0;
+  function updateAdvButtonLatch(){
+    if (!btnSend) return;
+    btnSend.classList.toggle("adv-running", advButtonLatchDepth > 0);
+  }
+  function latchAdvancedButton(){
+    advButtonLatchDepth += 1;
+    updateAdvButtonLatch();
+  }
+  function releaseAdvancedButton(){
+    advButtonLatchDepth = Math.max(0, advButtonLatchDepth - 1);
+    updateAdvButtonLatch();
+  }
+
   function stopAdvCountdown(done=false, resetSignal=true){
     if (advCountdownTimer) clearInterval(advCountdownTimer);
     advCountdownTimer = null;
@@ -1801,6 +2298,7 @@
 
   function setAdvancedOpen(open){
     advancedOpen = !!open;
+    window.__ADVANCED_PANEL_OPEN__ = advancedOpen;
     if (advancedPanelEl) {
       advancedPanelEl.classList.toggle("adv-open", advancedOpen);
       advancedPanelEl.classList.toggle("adv-collapsed", !advancedOpen);
@@ -1944,6 +2442,7 @@
     const gap = clampNum(Math.round(normalized.delayMs || ADV_DEFAULTS.delayMs), ADV_LIMITS.delayMs.min, ADV_LIMITS.delayMs.max);
     const preDelay = clampNum(Math.round(normalized.preDelayMs || ADV_DEFAULTS.preDelayMs), ADV_LIMITS.preDelayMs.min, ADV_LIMITS.preDelayMs.max);
     const useHold = dur !== ADV_DEFAULTS.durationMs;
+    latchAdvancedButton();
     startAdvCountdown({ preDelayMs: preDelay, pulses, durationMs: dur, delayMs: gap });
     (async ()=>{
       try {
@@ -1973,6 +2472,7 @@
       } finally {
         ensureAdvHoldOff();
         setAdvLedPhase("off");
+        releaseAdvancedButton();
       }
     })();
   }
@@ -1983,6 +2483,7 @@
     const gap = clampNum(Math.round(normalized.delayMs || ADV_DEFAULTS.delayMs), ADV_LIMITS.delayMs.min, ADV_LIMITS.delayMs.max);
     const preDelay = clampNum(Math.round(normalized.preDelayMs || ADV_DEFAULTS.preDelayMs), ADV_LIMITS.preDelayMs.min, ADV_LIMITS.preDelayMs.max);
     const holdMs = getRouletteSpinDurationMs(normalized);
+    latchAdvancedButton();
     startAdvCountdown({ preDelayMs: preDelay, pulses, durationMs: holdMs, delayMs: gap });
     (async () => {
       try {
@@ -2025,6 +2526,7 @@
         releaseRoulettePointer();
         clearRouletteAutoTimer();
         setAdvLedPhase("off");
+        releaseAdvancedButton();
       }
     })();
   }
@@ -2161,6 +2663,7 @@
   const toggleBtn = $("#toggleControl");
   const flowgateModalBtn = $("#flowgateModalBtn");
   const serialModalBtn = $("#serialModalBtn");
+  const keepawakeModalBtn = $("#keepawakeModalBtn");
   const interfaceSoundBtn = $("#interfaceSoundToggle");
   const wrapperEl = $("#remoteControlWrapper");
   const PIN_STATE_KEY = "remoteControlInlineState";
@@ -2404,6 +2907,41 @@
     return true;
   }
 
+  function openKeepawakeModalFromControl(){
+    const navTrigger = document.getElementById("mod-keepawake");
+    if (navTrigger && typeof navTrigger.click === "function") {
+      navTrigger.click();
+      return true;
+    }
+    const modalEl = document.getElementById("keepawake-module-modal");
+    if (!modalEl) {
+      const card = document.getElementById("hbka-widget");
+      if (card && typeof card.scrollIntoView === "function") {
+        card.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      return false;
+    }
+    const modalBody = document.getElementById("keepawake-module-modal-body");
+    if (modalBody && modalBody.dataset.bound !== "true") {
+      const slot = document.querySelector('section[data-module-src="Modules/Keepawake.html"]');
+      if (slot && slot.children.length) {
+        const wrapper = document.createElement("div");
+        while (slot.firstChild) wrapper.appendChild(slot.firstChild);
+        modalBody.appendChild(wrapper);
+        modalBody.dataset.bound = "true";
+        slot.style.display = "none";
+      }
+    }
+    if (window.bootstrap && typeof window.bootstrap.Modal === "function") {
+      window.bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    } else {
+      modalEl.classList.add("show");
+      modalEl.style.display = "block";
+      modalEl.removeAttribute("aria-hidden");
+    }
+    return true;
+  }
+
   if (flowgateModalBtn) {
     flowgateModalBtn.addEventListener("click", () => {
       openFlowgateModalFromControl();
@@ -2413,6 +2951,12 @@
   if (serialModalBtn) {
     serialModalBtn.addEventListener("click", () => {
       openSerialModalFromControl();
+    });
+  }
+
+  if (keepawakeModalBtn) {
+    keepawakeModalBtn.addEventListener("click", () => {
+      openKeepawakeModalFromControl();
     });
   }
 
@@ -2433,6 +2977,10 @@
   if (advancedToggleBtn) advancedToggleBtn.addEventListener("click", () => setAdvancedOpen(!advancedOpen));
   if (scoreboardToggleBtn) scoreboardToggleBtn.addEventListener("click", () => setScoreboardOpen(!scoreboardOpen));
   if (audioToggleBtn) audioToggleBtn.addEventListener("click", () => setAudioOpen(!audioOpen));
+  if (navalToggleBtn) navalToggleBtn.addEventListener("click", () => setNavalOpen(!navalOpen));
+  if (pulseToggleBtn) pulseToggleBtn.addEventListener("click", () => setPulseOpen(!pulseOpen));
+  if (videoToggleBtn) videoToggleBtn.addEventListener("click", () => setVideoOpen(!videoOpen));
+  if (chartToggleBtn) chartToggleBtn.addEventListener("click", () => setChartOpen(!chartOpen));
   if (advancedInputs.pulses) advancedInputs.pulses.addEventListener("change", e => updateAdvancedValue("pulses", parseInt(e.target.value,10)));
   if (advancedInputs.duration) advancedInputs.duration.addEventListener("change", e => updateAdvancedValue("durationMs", parseFloat(e.target.value)));
   if (advancedInputs.delay) advancedInputs.delay.addEventListener("change", e => updateAdvancedValue("delayMs", parseFloat(e.target.value)));
@@ -2458,35 +3006,6 @@
     });
   }
 
-  function embedRouletteModule(){
-    const mount = document.getElementById("rouletteMount");
-    const widget = document.getElementById("roletas-widget");
-    if (!mount || !widget) return false;
-    if (mount.contains(widget)) return true;
-    mount.appendChild(widget);
-    widget.classList.add("embedded-roulette");
-    return true;
-  }
-
-  function initRouletteEmbed(){
-    let attempts = 0;
-    const maxAttempts = 30;
-    let timer = null;
-    const attempt = () => {
-      if (embedRouletteModule()) {
-        if (timer) clearInterval(timer);
-        return;
-      }
-      attempts += 1;
-      if (attempts >= maxAttempts && timer) {
-        clearInterval(timer);
-      }
-    };
-    attempt();
-    timer = setInterval(attempt, 350);
-  }
-  initRouletteEmbed();
-
   function embedCustomButtons(){
     const mount = document.getElementById("customButtonsMount");
     const panel = document.getElementById("customPads");
@@ -2497,34 +3016,34 @@
     return true;
   }
 
-  function initCustomButtonsEmbed(){
-    let attempts = 0;
-    const maxAttempts = 30;
-    let timer = null;
-    const attempt = () => {
-      if (embedCustomButtons()) {
-        if (timer) clearInterval(timer);
-        return;
-      }
-      attempts += 1;
-      if (attempts >= maxAttempts && timer) {
-        clearInterval(timer);
-      }
-    };
-    attempt();
-    timer = setInterval(attempt, 350);
-  }
-  initCustomButtonsEmbed();
 
-  function initStatusNavbar(){
-    const flowgatePill = document.getElementById("fg-status-pill");
-    const flowgateStateEl = document.getElementById("fg-conn-state");
-    const peerCountEl = document.getElementById("fg-peer-count");
-    const peerListEl = document.getElementById("fg-peer-list");
-    const peerEmptyEl = document.getElementById("fg-peer-empty");
-    const serialPill = document.getElementById("serial-status-pill");
-    const serialStateEl = document.getElementById("serial-conn-state");
-    const serialDevicesPill = document.getElementById("serial-devices-pill");
+  // === Dynamic loader for custom buttons widget ===
+  function loadCustomButtonsWidget() {
+    const mount = document.getElementById("customButtonsMount");
+    if (!mount) return;
+    // Move the already-loaded module into the control area.
+    if (embedCustomButtons()) return;
+    // If the module loads later, keep trying briefly.
+    if (window.__customPadsMoveTimer) return;
+    window.__customPadsMoveTimer = setInterval(() => {
+      if (embedCustomButtons()) {
+        clearInterval(window.__customPadsMoveTimer);
+        window.__customPadsMoveTimer = null;
+      }
+    }, 200);
+  }
+  loadCustomButtonsWidget();
+
+    function initStatusNavbar(){
+      const flowgatePill = document.getElementById("fg-status-pill");
+      const flowgateStateEl = document.getElementById("fg-conn-state");
+      const peerCountEl = document.getElementById("fg-peer-count");
+      const botCountEl = document.getElementById("fg-bot-count");
+      const peerListEl = document.getElementById("fg-peer-list");
+      const peerEmptyEl = document.getElementById("fg-peer-empty");
+      const serialPill = document.getElementById("serial-status-pill");
+      const serialStateEl = document.getElementById("serial-conn-state");
+      const serialDevicesPill = document.getElementById("serial-devices-pill");
     const serialDeviceListEl = document.getElementById("serial-device-list");
     const serialDeviceEmptyEl = document.getElementById("serial-device-empty");
     if (!flowgateStateEl || !peerCountEl || !peerListEl || !peerEmptyEl || !serialStateEl) return;
@@ -2553,6 +3072,7 @@
     const collectPeerMeta = () => {
       const metaList = [];
       const seen = new Set();
+      const bots = new Set();
       const pull = (root) => {
         if (!root) return;
         Array.from(root.children).forEach((row) => {
@@ -2560,7 +3080,12 @@
           if (!badges.length) return;
           const mainBadge = badges[0];
           const raw = normalizeLabel(mainBadge.textContent || "");
-          if (!raw || /^bot-/i.test(raw) || seen.has(raw)) return;
+          if (!raw) return;
+          if (/^bot-/i.test(raw)) {
+            bots.add(raw);
+            return;
+          }
+          if (seen.has(raw)) return;
           seen.add(raw);
           const tags = badges
             .slice(1)
@@ -2569,9 +3094,21 @@
           metaList.push({ label: raw, title: mainBadge.title || raw, tags });
         });
       };
+      const pullBots = (root) => {
+        if (!root) return;
+        Array.from(root.children).forEach((row) => {
+          const badges = Array.from(row.querySelectorAll(".badge"));
+          if (!badges.length) return;
+          const mainBadge = badges[0];
+          const raw = normalizeLabel(mainBadge.textContent || "");
+          if (!raw) return;
+          bots.add(raw);
+        });
+      };
       pull(document.getElementById("tr-host-list"));
       pull(document.getElementById("tr-peer-list"));
-      return metaList;
+      pullBots(document.getElementById("tr-bot-list"));
+      return { peers: metaList, bots: bots.size };
     };
 
     const renderSerialDevices = (entries) => {
@@ -2591,7 +3128,7 @@
     };
 
     const renderPeers = () => {
-      const metaList = collectPeerMeta();
+      const { peers: metaList, bots } = collectPeerMeta();
       const peers = metaList.map(({ label, title }) => ({ label, title }));
       peerListEl.innerHTML = "";
       if (!peers.length) {
@@ -2608,6 +3145,7 @@
       }
       renderSerialDevices(metaList.filter((entry) => entry.tags.includes("serial")));
       peerCountEl.textContent = String(peers.length);
+      if (botCountEl) botCountEl.textContent = String(bots);
     };
 
     const refreshFlowgate = () => {
@@ -2619,10 +3157,12 @@
     const bindPeerObservers = () => {
       const hostList = document.getElementById("tr-host-list");
       const peerList = document.getElementById("tr-peer-list");
+      const botList = document.getElementById("tr-bot-list");
       if (!hostList || !peerList) return false;
       const observer = new MutationObserver(() => renderPeers());
       observer.observe(hostList, { childList: true, subtree: true });
       observer.observe(peerList, { childList: true, subtree: true });
+      if (botList) observer.observe(botList, { childList: true, subtree: true });
       return true;
     };
 
@@ -2803,11 +3343,19 @@
   const initialChannel = savedState?.channel || 1;
   const initialScoreboardOpen = savedState?.scoreboardOpen ?? false;
   const initialAudioOpen = savedState?.audioOpen ?? false;
+  const initialNavalOpen = savedState?.navalOpen ?? false;
+  const initialPulseOpen = savedState?.pulseOpen ?? false;
+  const initialVideoOpen = savedState?.videoOpen ?? false;
+  const initialChartOpen = savedState?.chartOpen ?? false;
   setMode(initialMode);
   setLevel(initialLevel, { broadcast:false });
   setChannel(initialChannel);
   setScoreboardOpen(initialScoreboardOpen, { persist:false, force:true });
   setAudioOpen(initialAudioOpen, { persist:false, force:true });
+  setNavalOpen(initialNavalOpen, { persist:false, force:true });
+  setPulseOpen(initialPulseOpen, { persist:false, force:true });
+  setVideoOpen(initialVideoOpen, { persist:false, force:true });
+  setChartOpen(initialChartOpen, { persist:false, force:true });
   syncAdvancedUi();
   setAdvancedOpen(advancedOpen);
   stopAdvCountdown(false);

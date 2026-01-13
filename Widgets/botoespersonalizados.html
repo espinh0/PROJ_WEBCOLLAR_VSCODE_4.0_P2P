@@ -1,7 +1,54 @@
-<!-- ===== BOTÕES PERSONALIZADOS — v1.0 ================================== -->
+﻿<!-- ===== BOTÕES PERSONALIZADOS — v1.0 ================================== -->
 <style>
   #customPads {
     margin: 0;
+  }
+  #customPads.cp-hidden {
+    display:none;
+  }
+  #customPads .cp-header-row {
+    color:#e5e7eb;
+  }
+  #customPads .cp-title-wrap {
+    display:flex;
+    align-items:center;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+  #customPads #cpClear {
+    border:0;
+    background: rgba(248,113,113,0.08);
+    color:#fecaca;
+    padding:5px 12px;
+    border-radius:999px;
+    font-size:.85rem;
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    transition: background .2s ease, color .2s ease;
+  }
+  #customPads #cpClear:hover {
+    background: rgba(248,113,113,0.16);
+    color:#ffe4e6;
+  }
+  #cpAdd.btn-save-shortcut {
+    border:0;
+    background: rgba(17,17,21,0.85);
+    color:#fde68a;
+    padding:8px 14px;
+    border-radius:10px;
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    font-weight:600;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 6px 16px rgba(0,0,0,0.35);
+    transition: background .2s ease, transform .15s ease;
+  }
+  #cpAdd.btn-save-shortcut:hover {
+    background: rgba(24,24,34,0.95);
+  }
+  #cpAdd.btn-save-shortcut:active {
+    transform: translateY(1px);
   }
   #customPads .cp-grid {
     display:flex;
@@ -12,32 +59,104 @@
   #customPads .cp-item {
     display:flex;
     align-items:stretch;
-    border: 1px solid #2a2a2e;
-    border-radius: 12px;
-    overflow:hidden;
-    background: #17171b;
+    gap:0;
+    border-radius: 14px;
     --cp-color:#fcd34d;
-    transition: border-color .2s ease, transform .2s ease, box-shadow .2s ease;
+    --cp-bg: linear-gradient(165deg, #1f1f26, #131218);
+    position:relative;
+    z-index:0;
   }
-  #customPads .cp-item.cp-active {
-    border-color: rgba(248,113,113,0.8);
-    box-shadow: 0 10px 22px rgba(248,113,113,0.25);
-  }
-  #customPads .cp-item:hover { transform: translateY(-1px); box-shadow: 0 8px 18px rgba(0,0,0,.25); }
+    #customPads .cp-item::after {
+      content:"";
+      position:absolute;
+      left:0;
+      right:0;
+      bottom:-10px;
+      height:30px;
+      border-radius: 0 0 12px 12px;
+      background: var(--cp-color, #fcd34d);
+      box-shadow: 0 8px 18px rgba(0,0,0,0.45);
+      opacity:.85;
+      pointer-events:none;
+      transition: opacity .18s ease, box-shadow .18s ease;
+      z-index:-1;
+    }
   #customPads .cp-btn {
     appearance:none;
     border:0;
     padding: 10px 12px;
+    padding-right: 64px;
     min-width: 200px;
     color:#e5e5e5;
-    background: transparent;
+    background: var(--cp-bg, linear-gradient(165deg, #1f1f26, #131218));
     text-align:left;
     cursor:pointer;
     display:flex;
     align-items:center;
     gap:14px;
+    flex:1;
+    border-radius: 12px;
+    position:relative;
+    z-index:1;
+    overflow:hidden;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -2px 6px rgba(0,0,0,0.6);
+    transition: box-shadow .25s ease, transform .15s ease;
+    --cp-press-offset: 0px;
+    transform: translateY(var(--cp-press-offset, 0px));
   }
-  #customPads .cp-btn:active { transform: translateY(1px); }
+  #customPads .cp-btn::after {
+    content:"";
+    position:absolute;
+    inset:0;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 0 rgba(0,0,0,0);
+    pointer-events:none;
+    transition: box-shadow .2s ease;
+  }
+  #customPads .cp-btn .cp-del {
+    position:absolute;
+    top:8px;
+    right:10px;
+    width:28px;
+    height:28px;
+    border-radius:50%;
+    border:0;
+    background: rgba(0,0,0,0.25);
+    color: rgba(255,255,255,0.8);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    transition: background .2s ease, color .2s ease;
+  }
+  #customPads .cp-btn .cp-del:hover {
+    background: rgba(0,0,0,0.4);
+    color:#fff;
+  }
+  #customPads .cp-btn:active {
+    --cp-press-offset: 6px;
+  }
+  #customPads .cp-item:hover .cp-btn {
+    box-shadow: 0 14px 30px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -2px 6px rgba(0,0,0,0.65);
+  }
+    #customPads .cp-item:hover::after {
+    box-shadow: 0 10px 22px rgba(0,0,0,0.55);
+    opacity:1;
+  }
+  #customPads .cp-item:hover .cp-btn::after {
+    box-shadow: inset 0 0 0 2px var(--cp-color, #fcd34d);
+  }
+  #customPads .cp-item.cp-active .cp-btn {
+    --cp-press-offset: 6px;
+    box-shadow: 0 16px 34px rgba(0,0,0,0.6), inset 0 2px 0 rgba(255,255,255,0.08), inset 0 -3px 12px rgba(0,0,0,0.75);
+  }
+  #customPads .cp-item.cp-active::after {
+    opacity:.6;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.4);
+  }
+  #customPads .cp-item.cp-active .cp-btn::after {
+    box-shadow: inset 0 0 0 2px rgba(248,113,113,0.8);
+  }
   #customPads .cp-btn-content {
     display:flex;
     align-items:center;
@@ -83,14 +202,36 @@
     gap:8px;
   }
   #customPads .cp-btn.cp-active {
-    background: linear-gradient(120deg, rgba(248,113,113,0.22), rgba(127,29,29,0.65));
+    background: var(--cp-bg, linear-gradient(165deg, #1f1f26, #131218));
     color: #ffe5e5;
   }
   #customPads .cp-btn.cp-active .cp-level,
   #customPads .cp-btn.cp-active .cp-level-icon,
   #customPads .cp-btn.cp-active .cp-channel-value {
-    color: #fda4af;
-    border-color: rgba(248,113,113,0.75);
+    color: var(--cp-color, #fcd34d);
+    border-color: var(--cp-color, #fcd34d);
+  }
+  #customPads .cp-advanced {
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
+    margin-top:4px;
+  }
+  #customPads .cp-advanced-chip {
+    font-size:.72rem;
+    padding:2px 9px;
+    border-radius:999px;
+    border:1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.05);
+    color: rgba(229,231,235,0.85);
+    letter-spacing:.03em;
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+  }
+  #customPads .cp-advanced-chip i {
+    font-size:.65rem;
+    opacity:.75;
   }
   #customPads .cp-channel {
     display:inline-flex;
@@ -118,23 +259,6 @@
     border:2px solid var(--cp-color, #fcd34d);
     box-shadow: 0 0 10px rgba(0,0,0,0.45);
   }
-  #customPads .cp-actions {
-    display:flex;
-    align-items:center;
-    border-left: 1px solid #2a2a2e;
-    background:#101014;
-  }
-  #customPads .cp-del {
-    width: 44px;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    border:0;
-    background: transparent;
-    cursor:pointer;
-    color:#ffb4b4;
-  }
-  #customPads .cp-del:hover { background: rgba(220,53,69,.12); }
   #customPads .cp-empty {
     color:#a8a8b3;
     font-size:.95rem;
@@ -144,14 +268,12 @@
 </style>
 
 <div id="customPads">
-  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2" style="color:#e5e7eb;">
-    <strong>Atalhos personalizados</strong>
-    <div style="display:flex;gap:8px;align-items:center;">
-      <button id="cpAdd" class="btn btn-sm btn-outline-light" type="button">
-        <i class="fa-solid fa-floppy-disk"></i> Salvar
-      </button>
-      <button id="cpClear" class="btn btn-sm btn-outline-danger" type="button" title="Apagar todos">
+  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2 cp-header-row">
+    <div class="cp-title-wrap">
+      <strong>Atalhos personalizados</strong>
+      <button id="cpClear" class="cp-clear-btn" type="button" title="Apagar todos">
         <i class="fa-solid fa-trash"></i>
+        <span>Apagar todos</span>
       </button>
     </div>
   </div>
@@ -217,6 +339,73 @@
 
     try { await pushToFirebase(payload); } catch(_){}
   }
+  const ADV_WAIT_SLICE_MS = 60;
+  const sleep = (ms) => new Promise(resolve => setTimeout(resolve, Math.max(0, ms || 0)));
+
+  async function waitWithStop(ms, signal){
+    const total = Math.max(0, Number(ms) || 0);
+    if (!signal) {
+      await sleep(total);
+      return false;
+    }
+    let remaining = total;
+    while (remaining > 0 && !signal.stop){
+      const chunk = Math.min(ADV_WAIT_SLICE_MS, remaining);
+      await sleep(chunk);
+      remaining -= chunk;
+    }
+    return !!signal.stop;
+  }
+
+  async function safeSend(command){
+    if (!command) return;
+    try {
+      await sendCommand(command);
+    } catch(_){
+      /* ignora falha individual para manter a sequência */
+    }
+  }
+
+  async function runAdvancedSequence(baseCmd, cfg, signal){
+    if (!cfg) return false;
+    const plan = {
+      pulses: clampNumber(Math.round((cfg.pulses ?? ADV_DEFAULTS.pulses) || ADV_DEFAULTS.pulses), ADV_LIMITS.pulses.min, ADV_LIMITS.pulses.max),
+      duration: clampNumber(Number(cfg.duration ?? ADV_DEFAULTS.duration) || ADV_DEFAULTS.duration, ADV_LIMITS.duration.min, ADV_LIMITS.duration.max),
+      interval: clampNumber(Number(cfg.interval ?? ADV_DEFAULTS.interval) || ADV_DEFAULTS.interval, ADV_LIMITS.interval.min, ADV_LIMITS.interval.max)
+    };
+    const durationMs = Math.round(plan.duration * 1000);
+    const intervalMs = Math.round(plan.interval * 1000);
+    const useHold = !approxEqual(plan.duration, ADV_DEFAULTS.duration);
+
+    for (let pulse = 0; pulse < plan.pulses; pulse += 1){
+      if (signal?.stop) break;
+      if (useHold) {
+        let abortedHold = false;
+        let holdArmed = false;
+        try {
+          await safeSend(`HOLDON ${baseCmd}`);
+          holdArmed = true;
+          abortedHold = await waitWithStop(durationMs, signal);
+        } finally {
+          if (holdArmed) await safeSend("HOLDOFF");
+        }
+        if (abortedHold) break;
+      } else {
+        await safeSend(baseCmd);
+        const abortedPulse = await waitWithStop(durationMs, signal);
+        if (abortedPulse) break;
+      }
+
+      const hasMore = pulse < plan.pulses - 1;
+      if (hasMore && intervalMs > 0){
+        const abortedGap = await waitWithStop(intervalMs, signal);
+        if (abortedGap) break;
+      }
+    }
+
+    return !(signal && signal.stop);
+  }
+
 
   function readMode(){ return (window.currentMode || "BEEP").toUpperCase(); }
   function readLevel(){
@@ -233,12 +422,19 @@
     return `${m},${lvl},${readChannel()}`;
   }
 
+  function isAdvancedPanelEnabled(){
+    return !!window.__ADVANCED_PANEL_OPEN__;
+  }
+
   // ====== UI / Estado ======
   const $ = s => document.querySelector(s);
   const elList = $("#cpList");
   const elEmpty = $("#cpEmpty");
-  const btnAdd = $("#cpAdd");
+  // Busca o botão globalmente, não só dentro do widget
+  let btnAdd = null;
+  let addBound = false;
   const btnClear = $("#cpClear");
+  const moduleRoot = $("#customPads");
 
   const STORE_KEY = "cp_custom_buttons_v1";
   const MODE_STYLES = {
@@ -250,14 +446,190 @@
     DEFAULT:   { color: "#a855f7", tint: "rgba(168,85,247,0.16)", icon: "fa-wave-square", label: "Modo" }
   };
 
-  /** @type {{id:string, mode:string, level:number, channel:number}[]} */
+  const BASE_TINT_BLEND = { r: 12, g: 13, b: 19 };
+
+  function blendChannel(fg, base, alpha){
+    return fg * alpha + base * (1 - alpha);
+  }
+
+  function toSolidTint(value, fallback){
+    if (!value) return fallback || `rgb(${BASE_TINT_BLEND.r}, ${BASE_TINT_BLEND.g}, ${BASE_TINT_BLEND.b})`;
+    const match = String(value).match(/rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([0-9.]+))?\s*\)/i);
+    if (match) {
+      const r = Number(match[1]);
+      const g = Number(match[2]);
+      const b = Number(match[3]);
+      const alpha = match[4] !== undefined ? Math.max(0, Math.min(1, Number(match[4]))) : 1;
+      const blendedR = Math.round(blendChannel(r, BASE_TINT_BLEND.r, alpha));
+      const blendedG = Math.round(blendChannel(g, BASE_TINT_BLEND.g, alpha));
+      const blendedB = Math.round(blendChannel(b, BASE_TINT_BLEND.b, alpha));
+      return `rgb(${blendedR}, ${blendedG}, ${blendedB})`;
+    }
+    return value;
+  }
+
+  const ADV_DEFAULTS = Object.freeze({ pulses: 1, duration: 0.18, interval: 1 });
+  const ADV_LIMITS = Object.freeze({
+    pulses: { min: 1, max: 9999 },
+    duration: { min: 0.05, max: 600 },
+    interval: { min: 0, max: 600 }
+  });
+  const ADV_TOLERANCE = 0.001;
+
+  function clampNumber(value, min, max){
+    const n = Number(value);
+    if (!Number.isFinite(n)) return min;
+    const upper = Number.isFinite(max) ? max : n;
+    return Math.max(min, Math.min(upper, n));
+  }
+
+  function approxEqual(a, b, tolerance = ADV_TOLERANCE){
+    return Math.abs(Number(a) - Number(b)) <= tolerance;
+  }
+
+  function normalizeAdvancedConfig(raw){
+    if (!raw) return null;
+    const normalized = {};
+    let meaningful = false;
+
+    if (raw.pulses !== undefined) {
+      const parsed = Math.round(Number(raw.pulses));
+      if (Number.isFinite(parsed)) {
+        const val = clampNumber(parsed, ADV_LIMITS.pulses.min, ADV_LIMITS.pulses.max);
+        normalized.pulses = val;
+        meaningful = meaningful || !approxEqual(val, ADV_DEFAULTS.pulses, 0);
+      }
+    }
+
+    if (raw.duration !== undefined) {
+      const parsed = Number(raw.duration);
+      if (Number.isFinite(parsed)) {
+        const val = Number(clampNumber(parsed, ADV_LIMITS.duration.min, ADV_LIMITS.duration.max).toFixed(2));
+        normalized.duration = val;
+        meaningful = meaningful || !approxEqual(val, ADV_DEFAULTS.duration);
+      }
+    }
+
+    if (raw.interval !== undefined) {
+      const parsed = Number(raw.interval);
+      if (Number.isFinite(parsed)) {
+        const val = Number(clampNumber(parsed, ADV_LIMITS.interval.min, ADV_LIMITS.interval.max).toFixed(2));
+        normalized.interval = val;
+        meaningful = meaningful || !approxEqual(val, ADV_DEFAULTS.interval);
+      }
+    }
+
+    if (!meaningful) return null;
+    if (normalized.pulses === undefined) normalized.pulses = ADV_DEFAULTS.pulses;
+    if (normalized.duration === undefined) normalized.duration = ADV_DEFAULTS.duration;
+    if (normalized.interval === undefined) normalized.interval = ADV_DEFAULTS.interval;
+    return normalized;
+  }
+
+  function parseNumericInput(el){
+    if (!el) return undefined;
+    const raw = (el.value ?? "").toString().replace(",", ".");
+    if (!raw.trim()) return undefined;
+    const num = Number(raw);
+    return Number.isFinite(num) ? num : undefined;
+  }
+
+  function readAdvancedSnapshot(){
+    if (!isAdvancedPanelEnabled()) return null;
+    const elPulses = document.getElementById("advPulses");
+    const elDuration = document.getElementById("advDuration");
+    const elDelay = document.getElementById("advDelay");
+    if (!elPulses && !elDuration && !elDelay) return null;
+
+    const snapshot = {
+      pulses: parseNumericInput(elPulses),
+      duration: parseNumericInput(elDuration),
+      interval: parseNumericInput(elDelay)
+    };
+    return normalizeAdvancedConfig(snapshot);
+  }
+
+  function formatSeconds(value){
+    if (!Number.isFinite(value)) return "";
+    const absVal = Math.abs(value);
+    const withDecimals = absVal < 10 ? value.toFixed(2) : value.toFixed(1);
+    const trimmed = withDecimals.replace(/\.0+$/, "").replace(/(\.\d*?[1-9])0+$/, "$1");
+    return trimmed;
+  }
+
+  function buildAdvancedSummary(adv){
+    if (!adv) return "";
+    const chips = [];
+    if (adv.pulses !== undefined && !approxEqual(adv.pulses, ADV_DEFAULTS.pulses, 0)) {
+      chips.push(`<span class="cp-advanced-chip"><i class="fa-solid fa-wave-square"></i><span>${adv.pulses}x</span></span>`);
+    }
+    if (adv.duration !== undefined && !approxEqual(adv.duration, ADV_DEFAULTS.duration)) {
+      chips.push(`<span class="cp-advanced-chip"><i class="fa-solid fa-stopwatch"></i><span>${formatSeconds(adv.duration)}s</span></span>`);
+    }
+    if (adv.interval !== undefined && !approxEqual(adv.interval, ADV_DEFAULTS.interval)) {
+      chips.push(`<span class="cp-advanced-chip"><i class="fa-solid fa-arrows-left-right"></i><span>${formatSeconds(adv.interval)}s</span></span>`);
+    }
+    if (!chips.length) return "";
+    return `<div class="cp-advanced">${chips.join("")}</div>`;
+  }
+
+  function applyAdvancedConfig(adv){
+    if (!adv) return;
+    const elPulses = document.getElementById("advPulses");
+    const elDuration = document.getElementById("advDuration");
+    const elDelay = document.getElementById("advDelay");
+    if (!elPulses && !elDuration && !elDelay) return;
+
+    const dispatchValue = (el, value) => {
+      if (!el || value === undefined) return;
+      const newVal = String(value);
+      if (el.value === newVal) return;
+      el.value = newVal;
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+
+    if (elPulses && adv.pulses !== undefined) {
+      dispatchValue(elPulses, Math.round(clampNumber(adv.pulses, ADV_LIMITS.pulses.min, ADV_LIMITS.pulses.max)));
+    }
+    if (elDuration && adv.duration !== undefined) {
+      dispatchValue(elDuration, formatSeconds(clampNumber(adv.duration, ADV_LIMITS.duration.min, ADV_LIMITS.duration.max)));
+    }
+    if (elDelay && adv.interval !== undefined) {
+      dispatchValue(elDelay, formatSeconds(clampNumber(adv.interval, ADV_LIMITS.interval.min, ADV_LIMITS.interval.max)));
+    }
+  }
+
+  /** @type {{id:string, mode:string, level:number, channel:number, advanced?: { pulses?: number; duration?: number; interval?: number; }}[]} */
   let items = [];
+  let activePadCancel = null;
+
+  function claimPadControl(cancelFn){
+    if (typeof cancelFn !== "function") return;
+    if (activePadCancel && activePadCancel !== cancelFn) {
+      try { activePadCancel(); } catch(_){ }
+    }
+    activePadCancel = cancelFn;
+  }
+
+  function releasePadControl(cancelFn){
+    if (activePadCancel === cancelFn) {
+      activePadCancel = null;
+    }
+  }
 
   function load(){
     try {
       const raw = localStorage.getItem(STORE_KEY);
       items = raw ? JSON.parse(raw) : [];
-      if (!Array.isArray(items)) items = [];
+      if (!Array.isArray(items)) {
+        items = [];
+      } else {
+        items = items.map(entry => ({
+          ...entry,
+          advanced: normalizeAdvancedConfig(entry.advanced)
+        }));
+      }
     } catch {
       items = [];
     }
@@ -269,10 +641,15 @@
 
   function render(){
     elList.innerHTML = "";
-    elEmpty.classList.toggle("d-none", items.length !== 0);
+    const hasItems = items.length > 0;
+    elEmpty.classList.toggle("d-none", hasItems);
+    if (moduleRoot) moduleRoot.classList.toggle("cp-hidden", !hasItems);
 
     for (const it of items){
       const cmd = `${it.mode},${it.level},${it.channel}`;
+      const advConfig = normalizeAdvancedConfig(it.advanced) || null;
+      it.advanced = advConfig;
+      const advSummary = buildAdvancedSummary(advConfig);
 
       const wrap = document.createElement("div");
       wrap.className = "cp-item";
@@ -286,10 +663,10 @@
       const hideLevel = modeKey === "LIGHT" || modeKey === "BEEP";
       wrap.dataset.mode = modeKey;
       wrap.style.setProperty("--cp-color", modeStyle.color);
-      wrap.style.borderColor = modeStyle.color;
-      wrap.style.background = `linear-gradient(120deg, ${modeStyle.tint}, rgba(12,12,14,0.92))`;
+      const solidTint = toSolidTint(modeStyle.tint, modeStyle.color);
+      wrap.style.setProperty("--cp-bg", `linear-gradient(120deg, ${solidTint}, #05060a)`);
       b.innerHTML = `<span class="cp-btn-content">
-                        <span class=\"cp-level ${hideLevel ? 'cp-level-no-value' : ''}\">${hideLevel ? '' : `<span class=\"cp-level-value\">${it.level}</span>`}<span class=\"cp-level-icon\"><i class=\"fa-solid ${modeStyle.icon}\"></i></span></span>
+                        <span class="cp-level ${hideLevel ? 'cp-level-no-value' : ''}">${hideLevel ? '' : `<span class="cp-level-value">${it.level}</span>`}<span class="cp-level-icon"><i class="fa-solid ${modeStyle.icon}"></i></span></span>
                         <span class="cp-details">
                           <strong class="cp-mode">
                             ${modeLabel}
@@ -298,16 +675,55 @@
                             <span>Canal</span>
                             <span class="cp-channel-value">${it.channel}</span>
                           </span>
+                          ${advSummary}
                         </span>
                       </span>`;
 
-      // Comportamento: pressionar = HOLDON, soltar = HOLDOFF
-      // Fallback: se soltar não disparar por algum motivo, corta em 2s.
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "cp-del";
+      del.title = "Remover";
+      del.innerHTML = `<i class="fa-solid fa-xmark"></i>`;
+
+      const stopPadPointer = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      };
+      ["pointerdown", "pointerup", "pointercancel"].forEach(evt => {
+        del.addEventListener(evt, stopPadPointer);
+      });
+      del.addEventListener("click", (e) => {
+        stopPadPointer(e);
+        items = items.filter(x => x.id !== it.id);
+        save();
+        render();
+      });
+      b.appendChild(del);
+
+      // Comportamento: mantém HOLD tradicional para botões simples
+      // e executa sequências avançadas controlando o latch visual.
+      const hasAdvancedSequence = !!advConfig;
       let safetyTimer = null;
-      let down = false;
       let suppressClick = false;
       let suppressTimer = null;
       const CLICK_SUPPRESS_MS = 80;
+      let simpleHoldActive = false;
+      let advRunner = null;
+      let advStopSignal = null;
+
+      function setActiveState(active){
+        b.classList.toggle("cp-active", !!active);
+        wrap.classList.toggle("cp-active", !!active);
+      }
+
+      function shouldUseAdvanced(){
+        return hasAdvancedSequence;
+      }
+
+      function syncAdvancedUi(){
+        if (!advConfig || !isAdvancedPanelEnabled()) return;
+        applyAdvancedConfig(advConfig);
+      }
 
       function engagePointerSuppression(){
         suppressClick = true;
@@ -318,65 +734,83 @@
         suppressTimer = setTimeout(() => { suppressClick = false; }, CLICK_SUPPRESS_MS);
       }
 
-      async function holdOn(){
-        if (down) return;
-        down = true;
-        b.classList.add("cp-active");
-        wrap.classList.add("cp-active");
-        try { await sendCommand(`HOLDON ${cmd}`); } catch(_) {}
+      async function holdOnSimple(){
+        if (simpleHoldActive) return;
+        claimPadControl(cancelActive);
+        simpleHoldActive = true;
+        setActiveState(true);
+        await safeSend(`HOLDON ${cmd}`);
         clearTimeout(safetyTimer);
-        safetyTimer = setTimeout(() => { holdOff(); }, 2000);
+        // safetyTimer = setTimeout(() => { holdOffSimple(); }, 2000);
       }
-      async function holdOff(){
-        if (!down) return;
-        down = false;
-        b.classList.remove("cp-active");
-        wrap.classList.remove("cp-active");
+      async function holdOffSimple(){
+        if (!simpleHoldActive) return;
+        simpleHoldActive = false;
+        setActiveState(false);
         clearTimeout(safetyTimer);
         safetyTimer = null;
-        try { await sendCommand("HOLDOFF"); } catch(_) {}
+        await safeSend("HOLDOFF");
+        if (!advRunner) releasePadControl(cancelActive);
+      }
+
+      function startAdvancedSequence(){
+        if (!shouldUseAdvanced() || advRunner) return false;
+        syncAdvancedUi();
+        claimPadControl(cancelActive);
+        advStopSignal = { stop: false };
+        setActiveState(true);
+        const runner = runAdvancedSequence(cmd, advConfig, advStopSignal)
+          .catch(() => false)
+          .finally(() => {
+            setActiveState(false);
+            advRunner = null;
+            advStopSignal = null;
+            if (!simpleHoldActive) releasePadControl(cancelActive);
+          });
+        advRunner = runner;
+        return true;
+      }
+
+      function stopAdvancedSequence(){
+        if (advStopSignal) advStopSignal.stop = true;
+      }
+
+      function cancelActive(){
+        if (advRunner) {
+          stopAdvancedSequence();
+        } else {
+          holdOffSimple();
+        }
       }
 
       b.addEventListener("pointerdown", (e) => {
         e.preventDefault();
         b.setPointerCapture?.(e.pointerId);
         engagePointerSuppression();
-        holdOn();
+        if (!startAdvancedSequence()) {
+          holdOnSimple();
+        }
       });
 
       b.addEventListener("pointerup", (e) => {
         e.preventDefault();
-        try { b.releasePointerCapture?.(e.pointerId); } catch(_){}
-        holdOff();
+        try { b.releasePointerCapture?.(e.pointerId); } catch(_){ }
+        if (!advRunner) holdOffSimple();
         releasePointerSuppression();
       });
 
-      b.addEventListener("pointercancel", () => { holdOff(); releasePointerSuppression(); });
-      window.addEventListener("blur", () => { holdOff(); releasePointerSuppression(); });
+      b.addEventListener("pointercancel", () => { cancelActive(); releasePointerSuppression(); });
+      window.addEventListener("blur", () => { cancelActive(); releasePointerSuppression(); });
       b.addEventListener("click", (e) => {
         if (suppressClick) return;
         e.preventDefault();
-        holdOn();
-        setTimeout(holdOff, 120);
+        if (!startAdvancedSequence()) {
+          holdOnSimple();
+          setTimeout(() => { holdOffSimple(); }, 120);
+        }
       });
 
-      const acts = document.createElement("div");
-      acts.className = "cp-actions";
-
-      const del = document.createElement("button");
-      del.type = "button";
-      del.className = "cp-del";
-      del.title = "Remover";
-      del.innerHTML = `<i class="fa-solid fa-xmark"></i>`;
-      del.addEventListener("click", () => {
-        items = items.filter(x => x.id !== it.id);
-        save();
-        render();
-      });
-
-      acts.appendChild(del);
       wrap.appendChild(b);
-      wrap.appendChild(acts);
       elList.appendChild(wrap);
     }
   }
@@ -385,28 +819,51 @@
     const mode = readMode();
     const level = (mode === "SHOCK" || mode === "VIBRATION") ? readLevel() : 0;
     const channel = readChannel();
+    const advanced = readAdvancedSnapshot();
 
     const id = "cp_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2,8);
 
-    items.push({ id, mode, level, channel });
+    const entry = { id, mode, level, channel };
+    if (advanced) entry.advanced = advanced;
+    items.push(entry);
     save();
     render();
   }
 
   // ====== Eventos ======
-  btnAdd.addEventListener("click", () => {
-    try { addCurrent(); } catch (e) { alert(e.message || "Falha ao adicionar."); }
-  });
+  function bindAddButton(){
+    if (addBound) return true;
+    const found = document.getElementById("cpAdd");
+    if (!found) return false;
+    btnAdd = found;
+    btnAdd.addEventListener("click", () => {
+      try { addCurrent(); } catch (e) { alert(e.message || "Falha ao adicionar."); }
+    });
+    addBound = true;
+    return true;
+  }
 
-  btnClear.addEventListener("click", () => {
-    if (!confirm("Apagar todos os botões personalizados?")) return;
-    items = [];
-    save();
-    render();
-  });
+  if (!bindAddButton()) {
+    const addObserver = new MutationObserver(() => {
+      if (bindAddButton()) addObserver.disconnect();
+    });
+    if (document.body) {
+      addObserver.observe(document.body, { childList: true, subtree: true });
+    }
+  }
+  if (btnClear) {
+    btnClear.addEventListener("click", () => {
+      if (!confirm("Apagar todos os botões personalizados?")) return;
+      items = [];
+      save();
+      render();
+    });
+  }
 
   // Init
   load();
   render();
 })();
 </script>
+
+

@@ -60,7 +60,6 @@
   <div class="mt-3">
     <label class="form-label small mb-1">Fontes de áudio</label>
     <div class="mb-2">
-      <label class="form-label small mb-1 text-secondary">Fontes de Áudio</label>
       <div class="d-flex flex-wrap gap-2">
         <button id="audio-collar-refresh-media" class="btn btn-sm btn-outline-light">
           <i class="fa-solid fa-music me-1"></i> Escutar página
@@ -309,7 +308,7 @@
   // ---------- UI helpers ----------
   const clamp = (n,min,max) => Math.max(min, Math.min(max, n));
   const $  = sel => document.querySelector(sel);
-  const ALLOWED_MODES = ['BEEP','VIBRATION','SHOCK','LIGHT'];
+  const ALLOWED_MODES = ['BEEP','VIBRATION','SHOCK','LIGHT','ROULETTE'];
   const sanitizeMode = (m) => {
     const v = String(m || '').toUpperCase();
     return ALLOWED_MODES.includes(v) ? v : 'BEEP';
@@ -377,6 +376,8 @@
   let controlBusBound = false;
   let lastRxSig = null;
   let warnedNoHoldTx = false;
+  let rouletteHoldActive = false;
+  let warnedNoRoulette = false;
 
   function setControlState(next){
     appendLog(`setControlState: next=${JSON.stringify(next)}`);
@@ -414,9 +415,54 @@
     try { console.warn('[audio-collar] SerialBridge.send indisponivel.'); } catch(_){}
   }
 
+  function forwardRoulettePointer(type, srcEvt){
+    const bridge = window.__ROULETTE_BRIDGE__;
+    if (bridge) {
+      if (typeof bridge.forwardEvent === 'function') {
+        return bridge.forwardEvent(type, srcEvt);
+      }
+      if (type === 'pointerdown' && typeof bridge.nativePress === 'function') {
+        return bridge.nativePress(srcEvt);
+      }
+      if (type === 'pointerup' && typeof bridge.nativeRelease === 'function') {
+        return bridge.nativeRelease(srcEvt);
+      }
+    }
+    const target = document.getElementById('r3Btn');
+    if (!target) return false;
+    const opts = { bubbles: true, cancelable: true };
+    if (srcEvt && srcEvt.pointerType) opts.pointerType = srcEvt.pointerType;
+    if (srcEvt && srcEvt.isPrimary != null) opts.isPrimary = srcEvt.isPrimary;
+    let ev;
+    try { ev = new PointerEvent(type, opts); } catch(_){ ev = new Event(type, { bubbles: true }); }
+    try { return target.dispatchEvent(ev); } catch(_){ return false; }
+  }
+
+  function applyRouletteHoldState(shouldHold, meta){
+    const next = !!shouldHold;
+    if (next === rouletteHoldActive) return;
+    const ok = forwardRoulettePointer(next ? 'pointerdown' : 'pointerup', meta && meta.srcEvt);
+    if (ok === false) {
+      if (!warnedNoRoulette) {
+        appendLog('Roleta indisponivel (#r3Btn nao encontrado).');
+        warnedNoRoulette = true;
+      }
+      return;
+    }
+    warnedNoRoulette = false;
+    rouletteHoldActive = next;
+  }
+
   function applyHoldStateLocal(state, meta){
     // Emite evento próprio
     try { window.dispatchEvent(new CustomEvent('hold:state', { detail: { state, meta } })); } catch(_){}
+
+    const modeKey = String(state && state.mode || control.mode || '').toUpperCase();
+    if (modeKey === 'ROULETTE') {
+      applyRouletteHoldState(!!state.on, meta);
+      return;
+    }
+    if (rouletteHoldActive) applyRouletteHoldState(false, meta);
 
     if (!EMIT_CHAT_BRIDGE) return;
 
@@ -829,6 +875,20 @@
   function updateDesiredFromPeak(peakPct){
     const now = Date.now();
     const thrOn  = clamp(cfg.thresholdPct, 0, 100);
+    const isRoulette = control.mode === 'ROULETTE';
+    if (isRoulette) {
+      const shouldHold = peakPct >= thrOn;
+      if (shouldHold && !desired.on) {
+        desired = { on:true, mode: control.mode, level: 0, ch: control.channel, seq: ++seq };
+        aboveSince = 0;
+        belowSince = 0;
+      } else if (!shouldHold && desired.on) {
+        desired = { on:false, mode: control.mode, level: 0, ch: control.channel, seq: ++seq };
+        aboveSince = 0;
+        belowSince = 0;
+      }
+      return;
+    }
     const thrOff = clamp(thrOn - THRESH_HYST, 0, 100);
 
     if (!desired.on) {

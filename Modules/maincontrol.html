@@ -1696,14 +1696,31 @@
           holder.innerHTML = "";
           holder.classList.remove("chart-embed-placeholder");
           chartCard.classList.add("embedded-event-chart");
+          chartCard.classList.remove("chart-hidden");
+          chartCard.style.display = "";
           holder.appendChild(chartCard);
+          setTimeout(() => {
+            try { window.dispatchEvent(new Event("resize")); } catch(_) {}
+          }, 0);
           return true;
         };
         if (tryAttach()) return;
         let attempts = 0;
         const timer = setInterval(() => {
           attempts += 1;
-          if (tryAttach() || attempts >= 40) clearInterval(timer);
+          if (tryAttach() || attempts >= 40) {
+            if (attempts >= 40) {
+              const chartCard = document.getElementById("collarEventChartCard");
+              if (chartCard) {
+                chartCard.classList.remove("chart-hidden");
+                chartCard.style.display = "";
+                setTimeout(() => {
+                  try { window.dispatchEvent(new Event("resize")); } catch(_) {}
+                }, 0);
+              }
+            }
+            clearInterval(timer);
+          }
         }, 400);
       }
       initEventChartEmbed();
@@ -3089,6 +3106,10 @@
     const modalEl = ensureFlowgateModal();
     if (!modalEl) {
       const panel = document.getElementById("flowgate-panel");
+      if (panel) {
+        panel.classList.remove("flowgate-hidden");
+        panel.style.display = "";
+      }
       if (panel && typeof panel.scrollIntoView === "function") {
         panel.scrollIntoView({ behavior: "smooth", block: "start" });
       }
@@ -3103,6 +3124,11 @@
         modalBody.appendChild(wrapper);
         modalBody.dataset.bound = "true";
         slot.style.display = "none";
+        const panel = document.getElementById("flowgate-panel");
+        if (panel) {
+          panel.classList.remove("flowgate-hidden");
+          panel.style.display = "";
+        }
       }
     }
     if (window.bootstrap && typeof window.bootstrap.Modal === "function") {

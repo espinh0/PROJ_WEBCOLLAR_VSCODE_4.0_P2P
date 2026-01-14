@@ -286,12 +286,22 @@
     modalBody.appendChild(wrapper);
     modalBody.dataset.bound = "true";
     slot.style.display = "none";
+    const panel = document.getElementById("flowgate-panel");
+    if (panel) {
+      panel.classList.remove("flowgate-hidden");
+      panel.style.display = "";
+    }
     return true;
   }
 
   function showFlowgateModal() {
     const modalEl = document.getElementById("flowgate-module-modal");
     if (!modalEl) {
+      const panel = document.getElementById("flowgate-panel");
+      if (panel) {
+        panel.classList.remove("flowgate-hidden");
+        panel.style.display = "";
+      }
       scrollFallback("flowgate-panel");
       return;
     }

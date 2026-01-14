@@ -118,6 +118,9 @@
     return {name:'SerialBridge', send: function(){ throw new Error('SerialBridge.send indisponivel'); }};
   }
   var SERIAL = pickSerialAdapter();
+  function getSerialAdapter(){
+    return pickSerialAdapter();
+  }
 
   var processed = new Set();
   var MAX = 500;
@@ -152,18 +155,36 @@
     return origin;
   }
 
-  function onChatMessage(e){
-    var msg = (e && e.detail) ? e.detail : e;
-    var id  = String(msg.id || msg.key || '');
-    if (!id) return;
-    if (processed.has(id)) return;
+  function normalizeChatMessage(input){
+    var msg = (input && input.detail) ? input.detail : input;
+    if (!msg) return null;
+    if (msg.type && msg.data) {
+      if (msg.type !== 'chat') return null;
+      msg = msg.data;
+    }
+    return msg;
+  }
 
+  function buildFallbackId(msg, text, origin){
+    var ts = msg.ts || msg.timestamp || '';
+    var base = `${origin}|${ts}|${text}`;
+    return base && base !== '||' ? base : `noid:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+  }
+
+  function onChatMessage(e){
+    var msg = normalizeChatMessage(e);
+    if (!msg) return;
     var text = extractText(msg).trim();
     if (!text) return;
 
     var origin = extractOrigin(msg);
+    var id  = String(msg.id || msg.key || '');
+    if (!id) id = buildFallbackId(msg, text, origin);
+    if (processed.has(id)) return;
+
     executorLog('received', text, origin, {peerId: msg.peerId, username: msg.username});
 
+    var SERIAL = getSerialAdapter();
     try {
       SERIAL.send(text);
       logLine(`ÔåÆ chat ÔûÂ collar (${SERIAL.name}): ${text}`);
@@ -177,6 +198,8 @@
   }
 
   window.addEventListener('chat:message', onChatMessage);
+  window.addEventListener('cmd:message', onChatMessage);
+  window.addEventListener('flowgate:message', onChatMessage);
 
   logLine(`EXECUTOR iniciado ÔÇö aguardando eventos "chat:message"; adaptador: ${SERIAL.name}.`);
   executorLog('init', 'EXECUTOR_START', 'executor', {adapter: SERIAL.name});

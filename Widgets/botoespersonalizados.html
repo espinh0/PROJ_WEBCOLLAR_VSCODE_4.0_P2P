@@ -331,7 +331,8 @@
     const payload = String(text || '').trim();
     if (!payload) return;
 
-    if (window.SerialBridge && typeof window.SerialBridge.send === 'function') {
+    const serialReady = !!(window.port && window.port.writable);
+    if (serialReady && window.SerialBridge && typeof window.SerialBridge.send === 'function') {
       try { await window.SerialBridge.send(payload); return; } catch(_){}
     }
 

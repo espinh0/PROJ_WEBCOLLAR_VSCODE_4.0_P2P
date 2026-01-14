@@ -1886,10 +1886,53 @@
     const payload = String(text || '').trim();
     if (!payload) return;
 
-    if (window.SerialBridge && typeof window.SerialBridge.send === 'function') {
+    const serialReady = !!(window.port && window.port.writable);
+    if (serialReady && window.SerialBridge && typeof window.SerialBridge.send === 'function') {
       try { window.SerialBridge.send(payload); return; } catch(e){ log(`Falha SerialBridge: ${e && e.message || e}`, "warn"); }
     }
-    log('SerialBridge indisponivel: comando nao enviado.', "warn");
+
+    const room = (window.Flowgate && window.Flowgate.room) ? window.Flowgate.room : window.__TRYSTERO_ROOM__;
+    if (room && typeof room.makeAction === 'function') {
+      const pair = room.makeAction('cmd');
+      const sendCmd = Array.isArray(pair) ? pair[0] : null;
+      if (typeof sendCmd === 'function') {
+        try {
+          const msg = {
+            text: payload.slice(0, 400),
+            name: getUsername(),
+            timestamp: Date.now(),
+            id: `cmd:${Date.now()}:${Math.random().toString(36).slice(2)}`
+          };
+          sendCmd(msg);
+          return;
+        } catch(e) {
+          log(`Falha Flowgate (room cmd): ${e && e.message || e}`, "warn");
+        }
+      }
+    }
+
+    const cmdBus = (window.__TRYSTERO_CMD__ && typeof window.__TRYSTERO_CMD__.send === 'function') ? window.__TRYSTERO_CMD__ : null;
+    if (cmdBus && (!cmdBus.isReady || cmdBus.isReady())) {
+      const ok = cmdBus.send(payload.slice(0, 400), { via: 'maincontrol' });
+      if (!ok) log('Falha Flowgate (cmd): comando nao enviado.', "warn");
+      return;
+    }
+
+    const chatBus = (window.__TRYSTERO_CHAT__ && typeof window.__TRYSTERO_CHAT__.send === 'function') ? window.__TRYSTERO_CHAT__ : null;
+    if (chatBus && (!chatBus.isReady || chatBus.isReady())) {
+      try {
+        const maybe = chatBus.send(payload.slice(0, 400), { via: 'maincontrol' });
+        if (maybe && typeof maybe.catch === 'function') {
+          maybe.catch((err) => log(`Falha Flowgate (chat): ${err && err.message || err}`, "warn"));
+        }
+        return;
+      } catch(e) {
+        log(`Falha Flowgate (chat): ${e && e.message || e}`, "warn");
+        return;
+      }
+    }
+
+    log('Flowgate/SerialBridge indisponivel: comando nao enviado.', "warn");
   }
 
   // ===== Helpers UI =====
@@ -3642,7 +3685,6 @@
   syncAdvancedUi();
   setAdvancedOpen(advancedOpen, { broadcast:false });
   stopAdvCountdown(false);
-  ensureSliderTooltip(`${initialLevel}%`);
   syncLevelInputWidth();
   broadcastBasics("remote-init");
 })();

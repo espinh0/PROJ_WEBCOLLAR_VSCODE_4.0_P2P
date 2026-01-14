@@ -99,13 +99,13 @@
   window.addEventListener("flowgate:peer_connected", (ev) => {
     const d = ev?.detail || {};
     const name = d.name || shortId(d.peerId);
-    showNotification({ text: `Peer entrou: ${name}`, type: "join", ttl: 4500 });
+    showNotification({ text: `Usuário entrou: ${name}`, type: "join", ttl: 4500 });
   });
 
   window.addEventListener("flowgate:peer_disconnected", (ev) => {
     const d = ev?.detail || {};
     const name = d.name || shortId(d.peerId);
-    showNotification({ text: `Peer saiu: ${name}`, type: "leave", ttl: 4500 });
+    showNotification({ text: `Usuário saiu: ${name}`, type: "leave", ttl: 4500 });
   });
 
   // Tags locais (host/serial)

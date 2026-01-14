@@ -794,7 +794,7 @@
           </div>
         </div>
         <div id="flashscore-browser-body" class="card-body p-0">
-          <iframe id="flashscore-browser-iframe" loading="lazy" tabindex="-1" style="width: 100%; height: 70vh; border: 0;" src="https://www.flashscore.com.br/basquete/"></iframe>
+          <iframe id="flashscore-browser-iframe" loading="lazy" tabindex="-1" style="width: 100%; height: 70vh; border: 0;" src="about:blank" data-initial-src="https://www.flashscore.com.br/basquete/"></iframe>
         </div>
       </div>
     </div>
@@ -1675,101 +1675,136 @@ function mountProfileRows(){
       return;
     }
 
-    const initialSrc = 'https://www.flashscore.com.br/basquete/';
-    const storageKey = 'flashscore-browser-last-url';
-    const toggleIcon = toggleBtn.querySelector('i');
-    const visibilityKey = 'flashscore-browser-visibility';
-
-    const applyExpandedState = (expanded) => {
-      browserBody.style.display = expanded ? 'block' : 'none';
-      if (toggleIcon) {
-        toggleIcon.classList.toggle('fa-chevron-up', expanded);
-        toggleIcon.classList.toggle('fa-chevron-down', !expanded);
-      }
-      const label = expanded ? 'Ocultar' : 'Expandir';
-      toggleBtn.setAttribute('title', label);
-      toggleBtn.setAttribute('aria-label', label);
-      toggleBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    const isHostFlag = () => {
+      try {
+        const peer = (window.Flowgate && window.Flowgate.localPeer) ? window.Flowgate.localPeer : window.__TRYSTERO_PEER__;
+        const tags = (peer && typeof peer.getLocalTags === 'function') ? peer.getLocalTags() : [];
+        if (Array.isArray(tags) && tags.map((t)=> String(t || '').toLowerCase()).includes('host')) return true;
+      } catch(_){ }
+      return document.documentElement.classList.contains('host-on');
     };
 
-    let savedVisibility = null;
-    try { savedVisibility = localStorage.getItem(visibilityKey); } catch(_){ }
-    let isExpanded = savedVisibility === null ? true : savedVisibility === 'expanded';
-    applyExpandedState(isExpanded);
+    let activated = false;
+    const startModule = () => {
+      if (activated || !isHostFlag()) return;
+      activated = true;
 
-    const lastUrl = localStorage.getItem(storageKey);
-    if (lastUrl && lastUrl !== initialSrc) {
-      iframe.src = lastUrl;
-      urlInput.value = lastUrl;
-    } else {
-      iframe.src = initialSrc;
-    }
+      const initialSrc = iframe.dataset.initialSrc || 'https://www.flashscore.com.br/basquete/';
+      const storageKey = 'flashscore-browser-last-url';
+      const toggleIcon = toggleBtn.querySelector('i');
+      const visibilityKey = 'flashscore-browser-visibility';
 
-    const navigateTo = (url) => {
-      const trimmedUrl = url.trim();
-      if (trimmedUrl && (trimmedUrl.startsWith('https://www.flashscore.com.br') || trimmedUrl.startsWith('https://www.flashscore.mobi'))) {
-        iframe.src = trimmedUrl;
-        localStorage.setItem(storageKey, trimmedUrl);
-        urlInput.value = trimmedUrl;
-      } else if (trimmedUrl) {
-        console.warn('URL inválida. Use flashscore.com.br ou flashscore.mobi');
-      }
-    };
+      const applyExpandedState = (expanded) => {
+        browserBody.style.display = expanded ? 'block' : 'none';
+        if (toggleIcon) {
+          toggleIcon.classList.toggle('fa-chevron-up', expanded);
+          toggleIcon.classList.toggle('fa-chevron-down', !expanded);
+        }
+        const label = expanded ? 'Ocultar' : 'Expandir';
+        toggleBtn.setAttribute('title', label);
+        toggleBtn.setAttribute('aria-label', label);
+        toggleBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      };
 
-    goBtn.addEventListener('click', () => navigateTo(urlInput.value));
-    urlInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        navigateTo(urlInput.value);
-      }
-    });
-
-    homeBtn.addEventListener('click', () => {
-      if (iframe.src !== initialSrc) {
-        iframe.src = initialSrc;
-        urlInput.value = '';
-        localStorage.setItem(storageKey, initialSrc);
-      }
-    });
-
-    toggleBtn.addEventListener('click', () => {
-      isExpanded = !isExpanded;
+      let savedVisibility = null;
+      try { savedVisibility = localStorage.getItem(visibilityKey); } catch(_){ }
+      let isExpanded = savedVisibility === null ? true : savedVisibility === 'expanded';
       applyExpandedState(isExpanded);
-      try { localStorage.setItem(visibilityKey, isExpanded ? 'expanded' : 'collapsed'); } catch(_){}
-    });
 
-    const markConsent = ()=> {
-      try { localStorage.setItem(consentKey, 'granted'); } catch(_){}
-    };
-    const sendConsent = ()=> {
-      if (!iframe?.contentWindow) return;
-      const msg = { type: consentRequest, consent: true, granted: true };
-      consentOrigins.forEach((origin)=>{
-        try { iframe.contentWindow.postMessage(msg, origin); } catch(_){}
+      const lastUrl = localStorage.getItem(storageKey);
+      if (lastUrl && lastUrl !== initialSrc) {
+        iframe.src = lastUrl;
+        urlInput.value = lastUrl;
+      } else {
+        iframe.src = initialSrc;
+      }
+
+      const navigateTo = (url) => {
+        const trimmedUrl = url.trim();
+        if (trimmedUrl && (trimmedUrl.startsWith('https://www.flashscore.com.br') || trimmedUrl.startsWith('https://www.flashscore.mobi'))) {
+          iframe.src = trimmedUrl;
+          localStorage.setItem(storageKey, trimmedUrl);
+          urlInput.value = trimmedUrl;
+        } else if (trimmedUrl) {
+          console.warn('URL invalida. Use flashscore.com.br ou flashscore.mobi');
+        }
+      };
+
+      goBtn.addEventListener('click', () => navigateTo(urlInput.value));
+      urlInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          navigateTo(urlInput.value);
+        }
       });
-      try { iframe.contentWindow.postMessage(msg, '*'); } catch(_){}
+
+      homeBtn.addEventListener('click', () => {
+        if (iframe.src !== initialSrc) {
+          iframe.src = initialSrc;
+          urlInput.value = '';
+          localStorage.setItem(storageKey, initialSrc);
+        }
+      });
+
+      toggleBtn.addEventListener('click', () => {
+        isExpanded = !isExpanded;
+        applyExpandedState(isExpanded);
+        try { localStorage.setItem(visibilityKey, isExpanded ? 'expanded' : 'collapsed'); } catch(_){ }
+      });
+
+      const markConsent = ()=> {
+        try { localStorage.setItem(consentKey, 'granted'); } catch(_){ }
+      };
+      const sendConsent = ()=> {
+        if (!iframe?.contentWindow) return;
+        const msg = { type: consentRequest, consent: true, granted: true };
+        consentOrigins.forEach((origin)=>{
+          try { iframe.contentWindow.postMessage(msg, origin); } catch(_){ }
+        });
+        try { iframe.contentWindow.postMessage(msg, '*'); } catch(_){ }
+      };
+
+      const storedConsent = localStorage.getItem(consentKey) === 'granted';
+      if (storedConsent) sendConsent();
+
+      window.addEventListener('message', (event)=>{
+        if (!event?.data || event.data.type !== consentAck) return;
+        if (event.origin && !event.origin.includes('flashscore')) return;
+        if (event.data.granted === true) markConsent();
+      });
+
+      iframe.addEventListener('load', () => {
+        iframe.blur();
+        sendConsent();
+      });
+
+      if (!storedConsent) {
+        markConsent();
+        sendConsent();
+      }
     };
 
-    const storedConsent = localStorage.getItem(consentKey) === 'granted';
-    if (storedConsent) sendConsent();
-
-    window.addEventListener('message', (event)=>{
-      if (!event?.data || event.data.type !== consentAck) return;
-      if (event.origin && !event.origin.includes('flashscore')) return;
-      if (event.data.granted === true) markConsent();
-    });
-
-    iframe.addEventListener('load', () => {
-      iframe.blur();
-      sendConsent();
-    });
-
-    if (!storedConsent) {
-      markConsent();
-      sendConsent();
+    if (!isHostFlag()) {
+      try { iframe.src = 'about:blank'; } catch(_){ }
+      const watchForHost = () => startModule();
+      window.addEventListener('flowgate:local_tags_changed', watchForHost);
+      window.addEventListener('trystero:localTags', watchForHost);
+      let tries = 0;
+      const hostTimer = setInterval(() => {
+        tries += 1;
+        if (activated) { clearInterval(hostTimer); return; }
+        if (isHostFlag() || tries > 15) {
+          if (isHostFlag()) startModule();
+          clearInterval(hostTimer);
+        }
+      }, 1000);
+      return;
     }
+
+    startModule();
   })();
 </script>
+
 
 <script>
   function isHost(){

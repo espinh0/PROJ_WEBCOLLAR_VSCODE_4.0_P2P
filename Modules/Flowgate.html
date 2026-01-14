@@ -2077,6 +2077,10 @@
       if (!hostConnLostAt) hostConnLostAt = Date.now();
       debugHostCandidates(`host-disconnect:${reason}`);
       snapshotState('host-disconnect', { reason });
+      if (iceMode !== 'turn' && (reason === 'host-timeout' || reason === 'host-error')) {
+        requestTurnFallback(`host-${reason}`);
+        return;
+      }
       if (iceMode === 'turn') {
         if (requestTurnFailover(`host-${reason || 'fail'}`)) return;
       }

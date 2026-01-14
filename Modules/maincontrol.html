@@ -495,6 +495,11 @@
     color: #ffecec;
     box-shadow: 0 8px 20px rgba(239,68,68,0.25), 0 4px 12px rgba(0,0,0,0.35);
     transition: transform .12s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease, color .1s ease;
+    touch-action: manipulation;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
   }
   .btn-send i {
     color: var(--send-color);
@@ -586,6 +591,11 @@
     box-shadow: 0 8px 18px rgba(0,0,0,0.28);
     transition: transform .15s ease, box-shadow .2s ease, border-color .15s ease, background .15s ease, color .12s ease;
     line-height: 1;
+    touch-action: manipulation;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
   }
   .btn-save-shortcut i {
     color: var(--save-color);
@@ -1139,6 +1149,11 @@
     align-items: center;
     justify-content: center;
     transition: background 0.12s ease, color 0.12s ease;
+    touch-action: manipulation;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
   }
   .number-spinner .spin-btn:first-child,
   .number-spinner .spin-btn:last-child {
@@ -2837,7 +2852,10 @@
   }
 
   // Eventos
-  btnSend.addEventListener("pointerdown", startPress);
+  btnSend.addEventListener("pointerdown", (e) => {
+    if (e && e.cancelable) e.preventDefault();
+    startPress(e);
+  }, { passive: false });
   btnSend.addEventListener("pointerup",   () => stopPress(false));
   btnSend.addEventListener("pointerleave",() => stopPress(false));
   btnSend.addEventListener("pointercancel",() => stopPress(false));

@@ -103,6 +103,11 @@
     transition: box-shadow .25s ease, transform .15s ease;
     --cp-press-offset: 0px;
     transform: translateY(var(--cp-press-offset, 0px));
+    touch-action: manipulation;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
   }
   #customPads .cp-btn::after {
     content:"";
@@ -128,6 +133,11 @@
     justify-content:center;
     cursor:pointer;
     transition: background .2s ease, color .2s ease;
+    touch-action: manipulation;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
   }
   #customPads .cp-btn .cp-del:hover {
     background: rgba(0,0,0,0.4);

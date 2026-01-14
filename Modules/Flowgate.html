@@ -2077,6 +2077,9 @@
       if (!hostConnLostAt) hostConnLostAt = Date.now();
       debugHostCandidates(`host-disconnect:${reason}`);
       snapshotState('host-disconnect', { reason });
+      if (iceMode === 'turn') {
+        if (requestTurnFailover(`host-${reason || 'fail'}`)) return;
+      }
       if (maybeRotateHostId(reason)) {
         connectToHost();
         return;

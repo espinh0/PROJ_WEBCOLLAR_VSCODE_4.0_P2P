@@ -1741,10 +1741,46 @@
       oldScript.parentNode?.replaceChild(newScript, oldScript);
     });
   }
-  function loadControlScoreboard(){
+  let scoreboardLoaded = false;
+  let audioLoaded = false;
+  let navalLoaded = false;
+  let pulseLoaded = false;
+  let videoLoaded = false;
+
+  function resetScoreboardMount(){
     const mount = document.getElementById('controlScoreboardMount');
     if (!mount) return;
     mount.innerHTML = '<div class="scoreboard-embed-state scoreboard-loading-state">Carregando placar...</div>';
+  }
+
+  function resetAudioMount(){
+    const mount = document.getElementById('controlAudioMount');
+    if (!mount) return;
+    mount.innerHTML = '<div class="audio-embed-state audio-loading-state">Carregando audio...</div>';
+  }
+
+  function resetNavalMount(){
+    const mount = document.getElementById('navalModuleMount');
+    if (!mount) return;
+    mount.innerHTML = '<div class="naval-embed-state naval-loading-state">Carregando Batalha Naval...</div>';
+  }
+
+  function resetPulseMount(){
+    const mount = document.getElementById('pulseSequencerMount');
+    if (!mount) return;
+    mount.innerHTML = '<div class="pulse-embed-state pulse-loading-state">Carregando Sequenciador de Pulsos...</div>';
+  }
+
+  function resetVideoMount(){
+    const mount = document.getElementById('videoPlayerMount');
+    if (!mount) return;
+    mount.innerHTML = '<div class="video-embed-state video-loading-state">Carregando Video...</div>';
+  }
+
+  function loadControlScoreboard(){
+    const mount = document.getElementById('controlScoreboardMount');
+    if (!mount) return;
+    resetScoreboardMount();
     fetch(SCOREBOARD_SRC)
       .then((res) => {
         if (!res.ok) throw new Error('Falha ao carregar Widgets/fscore.html: ' + res.status);
@@ -1753,18 +1789,25 @@
       .then((html) => {
         mount.innerHTML = html;
         runInlineScriptsIn(mount);
+        scoreboardLoaded = true;
       })
       .catch((err) => {
         try { console.error(err); } catch(_){ }
         mount.innerHTML = '<div class="scoreboard-embed-state scoreboard-error-state">Nao foi possivel carregar o placar.</div>';
+        scoreboardLoaded = false;
       });
   }
-  loadControlScoreboard();
+  resetScoreboardMount();
+
+  function unloadControlScoreboard(){
+    resetScoreboardMount();
+    scoreboardLoaded = false;
+  }
 
   function loadControlAudio(){
     const mount = document.getElementById('controlAudioMount');
     if (!mount) return;
-    mount.innerHTML = '<div class="audio-embed-state audio-loading-state">Carregando audio...</div>';
+    resetAudioMount();
     fetch(AUDIO_LISTENER_SRC)
       .then((res) => {
         if (!res.ok) throw new Error('Falha ao carregar Widgets/audiolistener.html: ' + res.status);
@@ -1773,18 +1816,28 @@
       .then((html) => {
         mount.innerHTML = html;
         runInlineScriptsIn(mount);
+        audioLoaded = true;
       })
       .catch((err) => {
         try { console.error(err); } catch(_){ }
         mount.innerHTML = '<div class="audio-embed-state audio-error-state">Nao foi possivel carregar o audio.</div>';
+        audioLoaded = false;
       });
   }
-  loadControlAudio();
+  resetAudioMount();
+
+  function unloadControlAudio(){
+    if (typeof window.__audioCollarStopAllSources === "function") {
+      try { window.__audioCollarStopAllSources(); } catch(_){}
+    }
+    resetAudioMount();
+    audioLoaded = false;
+  }
 
   function loadControlNaval(){
     const mount = document.getElementById('navalModuleMount');
     if (!mount) return;
-    mount.innerHTML = '<div class="naval-embed-state naval-loading-state">Carregando Batalha Naval...</div>';
+    resetNavalMount();
     fetch(NAVAL_WIDGET_SRC)
       .then((res) => {
         if (!res.ok) throw new Error('Falha ao carregar Widgets/Games/naval.html: ' + res.status);
@@ -1793,18 +1846,25 @@
       .then((html) => {
         mount.innerHTML = html;
         runInlineScriptsIn(mount);
+        navalLoaded = true;
       })
       .catch((err) => {
         try { console.error(err); } catch(_){ }
         mount.innerHTML = '<div class="naval-embed-state naval-error-state">Nao foi possivel carregar Batalha Naval.</div>';
+        navalLoaded = false;
       });
   }
-  loadControlNaval();
+  resetNavalMount();
+
+  function unloadControlNaval(){
+    resetNavalMount();
+    navalLoaded = false;
+  }
 
   function loadPulseSequencer(){
     const mount = document.getElementById('pulseSequencerMount');
     if (!mount) return;
-    mount.innerHTML = '<div class="pulse-embed-state pulse-loading-state">Carregando Sequenciador de Pulsos...</div>';
+    resetPulseMount();
     fetch(PULSE_SEQUENCER_SRC)
       .then((res) => {
         if (!res.ok) throw new Error('Falha ao carregar Widgets/sequence.html: ' + res.status);
@@ -1813,18 +1873,25 @@
       .then((html) => {
         mount.innerHTML = html;
         runInlineScriptsIn(mount);
+        pulseLoaded = true;
       })
       .catch((err) => {
         try { console.error(err); } catch(_){ }
         mount.innerHTML = '<div class="pulse-embed-state pulse-error-state">Nao foi possivel carregar o Sequenciador de Pulsos.</div>';
+        pulseLoaded = false;
       });
   }
-  loadPulseSequencer();
+  resetPulseMount();
+
+  function unloadPulseSequencer(){
+    resetPulseMount();
+    pulseLoaded = false;
+  }
 
   function loadControlVideo(){
     const mount = document.getElementById('videoPlayerMount');
     if (!mount) return;
-    mount.innerHTML = '<div class="video-embed-state video-loading-state">Carregando Video...</div>';
+    resetVideoMount();
     fetch(VIDEO_PLAYER_SRC)
       .then((res) => {
         if (!res.ok) throw new Error('Falha ao carregar Widgets/Video_player.html: ' + res.status);
@@ -1833,13 +1900,30 @@
       .then((html) => {
         mount.innerHTML = html;
         runInlineScriptsIn(mount);
+        videoLoaded = true;
       })
       .catch((err) => {
         try { console.error(err); } catch(_){ }
         mount.innerHTML = '<div class="video-embed-state video-error-state">Nao foi possivel carregar o Video.</div>';
+        videoLoaded = false;
       });
   }
-  loadControlVideo();
+  resetVideoMount();
+
+  function unloadControlVideo(){
+    const mount = document.getElementById('videoPlayerMount');
+    if (mount) {
+      mount.querySelectorAll("video").forEach((el) => {
+        try { el.pause(); } catch(_){}
+        try { el.removeAttribute("src"); el.load(); } catch(_){}
+      });
+      mount.querySelectorAll("iframe").forEach((el) => {
+        try { el.src = "about:blank"; } catch(_){}
+      });
+    }
+    resetVideoMount();
+    videoLoaded = false;
+  }
 
   function loadRouletteWidget(){
     const mount = document.getElementById('rouletteMount');
@@ -2114,6 +2198,11 @@
       if (icon) icon.className = scoreboardOpen ? "fa-solid fa-trophy" : "fa-solid fa-flag-checkered";
       updateScoreboardToggleTooltip(scoreboardOpen ? "Ocultar placar" : "Mostrar placar");
     }
+    if (scoreboardOpen) {
+      if (!scoreboardLoaded) loadControlScoreboard();
+    } else if (scoreboardLoaded) {
+      unloadControlScoreboard();
+    }
     if (opts?.persist !== false) persistState();
     if (opts?.signalArmed !== false) {
       syncScoreboardArmedState(scoreboardOpen, { force: opts?.force });
@@ -2156,8 +2245,10 @@
       if (icon) icon.className = audioOpen ? "fa-solid fa-wave-square" : "fa-solid fa-headphones";
       updateAudioToggleTooltip(audioOpen ? "Ocultar audio" : "Mostrar audio");
     }
-    if (!audioOpen && typeof window.__audioCollarStopAllSources === "function") {
-      try { window.__audioCollarStopAllSources(); } catch(_){}
+    if (audioOpen) {
+      if (!audioLoaded) loadControlAudio();
+    } else if (audioLoaded) {
+      unloadControlAudio();
     }
     if (opts?.persist !== false) persistState();
     if (opts?.broadcast !== false) emitControlPatch({ audioOpen, reason: opts?.reason || "audio-toggle" });
@@ -2199,6 +2290,11 @@
       if (icon) icon.className = navalOpen ? "fa-solid fa-anchor" : "fa-solid fa-ship";
       updateNavalToggleTooltip(navalOpen ? "Ocultar Batalha Naval" : "Mostrar Batalha Naval");
     }
+    if (navalOpen) {
+      if (!navalLoaded) loadControlNaval();
+    } else if (navalLoaded) {
+      unloadControlNaval();
+    }
     if (opts?.persist !== false) persistState();
     if (opts?.broadcast !== false) emitControlPatch({ navalOpen, reason: opts?.reason || "naval-toggle" });
   }
@@ -2239,6 +2335,11 @@
       if (icon) icon.className = pulseOpen ? "fa-solid fa-wave-square" : "fa-solid fa-sliders";
       updatePulseToggleTooltip(pulseOpen ? "Ocultar Sequenciador" : "Mostrar Sequenciador");
     }
+    if (pulseOpen) {
+      if (!pulseLoaded) loadPulseSequencer();
+    } else if (pulseLoaded) {
+      unloadPulseSequencer();
+    }
     if (opts?.persist !== false) persistState();
     if (opts?.broadcast !== false) emitControlPatch({ pulseOpen, reason: opts?.reason || "pulse-toggle" });
   }
@@ -2278,6 +2379,11 @@
       const icon = videoToggleBtn.querySelector("i");
       if (icon) icon.className = videoOpen ? "fa-solid fa-circle-play" : "fa-solid fa-clapperboard";
       updateVideoToggleTooltip(videoOpen ? "Ocultar Video" : "Mostrar Video");
+    }
+    if (videoOpen) {
+      if (!videoLoaded) loadControlVideo();
+    } else if (videoLoaded) {
+      unloadControlVideo();
     }
     if (opts?.persist !== false) persistState();
     if (opts?.broadcast !== false) emitControlPatch({ videoOpen, reason: opts?.reason || "video-toggle" });
@@ -3150,6 +3256,10 @@
     const modalEl = document.getElementById("serial-module-modal");
     if (!modalEl) {
       const card = document.getElementById("serialPortCard");
+      if (card) {
+        card.classList.remove("serial-hidden");
+        card.style.display = "";
+      }
       if (card && typeof card.scrollIntoView === "function") {
         card.scrollIntoView({ behavior: "smooth", block: "start" });
       }
@@ -3164,6 +3274,11 @@
         modalBody.appendChild(wrapper);
         modalBody.dataset.bound = "true";
         slot.style.display = "none";
+        const card = document.getElementById("serialPortCard");
+        if (card) {
+          card.classList.remove("serial-hidden");
+          card.style.display = "";
+        }
       }
     }
     if (window.bootstrap && typeof window.bootstrap.Modal === "function") {
@@ -3185,6 +3300,10 @@
     const modalEl = document.getElementById("keepawake-module-modal");
     if (!modalEl) {
       const card = document.getElementById("hbka-widget");
+      if (card) {
+        card.classList.remove("keepawake-hidden");
+        card.style.display = "";
+      }
       if (card && typeof card.scrollIntoView === "function") {
         card.scrollIntoView({ behavior: "smooth", block: "start" });
       }
@@ -3199,6 +3318,11 @@
         modalBody.appendChild(wrapper);
         modalBody.dataset.bound = "true";
         slot.style.display = "none";
+        const card = document.getElementById("hbka-widget");
+        if (card) {
+          card.classList.remove("keepawake-hidden");
+          card.style.display = "";
+        }
       }
     }
     if (window.bootstrap && typeof window.bootstrap.Modal === "function") {

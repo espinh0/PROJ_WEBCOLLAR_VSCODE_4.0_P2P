@@ -257,12 +257,22 @@
     modalBody.appendChild(wrapper);
     modalBody.dataset.bound = "true";
     slot.style.display = "none";
+    const card = document.getElementById("serialPortCard");
+    if (card) {
+      card.classList.remove("serial-hidden");
+      card.style.display = "";
+    }
     return true;
   }
 
   function showSerialModal() {
     const modalEl = document.getElementById("serial-module-modal");
     if (!modalEl) {
+      const card = document.getElementById("serialPortCard");
+      if (card) {
+        card.classList.remove("serial-hidden");
+        card.style.display = "";
+      }
       scrollFallback("serialPortCard");
       return;
     }
@@ -325,6 +335,11 @@
     modalBody.appendChild(wrapper);
     modalBody.dataset.bound = "true";
     slot.style.display = "none";
+    const card = document.getElementById("hbka-widget");
+    if (card) {
+      card.classList.remove("keepawake-hidden");
+      card.style.display = "";
+    }
     return true;
   }
 
@@ -371,6 +386,11 @@
   function showKeepawakeModal() {
     const modalEl = document.getElementById("keepawake-module-modal");
     if (!modalEl) {
+      const card = document.getElementById("hbka-widget");
+      if (card) {
+        card.classList.remove("keepawake-hidden");
+        card.style.display = "";
+      }
       scrollFallback("hbka-widget");
       return;
     }

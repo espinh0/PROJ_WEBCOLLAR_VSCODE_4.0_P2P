@@ -488,9 +488,84 @@
 
     let ICE_CONFIGS = buildIceConfigs(TURN_CONFIG);
     let preferredIceMode = ICE_MODE_DEFAULT;
+    let lastNetworkSig = '';
+    let networkChangeTimer = null;
+
+    const getNetworkConnection = () => {
+      return navigator.connection || navigator.mozConnection || navigator.webkitConnection || null;
+    };
+    function getNetworkInfo() {
+      const conn = getNetworkConnection();
+      if (!conn) return null;
+      return {
+        type: String(conn.type || ''),
+        effectiveType: String(conn.effectiveType || ''),
+        downlink: (typeof conn.downlink === 'number') ? conn.downlink : null,
+        rtt: (typeof conn.rtt === 'number') ? conn.rtt : null,
+        saveData: !!conn.saveData
+      };
+    }
+    function describeNetworkInfo(info) {
+      if (!info) return 'indisponivel';
+      const parts = [];
+      if (info.type) parts.push(`type=${info.type}`);
+      if (info.effectiveType) parts.push(`effective=${info.effectiveType}`);
+      if (typeof info.rtt === 'number') parts.push(`rtt=${Math.round(info.rtt)}`);
+      if (typeof info.downlink === 'number') parts.push(`downlink=${info.downlink}`);
+      if (info.saveData) parts.push('saveData');
+      return parts.join(' ') || 'indisponivel';
+    }
+    function pickAutoIceMode(info) {
+      if (!info) return 'auto';
+      const type = String(info.type || '').toLowerCase();
+      const effective = String(info.effectiveType || '').toLowerCase();
+      if (type === 'cellular' || type === 'none') return 'turn';
+      if (effective === 'slow-2g' || effective === '2g' || effective === '3g') return 'turn';
+      return 'auto';
+    }
+    function resolveAutoIceMode(reason) {
+      const info = getNetworkInfo();
+      const mode = pickAutoIceMode(info);
+      const label = describeNetworkInfo(info);
+      const sig = `${label}|${mode}`;
+      if (sig !== lastNetworkSig) {
+        lastNetworkSig = sig;
+        log(`Rede: ${label} -> ICE auto=${mode}${reason ? ` (${reason})` : ''}`);
+      }
+      return mode;
+    }
+    function handleNetworkChange() {
+      if (preferredIceMode !== 'auto') return;
+      const nextMode = resolveAutoIceMode('change');
+      if (!room) return;
+      if (connectInProgress) return;
+      const nextEffective = nextMode === 'auto' ? 'auto' : nextMode;
+      if (nextEffective === iceMode) return;
+      if (networkChangeTimer) return;
+      networkChangeTimer = setTimeout(() => {
+        networkChangeTimer = null;
+        if (!room || connectInProgress) return;
+        const desired = resolveAutoIceMode('change-apply');
+        const desiredEffective = desired === 'auto' ? 'auto' : desired;
+        if (desiredEffective === iceMode) return;
+        disconnect('net-change');
+        setTimeout(() => connect('net-change'), 150);
+      }, 700);
+    }
+    function attachNetworkListener() {
+      const conn = getNetworkConnection();
+      if (!conn || typeof conn.addEventListener !== 'function') return;
+      if (window.__FLOWGATE_NET_LISTENER__) return;
+      window.__FLOWGATE_NET_LISTENER__ = true;
+      conn.addEventListener('change', () => handleNetworkChange());
+    }
 
     function resolveIceOptions(mode) {
       const normalized = sanitizeIceMode(mode);
+      if (normalized === 'auto') {
+        const autoMode = resolveAutoIceMode('auto');
+        if (autoMode !== 'auto') return resolveIceOptions(autoMode);
+      }
       const toArray = (val) => Array.isArray(val) ? val : (val ? [val] : []);
       const turnOnly = (list) => (list || []).map((cfg) => {
         const urls = toArray(cfg.urls)
@@ -2356,6 +2431,7 @@
       if (presenceTimer) { clearInterval(presenceTimer); presenceTimer = null; }
       if (presenceBurstTimer) { clearInterval(presenceBurstTimer); presenceBurstTimer = null; }
       if (presenceSweepTimer) { clearInterval(presenceSweepTimer); presenceSweepTimer = null; }
+      if (networkChangeTimer) { clearTimeout(networkChangeTimer); networkChangeTimer = null; }
       if (localTagsListener) {
         window.removeEventListener('trystero:localTags', localTagsListener);
         localTagsListener = null;
@@ -2386,6 +2462,8 @@
       const storedTurnId = stored.turnPresetId || TURN_DEFAULT_ID;
       preferredIceMode = sanitizeIceMode(qp.ice || stored.iceMode || ICE_MODE_DEFAULT);
       iceMode = preferredIceMode;
+      attachNetworkListener();
+      if (preferredIceMode === 'auto') resolveAutoIceMode('init');
 
       renderTurnOptions();
       applyTurnPreset(storedTurnId, { silent: true });

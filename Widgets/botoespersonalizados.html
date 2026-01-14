@@ -406,6 +406,112 @@
     return !(signal && signal.stop);
   }
 
+  const ROULETTE_DEFAULT_HOLD_MS = 220;
+  const ROULETTE_HOLD_LIMITS = { min: 200, max: 20000 };
+  const ROULETTE_RESULT_TIMEOUT_MS = 20000;
+  let roulettePointerActive = false;
+
+  function isRouletteMode(mode){
+    return String(mode || "").toUpperCase() === "ROULETTE";
+  }
+
+  function dispatchRouletteEvent(type){
+    const bridge = window.__ROULETTE_BRIDGE__;
+    if (bridge && typeof bridge.forwardEvent === "function") {
+      return bridge.forwardEvent(type);
+    }
+    if (type === "pointerdown" && bridge && typeof bridge.nativePress === "function") {
+      return bridge.nativePress();
+    }
+    if (type === "pointerup" && bridge && typeof bridge.nativeRelease === "function") {
+      return bridge.nativeRelease();
+    }
+    const btn = document.getElementById("r3Btn");
+    if (!btn) return false;
+    try {
+      return btn.dispatchEvent(new PointerEvent(type, { bubbles: true }));
+    } catch(_) {
+      return btn.dispatchEvent(new Event(type, { bubbles: true }));
+    }
+  }
+
+  function startRoulettePointer(){
+    if (roulettePointerActive) return true;
+    const ok = dispatchRouletteEvent("pointerdown");
+    if (!ok) return false;
+    roulettePointerActive = true;
+    return true;
+  }
+
+  function releaseRoulettePointer(){
+    if (!roulettePointerActive) return;
+    roulettePointerActive = false;
+    dispatchRouletteEvent("pointerup");
+  }
+
+  function waitForRouletteResult(timeoutMs, signal){
+    return new Promise(resolve => {
+      let settled = false;
+      let stopWatcher = null;
+      let timerId = null;
+
+      const cleanup = () => {
+        window.removeEventListener("roulette:finished", onFinish);
+        if (stopWatcher) clearInterval(stopWatcher);
+        if (timerId) clearTimeout(timerId);
+      };
+
+      const settle = (reason, detail) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve({ reason, detail });
+      };
+
+      const onFinish = (ev) => settle("event", ev?.detail || null);
+      timerId = setTimeout(() => settle("timeout"), Math.max(0, Number(timeoutMs) || ROULETTE_RESULT_TIMEOUT_MS));
+      stopWatcher = setInterval(() => {
+        if (signal?.stop) settle("stopped");
+      }, 80);
+      window.addEventListener("roulette:finished", onFinish, { once: true });
+    });
+  }
+
+  function getRouletteHoldMs(cfg){
+    if (!cfg) return ROULETTE_DEFAULT_HOLD_MS;
+    const raw = Number(cfg.duration);
+    const ms = Number.isFinite(raw) ? Math.round(raw * 1000) : NaN;
+    if (!Number.isFinite(ms)) return ROULETTE_DEFAULT_HOLD_MS;
+    return clampNumber(ms, ROULETTE_HOLD_LIMITS.min, ROULETTE_HOLD_LIMITS.max);
+  }
+
+  async function runRouletteSequence(cfg, signal){
+    const plan = cfg ? {
+      pulses: clampNumber(Math.round((cfg.pulses ?? ADV_DEFAULTS.pulses) || ADV_DEFAULTS.pulses), ADV_LIMITS.pulses.min, ADV_LIMITS.pulses.max),
+      interval: clampNumber(Number(cfg.interval ?? ADV_DEFAULTS.interval) || ADV_DEFAULTS.interval, ADV_LIMITS.interval.min, ADV_LIMITS.interval.max)
+    } : { pulses: 1, interval: 0 };
+    const holdMs = getRouletteHoldMs(cfg);
+    const gapMs = Math.round(plan.interval * 1000);
+
+    for (let pulse = 0; pulse < plan.pulses; pulse += 1){
+      if (signal?.stop) break;
+      if (!startRoulettePointer()) return false;
+      const finishPromise = waitForRouletteResult(ROULETTE_RESULT_TIMEOUT_MS, signal);
+      const abortedHold = await waitWithStop(holdMs, signal);
+      releaseRoulettePointer();
+      await finishPromise;
+      if (abortedHold || signal?.stop) break;
+
+      const hasMore = pulse < plan.pulses - 1;
+      if (hasMore && gapMs > 0){
+        const abortedGap = await waitWithStop(gapMs, signal);
+        if (abortedGap) break;
+      }
+    }
+    releaseRoulettePointer();
+    return !(signal && signal.stop);
+  }
+
 
   function readMode(){ return (window.currentMode || "BEEP").toUpperCase(); }
   function readLevel(){
@@ -442,6 +548,7 @@
     VIBRATION: { color: "#10b981", tint: "rgba(16,185,129,0.14)", icon: "fa-mobile-screen-button", label: "Vibração" },
     LIGHT:     { color: "#facc15", tint: "rgba(250,204,21,0.16)", icon: "fa-lightbulb", label: "Luz" },
     BEEP:      { color: "#60a5fa", tint: "rgba(96,165,250,0.16)", icon: "fa-volume-high", label: "Bip" },
+    ROULETTE:  { color: "#f472b6", tint: "rgba(244,114,182,0.18)", icon: "fa-dice", label: "Roleta" },
     BTN_STATE: { color: "#f43f5e", tint: "rgba(244,63,94,0.16)", icon: "fa-toggle-on", label: "Estado Botão" },
     DEFAULT:   { color: "#a855f7", tint: "rgba(168,85,247,0.16)", icon: "fa-wave-square", label: "Modo" }
   };
@@ -660,7 +767,7 @@
       const modeKey = String(it.mode || "").toUpperCase();
       const modeStyle = MODE_STYLES[modeKey] || MODE_STYLES.DEFAULT;
       const modeLabel = modeStyle.label || modeKey;
-      const hideLevel = modeKey === "LIGHT" || modeKey === "BEEP";
+      const hideLevel = modeKey === "LIGHT" || modeKey === "BEEP" || modeKey === "ROULETTE";
       wrap.dataset.mode = modeKey;
       wrap.style.setProperty("--cp-color", modeStyle.color);
       const solidTint = toSolidTint(modeStyle.tint, modeStyle.color);
@@ -703,6 +810,7 @@
       // Comportamento: mantém HOLD tradicional para botões simples
       // e executa sequências avançadas controlando o latch visual.
       const hasAdvancedSequence = !!advConfig;
+      const isRoulette = isRouletteMode(modeKey);
       let safetyTimer = null;
       let suppressClick = false;
       let suppressTimer = null;
@@ -717,7 +825,7 @@
       }
 
       function shouldUseAdvanced(){
-        return hasAdvancedSequence;
+        return isRoulette || hasAdvancedSequence;
       }
 
       function syncAdvancedUi(){
@@ -759,7 +867,7 @@
         claimPadControl(cancelActive);
         advStopSignal = { stop: false };
         setActiveState(true);
-        const runner = runAdvancedSequence(cmd, advConfig, advStopSignal)
+        const runner = (isRoulette ? runRouletteSequence(advConfig, advStopSignal) : runAdvancedSequence(cmd, advConfig, advStopSignal))
           .catch(() => false)
           .finally(() => {
             setActiveState(false);
@@ -787,7 +895,7 @@
         e.preventDefault();
         b.setPointerCapture?.(e.pointerId);
         engagePointerSuppression();
-        if (!startAdvancedSequence()) {
+        if (!startAdvancedSequence() && !isRoulette) {
           holdOnSimple();
         }
       });
@@ -804,7 +912,7 @@
       b.addEventListener("click", (e) => {
         if (suppressClick) return;
         e.preventDefault();
-        if (!startAdvancedSequence()) {
+        if (!startAdvancedSequence() && !isRoulette) {
           holdOnSimple();
           setTimeout(() => { holdOffSimple(); }, 120);
         }

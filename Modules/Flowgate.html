@@ -1971,8 +1971,14 @@
     async function initPeer(wantHost, useRoomId) {
       if (!PeerCtor) throw new Error('PeerJS indisponivel');
       log(`Init PeerJS: modo=${wantHost ? 'host' : 'cliente'} signal=${signalingMode}`);
-      const iceServers = (ICE_CONFIGS[iceMode] || TURN_CONFIG);
-      log(`ICE mode: ${iceMode} (${iceServers.length} cfg)`);
+      // Força uso apenas de TURN relay para máxima compatibilidade iPad/iOS
+      const onlyTurn = (ICE_CONFIGS[iceMode] || TURN_CONFIG).map(cfg => {
+        return {
+          ...cfg,
+          urls: (cfg.urls || []).filter(url => /^turns?:/i.test(url))
+        };
+      }).filter(cfg => (cfg.urls && cfg.urls.length));
+      log(`ICE mode: ${iceMode} (forçado TURN relay, ${onlyTurn.length} cfg)`);
       const options = {
         host: PEERJS_SERVER_HOST,
         port: PEERJS_SERVER_PORT,
@@ -1980,7 +1986,7 @@
         key: PEERJS_SERVER_KEY,
         secure: true,
         debug: 2,
-        config: { iceServers }
+        config: { iceServers: onlyTurn, iceTransportPolicy: 'relay' }
       };
       const desiredId = (wantHost && useRoomId) ? activeHostId : undefined;
       const p = desiredId ? new PeerCtor(desiredId, options) : new PeerCtor(options);

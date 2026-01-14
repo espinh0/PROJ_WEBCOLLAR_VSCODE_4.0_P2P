@@ -1324,11 +1324,7 @@
       <input id="levelValue" class="form-control form-control-sm level-input" type="text" inputmode="numeric" pattern="[0-9]*" title="Nivel (0 a 100)" data-bs-toggle="tooltip" value="0%"/>
     </div>
   </div>
-  <div id="rouletteRow" class="collapsible-section is-collapsed mt-3 mb-3" aria-hidden="true">
-    <div id="rouletteMount" class="w-100"></div>
-  </div>
-
-  <div id="advancedPanel" class="advanced-panel adv-collapsed mb-3">
+  <div id="advancedPanel" class="advanced-panel adv-collapsed">
     <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap mb-2">
       <div class="fw-semibold text-light">Opcoes avancadas</div>
       <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -1373,6 +1369,9 @@
         </div>
       </div>
         <!-- Chart block removido do painel avançado -->
+  </div>
+  <div id="rouletteRow" class="collapsible-section is-collapsed mt-3 mb-3" aria-hidden="true">
+    <div id="rouletteMount" class="w-100"></div>
   </div>
     <div class="control-scoreboard-block collapsed mb-3" aria-hidden="true">
       <div id="controlScoreboardMount" class="control-scoreboard-mount">
@@ -1897,72 +1896,15 @@
   function initTooltips(){
     if (!(window.bootstrap && window.bootstrap.Tooltip)) return;
     $$('#remoteControlCard [data-bs-toggle="tooltip"]').forEach(el => {
-      if (el.id === "levelSlider") return; // slider tem tooltip manual
+      if (el.id === "levelSlider") return;
       new window.bootstrap.Tooltip(el);
     });
   }
 
-  function ensureAnchor(slider){
-    if (levelTooltipAnchor && levelTooltipAnchor.isConnected) return levelTooltipAnchor;
-    const anchor = document.createElement("span");
-    anchor.className = "level-tooltip-anchor";
-    slider.parentElement && slider.parentElement.appendChild(anchor);
-    levelTooltipAnchor = anchor;
-    return anchor;
-  }
-
-  function ensureSliderTooltip(text){
-    const slider = $("#levelSlider");
-    if (!slider || !(window.bootstrap && window.bootstrap.Tooltip)) return;
-    const anchor = ensureAnchor(slider);
-    if (anchor) {
-      const rect = slider.getBoundingClientRect();
-      const parentRect = slider.parentElement?.getBoundingClientRect();
-      const min = Number(slider.min) || 0;
-      const max = Number(slider.max) || 100;
-      const val = Math.max(min, Math.min(max, Number(slider.value) || 0));
-      const pct = (val - min) / (max - min || 1);
-      const thumbW = 18; // conforme CSS
-      const offsetLeft = parentRect ? rect.left - parentRect.left : 0;
-      const x = offsetLeft + (rect.width - thumbW) * pct + thumbW / 2;
-      anchor.style.left = `${x}px`;
-    }
-    const target = anchor || slider;
-    if (!levelTooltip) {
-      levelTooltip = new window.bootstrap.Tooltip(target, {
-        title: text,
-        placement: "top",
-        trigger: "manual",
-        customClass: "level-tooltip",
-        container: slider.parentElement
-      });
-    }
-    if (typeof levelTooltip.setContent === "function") {
-      levelTooltip.setContent({ ".tooltip-inner": text });
-    } else if (levelTooltip.tip) {
-      const inner = levelTooltip.tip.querySelector(".tooltip-inner");
-      if (inner) inner.textContent = text;
-    } else if (levelTooltip._config) {
-      levelTooltip._config.title = text;
-    }
-    target.setAttribute("data-bs-original-title", text);
-    target.setAttribute("title", text);
-    if (levelTooltip._element !== target) {
-      levelTooltip._element = target;
-    }
-  }
+  // Removido: funções ensureAnchor e ensureSliderTooltip (tooltip do slider de nível)
 
   function updateSliderTooltip(n){
-    const slider = $("#levelSlider");
-    const text = `${n}%`;
-    if (slider) {
-      slider.setAttribute("data-bs-original-title", text);
-      slider.setAttribute("title", text);
-    }
-    ensureSliderTooltip(text);
-    if (levelTooltipVisible && levelTooltip && typeof levelTooltip.update === "function") {
-      levelTooltip.update();
-    }
+    // Tooltip removido: não faz mais nada
   }
 
   function syncLevelInputWidth(){
@@ -1973,22 +1915,11 @@
   }
 
   function showSliderTooltip(){
-    const slider = $("#levelSlider");
-    if (!slider) return;
-    const text = `${slider.value || level}%`;
-    ensureSliderTooltip(text);
-    if (!levelTooltip) return;
-    levelTooltip._activeTrigger = levelTooltip._activeTrigger || {};
-    levelTooltip._activeTrigger.manual = true;
-    if (typeof levelTooltip.show === "function") levelTooltip.show();
-    if (levelTooltip.tip) levelTooltip.tip.setAttribute("data-popper-placement", "top");
-    levelTooltipVisible = true;
+    // Tooltip removido: não faz mais nada
   }
 
   function hideSliderTooltip(){
-    if (!levelTooltipVisible || !levelTooltip || typeof levelTooltip.hide !== "function") return;
-    levelTooltip.hide();
-    levelTooltipVisible = false;
+    // Tooltip removido: não faz mais nada
   }
 
   function updateLevelUi(n){

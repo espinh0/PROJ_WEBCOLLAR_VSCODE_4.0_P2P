@@ -1,0 +1,1112 @@
+/*
+  PET998DR TX (Arduino Nano/UNO + MX-FS-03V) / ESP32
+  Serial: 115200 (MODE,LEVEL,CHANNEL[,DUR_MS]) + CADENCE/PATTERN/SEQUENCE.
+  TX RF: (AVR D2) / (ESP32 GPIO25)
+
+  Patch cliques rápidos:
+  - Disparo único: 2 frames (SINGLE_SHOT_FRAMES_DEFAULT = 2)
+  - Gap entre frames: SINGLE_SHOT_GAP_MS = 6
+  - HOLD: período fixo HOLD_PERIOD_US (sem flood)
+
+  Correções para ESP32:
+  - NÃO usar GPIO6..11 (SPI Flash). LEDs movidos para 16/17/18/19.
+  - TX RF movido para GPIO25.
+  - OLED SSD1306 128x64 I2C em SDA=21, SCL=22, addr=0x3C.
+
+  Nota importante (Arduino IDE auto-prototype):
+  - Enum TxState declarado no topo + função txStateStr_u8(uint8_t) para evitar conflito.
+*/
+
+#include <Arduino.h>
+#include <stdio.h>   // snprintf
+
+// ====== FIX (Arduino auto-prototype) ======
+enum TxState : uint8_t { TX_IDLE=0, TX_SINGLE, TX_HOLD, TX_ENGINE };
+
+#ifdef ARDUINO_ARCH_ESP32
+  #include <BluetoothSerial.h>
+  #include <Wire.h>
+  #include <Adafruit_GFX.h>
+  #include <Adafruit_SSD1306.h>
+#endif
+
+// ====== Compat: LED_BUILTIN ======
+#ifndef LED_BUILTIN
+  #define LED_BUILTIN 13
+#endif
+
+// ====== Hardware / Pins (AVR vs ESP32) ======
+#ifdef ARDUINO_ARCH_ESP32
+  #ifndef TX_PIN
+    #define TX_PIN 25
+  #endif
+
+  // LEDs seguros (evita 6..11 do flash)
+  #define LED_AZUL_PIN      16
+  #define LED_VERMELHO_PIN  17
+  #define LED_AMARELO_PIN   18
+  #define LED_VERDE_PIN     19
+
+  #ifndef BTN_PIN
+    #define BTN_PIN 4
+  #endif
+  #ifndef BTN_ON_LEVEL
+    #define BTN_ON_LEVEL LOW
+  #endif
+
+  // OLED SSD1306 128x64 @ 0x3C
+  #ifndef OLED_SDA
+    #define OLED_SDA 21
+  #endif
+  #ifndef OLED_SCL
+    #define OLED_SCL 22
+  #endif
+  #ifndef OLED_ADDR
+    #define OLED_ADDR 0x3C
+  #endif
+
+#else
+  #ifndef TX_PIN
+    #define TX_PIN 2
+  #endif
+
+  #define LED_AZUL_PIN      5
+  #define LED_VERMELHO_PIN  6
+  #define LED_AMARELO_PIN   7
+  #define LED_VERDE_PIN     8
+
+  #ifndef BTN_PIN
+    #define BTN_PIN 4
+  #endif
+  #ifndef BTN_ON_LEVEL
+    #define BTN_ON_LEVEL LOW
+  #endif
+#endif
+
+#ifdef ARDUINO_ARCH_ESP32
+static BluetoothSerial SerialBT;
+static bool btReady = false;
+static const char* BT_DEVICE_NAME = "SCOLLAR-CONTROL";
+#endif
+
+// ====== Timings RF ======
+const unsigned int T_SHORT_US        = 350;
+const unsigned int T_LONG_US         = 710;
+const unsigned int PREAMBLE_HIGH_US  = 1400;
+volatile unsigned int INTERFRAME_GAP_US = 800;
+
+// Período de repetição do HOLD (evita flood)
+static const unsigned long HOLD_PERIOD_US = 50000UL;
+
+// ====== Parâmetros do motor rítmico ======
+static const uint16_t PULSE_MS_DEFAULT = 180;
+static const uint16_t MIN_GAP_MS       = 50;
+
+// ====== Patch: confiabilidade em cliques rápidos ======
+static const uint8_t  SINGLE_SHOT_FRAMES_DEFAULT = 2;
+static const uint16_t SINGLE_SHOT_GAP_MS         = 6;
+
+// ====== ID fixo (17 bits) ======
+static const char* FIXED_ID_BITS = "00110101001000100";
+
+// ====== Heartbeat (desativado) ======
+// static bool heartbeatArmed = false;
+// static unsigned long lastPingMs = 0;
+// static const unsigned long HEARTBEAT_TIMEOUT_MS = 1100;
+
+// ====== Debounce do botão ======
+static bool lastBtnStable = HIGH;
+static bool lastBtnRead   = HIGH;
+static unsigned long lastDebounceMs = 0;
+static const unsigned long DEBOUNCE_MS = 35;
+
+// ====== HOLD clássico ======
+static bool holdActive = false;
+static uint64_t holdFrame = 0ULL;
+static unsigned long nextFrameAt_us = 0UL;
+
+// ====== Medição de tempo do HOLDON->HOLDOFF ======
+static bool holdSessionActive = false;
+static unsigned long holdSessionStartMs = 0;
+
+// ====== Utils ======
+static inline int imax(int a, int b) { return (a > b) ? a : b; }
+static inline uint16_t u16max(uint16_t a, uint16_t b) { return (a > b) ? a : b; }
+
+// ====== LEDs ======
+static inline void rfLed(bool on){ digitalWrite(LED_BUILTIN, on ? HIGH : LOW); }
+static inline void azulLed(bool on){ digitalWrite(LED_AZUL_PIN, on ? HIGH : LOW); }
+static inline void vermelhoLed(bool on){ digitalWrite(LED_VERMELHO_PIN, on ? HIGH : LOW); }
+static inline void amareloLed(bool on){ digitalWrite(LED_AMARELO_PIN, on ? HIGH : LOW); }
+static inline void verdeLed(bool on){ digitalWrite(LED_VERDE_PIN, on ? HIGH : LOW); }
+
+static void allLedsOff() {
+  azulLed(false);
+  vermelhoLed(false);
+  amareloLed(false);
+  verdeLed(false);
+}
+
+// ====== Serial output (ATÔMICO) ======
+static inline void serialLine(const char* s){
+  Serial.println(s);
+#ifdef ARDUINO_ARCH_ESP32
+  if (btReady && SerialBT.hasClient()) SerialBT.println(s);
+#endif
+}
+
+static inline void serialLineF(const __FlashStringHelper* s){
+  Serial.println(s);
+#ifdef ARDUINO_ARCH_ESP32
+  if (btReady && SerialBT.hasClient()) SerialBT.println(s);
+#endif
+}
+
+static void serialOK_MLC(const char* mode, uint8_t lvl, uint8_t ch){
+  char buf[64];
+  snprintf(buf, sizeof(buf), "OK %s,%u,%u", mode, (unsigned)lvl, (unsigned)ch);
+  serialLine(buf);
+}
+
+static void serialOK_HOLDON_MLC(const char* mode, uint8_t lvl, uint8_t ch){
+  char buf[72];
+  snprintf(buf, sizeof(buf), "OK HOLDON %s,%u,%u", mode, (unsigned)lvl, (unsigned)ch);
+  serialLine(buf);
+}
+
+static void serialOK_HOLDOFF_MS(unsigned long elapsedMs){
+  char buf[48];
+  snprintf(buf, sizeof(buf), "OK HOLDOFF,%lu", elapsedMs);
+  serialLine(buf);
+}
+
+static void serialBTN_STATE(bool isOn){
+  char buf[32];
+  snprintf(buf, sizeof(buf), "BTN STATE -> %s", isOn ? "ON" : "OFF");
+  serialLine(buf);
+}
+
+// ====== Política: quando transmitir ======
+static inline bool shouldTransmit(const char* mode, uint8_t level){
+  if (!strcmp(mode, "SHOCK") || !strcmp(mode, "VIBRATION")){
+    return (level > 0);
+  }
+  return true;
+}
+
+/* ============================================================
+   ============  OLED (ESP32)  ================================
+   ============================================================ */
+#ifdef ARDUINO_ARCH_ESP32
+static Adafruit_SSD1306 display(128, 64, &Wire, -1);
+static bool oledOk = false;
+static unsigned long oledNextMs = 0;
+static const unsigned long OLED_PERIOD_MS = 150;
+
+static char lastMode[12] = "IDLE";
+static uint8_t lastLvl = 0;
+static uint8_t lastCh  = 1;
+
+static char lastLine[48] = "";
+static unsigned long lastCmdMs = 0;
+
+static volatile uint32_t txFramesCount = 0;
+static unsigned long lastTxMs = 0;
+
+static volatile TxState txState = TX_IDLE;
+
+// Função em uint8_t para evitar conflito do auto-prototype do Arduino IDE
+static inline const char* txStateStr_u8(uint8_t s){
+  switch (s){
+    case TX_SINGLE: return "SINGLE";
+    case TX_HOLD:   return "HOLD";
+    case TX_ENGINE: return "ENGINE";
+    default:        return "IDLE";
+  }
+}
+
+static void oledLogLine(const String& s){
+  s.toCharArray(lastLine, sizeof(lastLine));
+  lastCmdMs = millis();
+}
+
+static void oledSetMLC(const char* mode, uint8_t lvl, uint8_t ch){
+  strncpy(lastMode, mode, sizeof(lastMode)-1);
+  lastMode[sizeof(lastMode)-1] = 0;
+  lastLvl = lvl;
+  lastCh  = ch;
+}
+
+// Inclui o bitmap externo
+#include "epd_bitmap.h"
+static void oledInit(){
+  Wire.begin(OLED_SDA, OLED_SCL);
+  oledOk = display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR);
+  if (!oledOk) return;
+
+  display.setRotation(2); // Gira a tela em 180 graus
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+
+  // Desenha o bitmap 128x64 na tela inteira
+  display.drawBitmap(0, 0, epd_bitmap_Bitmap, 128, 64, SSD1306_WHITE);
+  display.display();
+}
+
+static void oledService(){
+  if (!oledOk) return;
+
+  const unsigned long now = millis();
+  if ((long)(now - oledNextMs) < 0) return;
+  oledNextMs = now + OLED_PERIOD_MS;
+
+  const bool btnOn = (digitalRead(BTN_PIN) == BTN_ON_LEVEL);
+  const bool btConn = (btReady && SerialBT.hasClient());
+  const bool txRecent = (now - lastTxMs) < 300;
+
+  // Checagem simples do módulo 433: tenta colocar HIGH e ler de volta
+  bool rf433_ok = false;
+  pinMode(TX_PIN, OUTPUT);
+  digitalWrite(TX_PIN, HIGH);
+  delayMicroseconds(2);
+  rf433_ok = (digitalRead(TX_PIN) == HIGH);
+  digitalWrite(TX_PIN, LOW); // retorna aocioso
+
+  display.clearDisplay();
+  display.setCursor(0,0);
+
+  display.print(F("MODE: "));
+  display.print(lastMode);
+  display.print(F(" CH"));
+  display.print((unsigned)lastCh);
+
+  display.setCursor(0,10);
+  display.print(F("LVL : "));
+  display.print((unsigned)lastLvl);
+  display.print(F(" TX:"));
+  display.print(txStateStr_u8((uint8_t)txState));
+  if (txRecent) display.print(F("*"));
+
+  display.setCursor(0,20);
+  display.print(F("433 : "));
+  display.print(rf433_ok ? F("OK   ") : F("FAIL "));
+
+  display.setCursor(0,30);
+  display.print(F("BTN : "));
+  display.print(btnOn ? F("ON ") : F("OFF"));
+  display.print(F(" BT:"));
+  display.print(btConn ? F("CONN") : F("DISC"));
+
+  display.setCursor(0,40);
+  display.print(F("FRM : "));
+  display.print((unsigned long)txFramesCount);
+
+  display.setCursor(0,50);
+  display.print(F("> "));
+  display.print(lastLine);
+
+  display.display();
+}
+#endif
+
+/* ============================================================
+   ============  RF bit-bang / frames  =========================
+   ============================================================ */
+
+static inline void txHigh(unsigned int us) { digitalWrite(TX_PIN, HIGH); delayMicroseconds(us); }
+static inline void txLow (unsigned int us) { digitalWrite(TX_PIN, LOW ); delayMicroseconds(us); }
+
+static inline void sendPreamble_body() {
+  txHigh(PREAMBLE_HIGH_US);
+  txLow (T_LONG_US);
+}
+
+static inline void sendBit_body(bool one) {
+  if (one) { txHigh(T_LONG_US);  txLow(T_SHORT_US); }
+  else     { txHigh(T_SHORT_US); txLow(T_LONG_US ); }
+}
+
+static void setBitMSB(uint64_t &word, uint8_t idxFromMSB, bool value, uint8_t totalBits = 41) {
+  uint8_t shift = totalBits - 1 - idxFromMSB;
+  uint64_t mask = (uint64_t)1 << shift;
+  if (value) word |= mask; else word &= ~mask;
+}
+
+static uint8_t bitsStringToWord(const char* bits, uint64_t &outWord) {
+  outWord = 0ULL;
+  uint8_t n = 0;
+  for (const char* p = bits; *p; ++p) {
+    if (*p == '0' || *p == '1') {
+      outWord = (outWord << 1) | (uint64_t)(*p == '1');
+      n++;
+    }
+  }
+  return n;
+}
+
+static bool modeToAK(const char* mode, uint8_t &a4, uint8_t &k4) {
+  if (!strcmp(mode, "SHOCK"))      { a4 = 0b0111; k4 = 0b0001; return true; }
+  if (!strcmp(mode, "VIBRATION"))  { a4 = 0b1011; k4 = 0b0010; return true; }
+  if (!strcmp(mode, "BEEP"))       { a4 = 0b1101; k4 = 0b0100; return true; }
+  if (!strcmp(mode, "LIGHT"))      { a4 = 0b1110; k4 = 0b1000; return true; }
+  return false;
+}
+
+static uint8_t channelToDDD(uint8_t ch) { return (ch == 1) ? 0b111 : 0b000; }
+
+static uint64_t composeFrame(const char* mode, uint8_t level, uint8_t channel) {
+  level = constrain(level, 0, 100);
+  uint8_t a4, k4;
+  if (!modeToAK(mode, a4, k4)) { a4 = 0; k4 = 0; }
+
+  uint64_t idWord = 0; bitsStringToWord(FIXED_ID_BITS, idWord);
+  uint8_t ddd = channelToDDD(channel);
+  uint8_t bbb = (~ddd) & 0b111;
+
+  uint64_t frame = 0ULL;
+  setBitMSB(frame, 0, true);
+  for (uint8_t i = 0; i < 3; ++i) setBitMSB(frame, 1 + i, (bbb >> (2 - i)) & 1);
+  for (uint8_t i = 0; i < 4; ++i) setBitMSB(frame, 4 + i, (k4  >> (3 - i)) & 1);
+  for (uint8_t i = 0; i < 17; ++i) setBitMSB(frame, 8 + i, (idWord >> (16 - i)) & 1ULL);
+  for (uint8_t i = 0; i < 7; ++i) setBitMSB(frame, 25 + i, (level >> (6 - i)) & 1);
+  for (uint8_t i = 0; i < 4; ++i) setBitMSB(frame, 32 + i, (a4   >> (3 - i)) & 1);
+  for (uint8_t i = 0; i < 3; ++i) setBitMSB(frame, 36 + i, (ddd >> (2 - i)) & 1);
+  setBitMSB(frame, 39, false);
+  setBitMSB(frame, 40, false);
+  return frame;
+}
+
+static void sendFrame_once(uint64_t frame) {
+#ifdef ARDUINO_ARCH_ESP32
+  txFramesCount++;
+  lastTxMs = millis();
+#endif
+
+  rfLed(true);
+  sendPreamble_body();
+  for (uint8_t i = 0; i < 41; ++i) {
+    bool bit = (frame >> (40 - i)) & 1ULL;
+    sendBit_body(bit);
+  }
+  digitalWrite(TX_PIN, LOW);
+  delayMicroseconds(INTERFRAME_GAP_US);
+  rfLed(false);
+  yield();
+}
+
+// Burst com gap em MILISSEGUNDOS entre frames
+static void sendCommandBurst(uint64_t frame, uint8_t times = SINGLE_SHOT_FRAMES_DEFAULT) {
+  for (uint8_t i = 0; i < times; ++i) {
+    sendFrame_once(frame);
+    if (i + 1 < times) delay(SINGLE_SHOT_GAP_MS);
+  }
+}
+
+// ====== Sessão de HOLD (tempo) ======
+static inline void holdSessionStartNow(){
+  holdSessionStartMs = millis();
+  holdSessionActive = true;
+}
+static inline void holdSessionClear(){
+  holdSessionActive = false;
+}
+
+// ====== HOLD (contínuo) ======
+static void holdStart(uint64_t frame) {
+  holdFrame = frame;
+  holdActive = true;
+
+#ifdef ARDUINO_ARCH_ESP32
+  txState = TX_HOLD;
+#endif
+
+  // 1 frame inicial
+  sendFrame_once(holdFrame);
+
+  // Agenda próximo envio para período fixo
+  nextFrameAt_us = micros() + HOLD_PERIOD_US;
+}
+
+static void holdStop() {
+  holdActive = false;
+  rfLed(false);
+  digitalWrite(TX_PIN, LOW);
+}
+
+static void serviceHoldTx() {
+  if (!holdActive) return;
+  unsigned long now = micros();
+
+  if ((long)(now - nextFrameAt_us) >= 0) {
+    sendFrame_once(holdFrame);
+    nextFrameAt_us += HOLD_PERIOD_US;
+
+    if ((long)(now - nextFrameAt_us) > (long)(HOLD_PERIOD_US * 3UL)) {
+      nextFrameAt_us = now + HOLD_PERIOD_US;
+    }
+  }
+}
+
+/* ============================================================
+   ============  Helpers / Parser  =============================
+   ============================================================ */
+
+static bool startsWithIgnoreCase(const String& s, const char* kw) {
+  String t = s; t.trim();
+  String k = String(kw);
+  t.toUpperCase(); k.toUpperCase();
+  return t.startsWith(k);
+}
+
+static inline void normalizeModeLvlForBeepLight(char* mode, uint8_t &lvl){
+  if (!strcmp(mode, "BEEP") || !strcmp(mode, "LIGHT")) lvl = 0;
+}
+
+// MODE,LVL,CH[,DUR_MS]
+static bool parseSimpleCmd(const String& line, char* outMode, uint8_t &outLvl, uint8_t &outCh, uint16_t &outMsOpt){
+  outMode[0]=0; outLvl=0; outCh=1; outMsOpt=PULSE_MS_DEFAULT;
+
+  int p1 = line.indexOf(',');
+  int p2 = (p1 >= 0) ? line.indexOf(',', p1+1) : -1;
+  int p3 = (p2 >= 0) ? line.indexOf(',', p2+1) : -1;
+  if (p1 < 0 || p2 < 0) return false;
+
+  String m = line.substring(0, p1); m.trim(); m.toUpperCase();
+  String lvlStr = line.substring(p1+1, p2); lvlStr.trim();
+  String chStr  = (p3 >=0) ? line.substring(p2+1, p3) : line.substring(p2+1); chStr.trim();
+  String msStr  = (p3 >=0) ? line.substring(p3+1) : String(PULSE_MS_DEFAULT);
+
+  uint8_t lvl = (uint8_t) constrain(lvlStr.toInt(), 0, 100);
+  uint8_t ch  = (uint8_t) ((chStr.length() ? chStr.toInt() : 1) == 2 ? 2 : 1);
+  uint16_t dur= (uint16_t) imax((int)MIN_GAP_MS, msStr.toInt());
+
+  if (!(m=="SHOCK"||m=="VIBRATION"||m=="BEEP"||m=="LIGHT")) return false;
+
+  m.toCharArray(outMode, 16);
+  outLvl= lvl;
+  outCh = ch;
+  outMsOpt = dur;
+  return true;
+}
+
+// Extrai MODE/LVL/CH de "CADENCE <MODE,LVL,CH,REPS,GAP>"
+static bool extractCadenceMLC(const String& cmd, char* outMode, uint8_t &outLvl, uint8_t &outCh){
+  outMode[0]=0; outLvl=0; outCh=1;
+  int sp = cmd.indexOf(' ');
+  if (sp < 0) return false;
+  String args = cmd.substring(sp+1); args.trim();
+
+  int p1 = args.indexOf(',');
+  int p2 = args.indexOf(',', p1+1);
+  int p3 = args.indexOf(',', p2+1);
+  int p4 = args.indexOf(',', p3+1);
+  if (p1<0||p2<0||p3<0||p4<0) return false;
+
+  String m = args.substring(0,p1); m.trim(); m.toUpperCase();
+  uint8_t lvl = (uint8_t) constrain(args.substring(p1+1,p2).toInt(), 0, 100);
+  uint8_t ch  = (uint8_t)(constrain(args.substring(p2+1,p3).toInt(), 1, 2));
+  uint16_t gap= u16max(MIN_GAP_MS, (uint16_t)args.substring(p4+1).toInt());
+  (void)gap;
+
+  if (!(m=="SHOCK"||m=="VIBRATION"||m=="BEEP"||m=="LIGHT")) return false;
+
+  m.toCharArray(outMode, 16);
+  outLvl = lvl;
+  outCh = ch;
+  return true;
+}
+
+// Extrai MODE/LVL/CH de "PATTERN <MODE,LVL,CH> [..]"
+static bool extractPatternMLC(const String& cmd, char* outMode, uint8_t &outLvl, uint8_t &outCh){
+  outMode[0]=0; outLvl=0; outCh=1;
+  int sp = cmd.indexOf(' ');
+  if (sp < 0) return false;
+  String rest = cmd.substring(sp+1);
+  rest.trim();
+
+  int brOpen = rest.indexOf('[');
+  if (brOpen < 0) return false;
+
+  String head = rest.substring(0, brOpen);
+  head.trim();
+
+  int p1 = head.indexOf(',');
+  int p2 = head.indexOf(',', p1+1);
+  if (p1<0 || p2<0) return false;
+
+  String m = head.substring(0,p1); m.trim(); m.toUpperCase();
+  uint8_t lvl = (uint8_t) constrain(head.substring(p1+1,p2).toInt(), 0, 100);
+  uint8_t ch  = (uint8_t)(constrain(head.substring(p2+1).toInt(), 1, 2));
+
+  if (!(m=="SHOCK"||m=="VIBRATION"||m=="BEEP"||m=="LIGHT")) return false;
+
+  m.toCharArray(outMode, 16);
+  outLvl = lvl;
+  outCh = ch;
+  return true;
+}
+
+static void handleLedForCommand(const char* mode, bool turnOn) {
+  if (strcmp(mode, "SHOCK") == 0) {
+    digitalWrite(LED_VERMELHO_PIN, turnOn ? HIGH : LOW);
+  } else if (strcmp(mode, "BEEP") == 0) {
+    digitalWrite(LED_AZUL_PIN, turnOn ? HIGH : LOW);
+  } else if (strcmp(mode, "VIBRATION") == 0) {
+    digitalWrite(LED_AMARELO_PIN, turnOn ? HIGH : LOW);
+  } else if (strcmp(mode, "LIGHT") == 0) {
+    digitalWrite(LED_VERDE_PIN, turnOn ? HIGH : LOW);
+  }
+}
+
+/* ============================================================
+   ============  MOTOR RÍTMICO (millis)  =======================
+   ============================================================ */
+
+enum StepKind : uint8_t { STEP_ON_HOLD_MS, STEP_OFF_MS };
+struct Step { StepKind kind; uint32_t ms; uint64_t frame; };
+
+static Step     steps[64];
+static uint8_t  stepCount = 0;
+static uint8_t  stepIdx   = 0;
+static bool     engineActive = false;
+static bool     engineRepeat = false;
+static uint32_t stepEndAt_ms = 0;
+
+// SEQUENCE multi-linha
+static bool   capturingSeq = false;
+static bool   seqRepeatOnEnd = false;
+static String seqLines[20];
+static uint8_t seqCount = 0;
+
+// Se verdadeiro, engineStart(true) deve iniciar medição de tempo (HOLDON CADENCE/PATTERN/SEQUENCE)
+static bool pendingHoldSessionStart = false;
+
+static void engineClear() { stepCount = 0; stepIdx = 0; engineActive = false; engineRepeat = false; }
+static bool engineAddOn(uint64_t frame, uint32_t ms){
+  if (stepCount >= (uint8_t)(sizeof(steps)/sizeof(steps[0]))) return false;
+  steps[stepCount++] = Step{ STEP_ON_HOLD_MS, ms, frame };
+  return true;
+}
+static bool engineAddOff(uint32_t ms){
+  if (stepCount >= (uint8_t)(sizeof(steps)/sizeof(steps[0]))) return false;
+  steps[stepCount++] = Step{ STEP_OFF_MS, ms, 0ULL };
+  return true;
+}
+
+static void engineStart(bool repeat){
+  if (!stepCount) return;
+  engineRepeat = repeat;
+  engineActive = true;
+  stepIdx = 0;
+
+#ifdef ARDUINO_ARCH_ESP32
+  txState = TX_ENGINE;
+#endif
+
+  if (pendingHoldSessionStart) {
+    holdSessionStartNow();
+    pendingHoldSessionStart = false;
+  }
+
+  if (steps[0].kind == STEP_ON_HOLD_MS) holdStart(steps[0].frame);
+  else                                   holdStop();
+
+  stepEndAt_ms = millis() + steps[0].ms;
+}
+
+static void engineStop(){
+  engineActive = false;
+  holdStop();
+#ifdef ARDUINO_ARCH_ESP32
+  txState = holdActive ? TX_HOLD : TX_IDLE;
+#endif
+}
+
+static void engineService(){
+  if (!engineActive) return;
+  unsigned long now = millis();
+  if ((long)(now - stepEndAt_ms) < 0) return;
+
+  stepIdx++;
+  if (stepIdx >= stepCount){
+    if (engineRepeat) stepIdx = 0;
+    else { engineStop(); return; }
+  }
+
+  const Step& s = steps[stepIdx];
+  if (s.kind == STEP_ON_HOLD_MS) holdStart(s.frame);
+  else                           holdStop();
+  stepEndAt_ms = millis() + s.ms;
+}
+
+/* ============================================================
+   ============  COMPILADORES  =================================
+   ============================================================ */
+
+static void compile_SIMPLE_into_playlist(const String& cmdLine){
+  char mode[16]; uint8_t lvl=0, ch=1; uint16_t durMs=PULSE_MS_DEFAULT;
+  if (!parseSimpleCmd(cmdLine, mode, lvl, ch, durMs)) return;
+
+  normalizeModeLvlForBeepLight(mode, lvl);
+  if (!shouldTransmit(mode, lvl)) return;
+
+  uint64_t frame = composeFrame(mode, lvl, ch);
+  engineAddOn(frame, durMs);
+  engineAddOff(u16max(MIN_GAP_MS, (uint16_t)120));
+}
+
+static bool compile_CADENCE(const String& line){
+  int sp = line.indexOf(' ');
+  if (sp < 0) return false;
+  String args = line.substring(sp+1);
+  args.trim();
+
+  int p1 = args.indexOf(',');
+  int p2 = args.indexOf(',', p1+1);
+  int p3 = args.indexOf(',', p2+1);
+  int p4 = args.indexOf(',', p3+1);
+  if (p1<0||p2<0||p3<0||p4<0) return false;
+
+  String m = args.substring(0,p1); m.trim(); m.toUpperCase();
+  uint8_t lvl = constrain(args.substring(p1+1,p2).toInt(), 0, 100);
+  uint8_t ch  = constrain(args.substring(p2+1,p3).toInt(), 1, 2);
+  uint8_t reps= (uint8_t)imax(1, args.substring(p3+1,p4).toInt());
+  uint16_t gap= u16max(MIN_GAP_MS, (uint16_t)args.substring(p4+1).toInt());
+
+  if (!(m=="SHOCK"||m=="VIBRATION"||m=="BEEP"||m=="LIGHT")) return false;
+
+  uint64_t frame = composeFrame(m.c_str(), lvl, ch);
+
+  for (uint8_t i=0;i<reps;i++){
+    engineAddOn(frame, PULSE_MS_DEFAULT);
+    engineAddOff(gap);
+  }
+  return true;
+}
+
+static bool compile_PATTERN(const String& line){
+  int sp = line.indexOf(' ');
+  if (sp < 0) return false;
+  String rest = line.substring(sp+1);
+  rest.trim();
+
+  int brOpen = rest.indexOf('[');
+  int brClose= rest.lastIndexOf(']');
+  if (brOpen < 0 || brClose < brOpen) return false;
+
+  String cmd = rest.substring(0, brOpen);
+  cmd.trim();
+  String list= rest.substring(brOpen+1, brClose);
+  list.trim();
+
+  char mode[16]; uint8_t lvl=0, ch=1; uint16_t _msDummy=0;
+  if (!parseSimpleCmd(cmd, mode, lvl, ch, _msDummy)) return false;
+
+  normalizeModeLvlForBeepLight(mode, lvl);
+  if (!shouldTransmit(mode, lvl)) return true;
+
+  uint64_t frame = composeFrame(mode, lvl, ch);
+
+  bool on = true;
+  int idx = 0;
+  while (idx <= list.length()){
+    int comma = list.indexOf(',', idx);
+    String tok = (comma>=0) ? list.substring(idx, comma) : list.substring(idx);
+    tok.trim();
+    if (tok.length()){
+      uint16_t dur = u16max(MIN_GAP_MS, (uint16_t)tok.toInt());
+      if (on) engineAddOn(frame, dur);
+      else    engineAddOff(dur);
+      on = !on;
+    }
+    if (comma < 0) break;
+    idx = comma + 1;
+  }
+  return true;
+}
+
+static bool compile_SEQUENCE_finalize(){
+  for (uint8_t i=0;i<seqCount;i++){
+    String ln = seqLines[i]; ln.trim();
+    if (!ln.length()) continue;
+
+    if (ln.startsWith("CADENCE") || ln.startsWith("Cadence") || ln.startsWith("cadence")){
+      if (!compile_CADENCE(ln)) return false;
+    }
+    else if (ln.startsWith("PATTERN") || ln.startsWith("Pattern") || ln.startsWith("pattern")){
+      if (!compile_PATTERN(ln)) return false;
+    }
+    else {
+      compile_SIMPLE_into_playlist(ln);
+    }
+  }
+  return (stepCount > 0);
+}
+
+/* ============================================================
+   ============  Botão + Heartbeat  ============================
+   ============================================================ */
+
+static inline bool pinToOnOff(bool pinLevel){ return (pinLevel == BTN_ON_LEVEL); }
+
+static void reportBtnState(bool isOn){
+  serialBTN_STATE(isOn);
+#ifdef ARDUINO_ARCH_ESP32
+  oledLogLine(String("BTN ") + (isOn ? "ON" : "OFF"));
+#endif
+}
+
+static void serviceButton(){
+  bool reading = digitalRead(BTN_PIN);
+
+  if (reading != lastBtnRead) {
+    lastDebounceMs = millis();
+    lastBtnRead = reading;
+  }
+
+  if ((millis() - lastDebounceMs) >= DEBOUNCE_MS) {
+    if (reading != lastBtnStable) {
+      lastBtnStable = reading;
+      reportBtnState(pinToOnOff(lastBtnStable));
+    }
+  }
+}
+
+static void doHoldoffAndReport(bool isAuto){
+  allLedsOff();
+  engineStop();
+  holdStop();
+  capturingSeq = false; seqCount = 0; seqRepeatOnEnd = false;
+  pendingHoldSessionStart = false;
+
+#ifdef ARDUINO_ARCH_ESP32
+  txState = TX_IDLE;
+  oledLogLine("HOLDOFF");
+#endif
+
+  unsigned long elapsed = 0;
+  if (holdSessionActive) {
+    elapsed = millis() - holdSessionStartMs;
+    holdSessionClear();
+  }
+
+  serialOK_HOLDOFF_MS(elapsed);
+}
+
+// static void serviceHeartbeat(){} // Heartbeat desativado
+
+/* ============================================================
+   ============  Setup / Loop  =================================
+   ============================================================ */
+
+static bool animationPlayed = false;
+
+void startupAnimation() {
+  int del = 100;
+  allLedsOff();
+  delay(del);
+
+  digitalWrite(LED_AZUL_PIN, HIGH);      delay(del);
+  digitalWrite(LED_VERMELHO_PIN, HIGH);  delay(del);
+  digitalWrite(LED_AMARELO_PIN, HIGH);   delay(del);
+  digitalWrite(LED_VERDE_PIN, HIGH);     delay(del);
+
+  allLedsOff();
+  delay(del*2);
+
+  for (int i=0; i<2; i++) {
+    digitalWrite(LED_AZUL_PIN, HIGH);
+    digitalWrite(LED_VERMELHO_PIN, HIGH);
+    digitalWrite(LED_AMARELO_PIN, HIGH);
+    digitalWrite(LED_VERDE_PIN, HIGH);
+    delay(del);
+    allLedsOff();
+    delay(del);
+  }
+}
+
+static bool handleLine(String line){
+  line.trim();
+  if (!line.length()) return false;
+
+#ifdef ARDUINO_ARCH_ESP32
+  oledLogLine(line);
+#endif
+
+
+
+  if (capturingSeq) {
+    if (startsWithIgnoreCase(line, "ENDSEQ") || startsWithIgnoreCase(line, "ENDSEQUENCE")) {
+      capturingSeq = false;
+      stepCount = 0;
+
+      if (compile_SEQUENCE_finalize()) {
+        if (seqRepeatOnEnd) pendingHoldSessionStart = true;
+        engineStart(seqRepeatOnEnd);
+        serialLineF(F("OK SEQUENCE"));
+#ifdef ARDUINO_ARCH_ESP32
+        oledLogLine("OK SEQUENCE");
+#endif
+      } else {
+        engineClear();
+        serialLineF(F("ERR SEQUENCE"));
+#ifdef ARDUINO_ARCH_ESP32
+        txState = TX_IDLE;
+        oledLogLine("ERR SEQUENCE");
+#endif
+      }
+
+      seqCount = 0;
+      seqRepeatOnEnd = false;
+    } else {
+      if (seqCount < (uint8_t)(sizeof(seqLines)/sizeof(seqLines[0]))) {
+        seqLines[seqCount++] = line;
+      } else {
+        serialLineF(F("ERR SEQUENCE"));
+#ifdef ARDUINO_ARCH_ESP32
+        oledLogLine("ERR SEQ FULL");
+#endif
+      }
+    }
+    return true;
+  }
+
+  if (startsWithIgnoreCase(line, "HOLDOFF")) {
+    doHoldoffAndReport(false);
+    return true;
+  }
+
+  if (startsWithIgnoreCase(line, "HOLDON ")) {
+    String cmd = line.substring(line.indexOf(' ') + 1);
+    cmd.trim();
+
+    if (cmd.startsWith("CADENCE") || cmd.startsWith("Cadence") || cmd.startsWith("cadence")) {
+      char mode[16]; uint8_t lvl=0, ch=1;
+      if (!extractCadenceMLC(cmd, mode, lvl, ch)) {
+        serialLineF(F("ERR HOLDON"));
+#ifdef ARDUINO_ARCH_ESP32
+        oledLogLine("ERR HOLDON");
+#endif
+      } else {
+        normalizeModeLvlForBeepLight(mode, lvl);
+        serialOK_HOLDON_MLC(mode, lvl, ch);
+
+        allLedsOff();
+        handleLedForCommand(mode, true);
+
+        engineClear();
+        if (compile_CADENCE(cmd)) {
+          if (stepCount > 0) pendingHoldSessionStart = true;
+#ifdef ARDUINO_ARCH_ESP32
+          oledSetMLC(mode, lvl, ch);
+#endif
+          engineStart(true);
+        }
+      }
+      return true;
+    }
+
+    if (cmd.startsWith("PATTERN") || cmd.startsWith("Pattern") || cmd.startsWith("pattern")) {
+      char mode[16]; uint8_t lvl=0, ch=1;
+      if (!extractPatternMLC(cmd, mode, lvl, ch)) {
+        serialLineF(F("ERR HOLDON"));
+#ifdef ARDUINO_ARCH_ESP32
+        oledLogLine("ERR HOLDON");
+#endif
+      } else {
+        normalizeModeLvlForBeepLight(mode, lvl);
+        serialOK_HOLDON_MLC(mode, lvl, ch);
+
+        allLedsOff();
+        handleLedForCommand(mode, true);
+
+        engineClear();
+        if (compile_PATTERN(cmd)) {
+          if (stepCount > 0) pendingHoldSessionStart = true;
+#ifdef ARDUINO_ARCH_ESP32
+          oledSetMLC(mode, lvl, ch);
+#endif
+          engineStart(true);
+        }
+      }
+      return true;
+    }
+
+    if (cmd.startsWith("SEQUENCE") || cmd.startsWith("Sequence") || cmd.startsWith("sequence")) {
+      capturingSeq = true; seqCount = 0; engineClear();
+      seqRepeatOnEnd = true;
+      serialLineF(F("OK HOLDON"));
+#ifdef ARDUINO_ARCH_ESP32
+      txState = TX_ENGINE;
+      oledLogLine("SEQ CAPTURE");
+#endif
+      return true;
+    }
+
+    // HOLDON simples
+    char mode[16] = {0}; uint8_t lvl=0, ch=1; uint16_t _ms=0;
+    if (parseSimpleCmd(cmd, mode, lvl, ch, _ms)) {
+      normalizeModeLvlForBeepLight(mode, lvl);
+
+#ifdef ARDUINO_ARCH_ESP32
+      oledSetMLC(mode, lvl, ch);
+#endif
+
+      if (!shouldTransmit(mode, lvl)) {
+        engineStop();
+        holdStop();
+        holdSessionClear();
+        serialOK_HOLDON_MLC(mode, lvl, ch);
+#ifdef ARDUINO_ARCH_ESP32
+        txState = TX_IDLE;
+#endif
+      } else {
+        allLedsOff();
+        handleLedForCommand(mode, true);
+        uint64_t frame = composeFrame(mode, lvl, ch);
+        engineStop();
+        holdSessionStartNow();
+        holdStart(frame);
+        serialOK_HOLDON_MLC(mode, lvl, ch);
+#ifdef ARDUINO_ARCH_ESP32
+        txState = TX_HOLD;
+#endif
+      }
+      return true;
+    }
+
+    serialLineF(F("ERR HOLDON"));
+#ifdef ARDUINO_ARCH_ESP32
+    oledLogLine("ERR HOLDON");
+#endif
+    return true;
+  }
+
+  if (startsWithIgnoreCase(line, "SEQUENCE")) {
+    capturingSeq = true; seqCount = 0; engineClear();
+    seqRepeatOnEnd = false;
+    serialLineF(F("OK SEQUENCE"));
+#ifdef ARDUINO_ARCH_ESP32
+    txState = TX_ENGINE;
+    oledLogLine("SEQ CAPTURE");
+#endif
+    return true;
+  }
+
+  if (startsWithIgnoreCase(line, "CADENCE ")) {
+    engineClear();
+    if (compile_CADENCE(line)) { engineStart(false); serialLineF(F("OK CADENCE")); }
+    else serialLineF(F("ERR CADENCE"));
+    return true;
+  }
+
+  if (startsWithIgnoreCase(line, "PATTERN ")) {
+    engineClear();
+    if (compile_PATTERN(line)) { engineStart(false); serialLineF(F("OK PATTERN")); }
+    else serialLineF(F("ERR PATTERN"));
+    return true;
+  }
+
+  // comando simples: MODE,LVL,CH[,DUR]
+  char mode[16] = {0};
+  uint8_t lvl=0, ch=1; uint16_t ms=PULSE_MS_DEFAULT;
+  if (parseSimpleCmd(line, mode, lvl, ch, ms)) {
+    normalizeModeLvlForBeepLight(mode, lvl);
+
+#ifdef ARDUINO_ARCH_ESP32
+    oledSetMLC(mode, lvl, ch);
+#endif
+
+    if (shouldTransmit(mode, lvl)) {
+      handleLedForCommand(mode, true);
+      uint64_t frame = composeFrame(mode, lvl, ch);
+
+#ifdef ARDUINO_ARCH_ESP32
+      txState = TX_SINGLE;
+#endif
+      sendCommandBurst(frame, SINGLE_SHOT_FRAMES_DEFAULT);
+#ifdef ARDUINO_ARCH_ESP32
+      if (!holdActive && !engineActive) txState = TX_IDLE;
+#endif
+
+      handleLedForCommand(mode, false);
+    }
+
+    serialOK_MLC(mode, lvl, ch);
+    return true;
+  }
+
+  serialLineF(F("ERR"));
+#ifdef ARDUINO_ARCH_ESP32
+  oledLogLine("ERR CMD");
+#endif
+  return true;
+}
+
+void setup() {
+  pinMode(TX_PIN, OUTPUT);
+  digitalWrite(TX_PIN, LOW);
+
+  pinMode(LED_BUILTIN, OUTPUT);
+  rfLed(false);
+
+  pinMode(LED_AZUL_PIN, OUTPUT);
+  pinMode(LED_VERMELHO_PIN, OUTPUT);
+  pinMode(LED_AMARELO_PIN, OUTPUT);
+  pinMode(LED_VERDE_PIN, OUTPUT);
+  allLedsOff();
+
+  pinMode(BTN_PIN, INPUT_PULLUP);
+
+  bool initRead = digitalRead(BTN_PIN);
+  lastBtnStable = initRead;
+  lastBtnRead   = initRead;
+  lastDebounceMs = millis();
+
+  Serial.begin(115200);
+  Serial.setTimeout(5);
+
+#ifdef ARDUINO_ARCH_ESP32
+  oledInit();
+
+  btReady = SerialBT.begin(BT_DEVICE_NAME);
+  if (btReady) {
+    SerialBT.setTimeout(5);
+  }
+  oledLogLine("BOOT OK");
+#endif
+
+  serialLineF(F("PET998DR TX pronto (115200)."));
+  serialLineF(F("Formato: MODE,LEVEL,CHANNEL[,DUR_MS]"));
+  serialLineF(F("Comandos: HOLDON <cmd> | HOLDOFF | CADENCE ... | PATTERN ... | SEQUENCE ... ENDSEQ"));
+  // Heartbeat desativado
+  serialLineF(F("Botao: apenas reporta ON/OFF no Serial (sem efeito no TX)."));
+  reportBtnState(pinToOnOff(initRead));
+}
+
+void loop() {
+  if (Serial && !animationPlayed) {
+    startupAnimation();
+    animationPlayed = true;
+  }
+
+  // Heartbeat desativado
+  serviceButton();
+
+  if (Serial.available()) {
+    String line = Serial.readStringUntil('\n');
+    handleLine(line);
+  }
+
+#ifdef ARDUINO_ARCH_ESP32
+  if (btReady && SerialBT.available()) {
+    String line = SerialBT.readStringUntil('\n');
+    handleLine(line);
+  }
+  oledService();
+#endif
+
+  serviceHoldTx();
+  engineService();
+}

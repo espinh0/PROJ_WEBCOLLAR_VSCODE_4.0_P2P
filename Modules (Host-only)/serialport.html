@@ -55,6 +55,17 @@
   </div>
 </div>
 
+<style>
+  #serialPortCard .card-header { flex-wrap: wrap; gap: 8px; }
+  #serialPortCard .card-header > div { min-width: 0; }
+  #serialPortCard .card-header .d-flex.align-items-center.gap-2 { flex-wrap: wrap; }
+  #serialPortCard .card-header .form-select-sm { max-width: 100%; }
+  @media (max-width: 720px) {
+    #serialPortCard .card-header { align-items: flex-start; }
+    #serialPortCard .card-header > div:last-child { width: 100%; justify-content: flex-start; }
+  }
+</style>
+
 <script>
 (() => {
   const $ = s => document.querySelector(s);
@@ -72,6 +83,8 @@
   const HOST_REQUIRED_MSG = "Habilite 'host' para abrir a serial";
   const LAST_BAUD_KEY = "ws.lastBaud";
   const WANT_AUTO_KEY = "ws.autoReconnect";
+  const LAST_BLE_ID_KEY = "ws.lastBleDeviceId";
+  const LAST_TRANSPORT_KEY = "ws.lastTransport";
 
   const state = {
     port: null,
@@ -164,6 +177,12 @@
     window.port = state.port;
     window.writer = state.writer;
     window.reader = state.reader;
+    const bleConnected = !!(state.bleDevice && state.bleDevice.gatt && state.bleDevice.gatt.connected);
+    const serialConnected = !!(state.port && state.port.readable && state.port.writable);
+    window.serialConnected = serialConnected || bleConnected;
+    if (window.SerialBridge) {
+      window.SerialBridge.isConnected = window.serialConnected;
+    }
   }
 
   function dispatchSerialLine(line) {
@@ -282,47 +301,38 @@
   }
 
   // ====== BLE (NUS) ======
-  async function connectBLE() {
+  async function setupBLEFromDevice(device) {
     const SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
     const CHAR_TX_UUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
     const CHAR_RX_UUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
 
-    log("Procurando por dispositivos BLE com o serviço UART...");
-    let device;
-    try {
-      device = await navigator.bluetooth.requestDevice({
-        filters: [{ services: [SERVICE_UUID] }],
-        optionalServices: [SERVICE_UUID]
-      });
-      if (!device) throw new Error("Nenhum dispositivo selecionado.");
-    } catch (e) {
-      throw new Error(`Seleção de dispositivo BLE falhou: ${e.message}`);
-    }
-
-    log(`Dispositivo selecionado: ${device.name || 'ID: ' + device.id}`);
     state.bleDevice = device;
-    
+    device.removeEventListener('gattserverdisconnected', onBLEDisconnected);
     device.addEventListener('gattserverdisconnected', onBLEDisconnected);
-
     log("Conectando ao servidor GATT...");
     const server = await device.gatt.connect();
     state.bleServer = server;
     log("Servidor GATT conectado.");
 
     const service = await server.getPrimaryService(SERVICE_UUID);
-    log("Serviço UART (NUS) encontrado.");
+    log("Servi??o UART (NUS) encontrado.");
 
     const [charTx, charRx] = await Promise.all([
         service.getCharacteristic(CHAR_TX_UUID),
         service.getCharacteristic(CHAR_RX_UUID)
     ]);
     
+    // Verifica permiss??es do characteristic RX
+    let rxProps = charRx.properties || {};
+    if (!rxProps.write && !rxProps.writeWithoutResponse) {
+      log("Aten????o: Caracter??stica RX n??o suporta escrita!", "warn");
+    }
     state.bleCharTx = charTx;
     state.bleCharRx = charRx;
-    log("Características RX/TX encontradas.");
+    log("Caracter??sticas RX/TX encontradas.");
 
     await charTx.startNotifications();
-    log("Inscrição para notificações ativada (TX).");
+    log("Inscri????o para notifica????es ativada (TX).");
 
     state.bleNotifyAbort = new AbortController();
     charTx.addEventListener('characteristicvaluechanged', handleBLENotifications, { signal: state.bleNotifyAbort.signal });
@@ -331,7 +341,47 @@
     setButtons(true);
     syncGlobals();
     window.dispatchEvent(new Event("serial-connected"));
-    log('Conexão BLE estabelecida com ' + (device.name || '(sem nome)'));
+    log('Conex??o BLE estabelecida com ' + (device.name || '(sem nome)'));
+  }
+
+  async function connectBLE() {
+    const SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+    log("Procurando por dispositivos BLE com o servi??o UART...");
+    let device;
+    try {
+      device = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: [SERVICE_UUID]
+      });
+      if (!device) throw new Error("Nenhum dispositivo selecionado.");
+    } catch (e) {
+      throw new Error(`Sele????o de dispositivo BLE falhou: ${e.message}`);
+    }
+
+    log(`Dispositivo selecionado: ${device.name || 'ID: ' + device.id}`);
+    try { localStorage.setItem(LAST_BLE_ID_KEY, device.id); } catch {}
+    await setupBLEFromDevice(device);
+  }
+
+  async function getKnownBLEDevice() {
+    if (!navigator.bluetooth || typeof navigator.bluetooth.getDevices !== "function") return null;
+    const devices = await navigator.bluetooth.getDevices();
+    if (!devices || !devices.length) return null;
+    const lastId = (() => {
+      try { return localStorage.getItem(LAST_BLE_ID_KEY); } catch { return null; }
+    })();
+    if (lastId) {
+      const match = devices.find(d => d.id === lastId);
+      if (match) return match;
+    }
+    return devices[0] || null;
+  }
+
+  async function reconnectBLE() {
+    if (!state.bleDevice) throw new Error("Nenhum dispositivo BLE previamente conhecido.");
+    if (state.bleDevice.gatt && state.bleDevice.gatt.connected) return;
+    log("Tentando reconectar BLE ao dispositivo anterior...");
+    await setupBLEFromDevice(state.bleDevice);
   }
 
   // ====== Bluetooth clássico (mantido, mas opcional) ======
@@ -370,7 +420,7 @@
 
         if (!prompt) {
           if (!quiet) log("Auto-reconnect ignorado: nenhuma porta previamente concedida.", "warn");
-          return;
+          throw new Error("Sem permissao serial previamente concedida.");
         }
 
         const port = await navigator.serial.requestPort({ filters: [] });
@@ -384,7 +434,20 @@
       }
 
       if (state.transport === 'ble') {
-        if (state.bleDevice && state.bleDevice.gatt.connected) return;
+        if (state.bleDevice && state.bleDevice.gatt && state.bleDevice.gatt.connected) return;
+        if (state.bleDevice && !prompt) {
+          await reconnectBLE();
+          return;
+        }
+        if (!prompt) {
+          const known = await getKnownBLEDevice();
+          if (known) {
+            state.bleDevice = known;
+            await reconnectBLE();
+            return;
+          }
+          throw new Error("Sem dispositivo BLE conhecido para reconectar.");
+        }
         await connectBLE();
         return;
       }
@@ -419,8 +482,9 @@
         if (state.bleDevice.gatt.connected) { try { state.bleDevice.gatt.disconnect(); } catch {} }
         if (!isEvent) {
             state.bleDevice.removeEventListener('gattserverdisconnected', onBLEDisconnected);
+            state.bleDevice = null;
         }
-        state.bleDevice = null; state.bleServer = null; state.bleCharRx = null; state.bleCharTx = null;
+        state.bleServer = null; state.bleCharRx = null; state.bleCharTx = null;
     }
 
     state.portOpening = null;
@@ -429,6 +493,10 @@
     syncGlobals();
     window.dispatchEvent(new Event("serial-disconnected"));
     log(`${state.transport.toUpperCase()} desconectado.`);
+
+    if (isEvent && (state.transport === 'ble' || state.transport === 'serial')) {
+      scheduleReconnect();
+    }
   }
 
   // ===== Auto-reconnect =====
@@ -458,7 +526,9 @@
     line = String(line ?? "").trim();
     if (!line) return;
 
-    const payload = line + "\n";
+    // Permite alternar terminador via window.BLE_LINE_ENDING
+    const lineEnding = typeof window.BLE_LINE_ENDING === 'string' ? window.BLE_LINE_ENDING : "\n";
+    const payload = line + lineEnding;
     const bytes = new TextEncoder().encode(payload);
 
     if (state.transport === 'serial') {
@@ -469,9 +539,46 @@
     }
 
     if (state.transport === 'ble') {
-      if (!state.bleCharRx) throw new Error("BLE RX indisponível");
-      // Revertido para writeValue para maior compatibilidade
-      await state.bleCharRx.writeValue(bytes);
+      const maxLen = 20;
+      let sentRx = false;
+      const canWriteNoRsp = !!(state.bleCharRx && state.bleCharRx.writeValueWithoutResponse && state.bleCharRx.properties && state.bleCharRx.properties.writeWithoutResponse);
+      const writeFn = canWriteNoRsp
+        ? state.bleCharRx.writeValueWithoutResponse.bind(state.bleCharRx)
+        : state.bleCharRx ? state.bleCharRx.writeValue.bind(state.bleCharRx) : null;
+      // Se o comando couber em um pacote, envie de uma vez só
+      if (bytes.length <= maxLen) {
+        if (state.bleCharRx) {
+          try {
+            if (!writeFn) throw new Error("write indisponivel");
+            await writeFn(bytes);
+            log(`BLE: enviado comando inteiro via RX (${bytes.length} bytes)`, "info");
+            sentRx = true;
+          } catch (e) {
+            log(`Erro ao enviar BLE RX: ${e.message || e}`, "warn");
+          }
+        }
+      } else {
+        // Fragmenta apenas se for maior que 20 bytes
+        if (state.bleCharRx) {
+          let offset = 0;
+          while (offset < bytes.length) {
+            const chunk = bytes.slice(offset, offset + maxLen);
+            try {
+              if (!writeFn) throw new Error("write indisponivel");
+              await writeFn(chunk);
+              log(`BLE: enviado chunk via RX [${offset}-${offset+chunk.length-1}] (${chunk.length} bytes)`, "info");
+              sentRx = true;
+            } catch (e) {
+              log(`Erro ao enviar chunk BLE RX: ${e.message || e}`, "warn");
+            }
+            offset += maxLen;
+          }
+        }
+      }
+      if (!sentRx) {
+        log("Nenhum characteristic BLE disponível para escrita!", "error");
+        throw new Error("Nenhum characteristic BLE disponível para escrita!");
+      }
       return;
     }
   }
@@ -499,6 +606,7 @@
     transportSel.addEventListener("change", () => {
       disconnectSerial().finally(() => {
           state.transport = transportSel.value;
+          try { localStorage.setItem(LAST_TRANSPORT_KEY, state.transport); } catch {}
           setStatus("Desconectado", "--");
           setButtons(false);
       });
@@ -521,12 +629,18 @@
   window.disconnectSerial = disconnectSerial;
   window.SerialBridge = window.SerialBridge || {};
   window.SerialBridge.send = sendLineUniversal;
+  window.SerialBridge.isConnected = !!window.serialConnected;
   window.collarSend = sendLineUniversal;
 
   // ===== Inicialização =====
   function initialize() {
     const hasWebBluetooth = !!navigator.bluetooth;
-    state.transport = hasWebBluetooth ? (transportSel?.value || 'ble') : 'serial';
+    const savedTransport = (() => {
+      try { return localStorage.getItem(LAST_TRANSPORT_KEY); } catch { return null; }
+    })();
+    const baseTransport = hasWebBluetooth ? (transportSel?.value || 'ble') : 'serial';
+    state.transport = savedTransport || baseTransport;
+    if (!hasWebBluetooth && state.transport !== 'serial') state.transport = 'serial';
     if (transportSel) transportSel.value = state.transport;
 
     const savedAuto = localStorage.getItem(WANT_AUTO_KEY);
@@ -550,6 +664,15 @@
   // watchers de host tag
   window.addEventListener("flowgate:local_tags_changed", () => { setButtons(!!state.port || !!state.bleDevice); });
   window.addEventListener("trystero:localTags", () => { setButtons(!!state.port || !!state.bleDevice); });
+
+  if (navigator.serial && typeof navigator.serial.addEventListener === "function") {
+    navigator.serial.addEventListener("disconnect", (event) => {
+      if (state.transport !== 'serial') return;
+      if (state.port && event && event.target === state.port) {
+        disconnectSerial({ isEvent: true }).catch(()=>{});
+      }
+    });
+  }
 
 })();
 </script>

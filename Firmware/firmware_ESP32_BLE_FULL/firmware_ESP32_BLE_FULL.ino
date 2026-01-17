@@ -44,6 +44,7 @@ static const uint16_t PULSE_MS_DEFAULT = 180;
 static const uint16_t MIN_GAP_MS       = 50;
 static const uint8_t  SINGLE_SHOT_FRAMES_DEFAULT = 2;
 static const uint16_t SINGLE_SHOT_GAP_MS         = 6;
+static const uint8_t  ENGINE_ON_FRAMES_DEFAULT   = 3;
 
 static const char* FIXED_ID_BITS = "00110101001000100";
 
@@ -168,7 +169,7 @@ static void engineStart(bool repeat){
   engineRepeat = repeat;
   engineActive = true;
   stepIdx = 0;
-  if (steps[0].kind == STEP_ON_HOLD_MS) sendFrame_once(steps[0].frame);
+  if (steps[0].kind == STEP_ON_HOLD_MS) sendCommandBurst(steps[0].frame, ENGINE_ON_FRAMES_DEFAULT);
   stepEndAt_ms = millis() + steps[0].ms;
 }
 static void engineService(){
@@ -182,7 +183,7 @@ static void engineService(){
     else { engineStop(); return; }
   }
   const Step& s = steps[stepIdx];
-  if (s.kind == STEP_ON_HOLD_MS) sendFrame_once(s.frame);
+  if (s.kind == STEP_ON_HOLD_MS) sendCommandBurst(s.frame, ENGINE_ON_FRAMES_DEFAULT);
   stepEndAt_ms = millis() + s.ms;
 }
 
@@ -337,6 +338,9 @@ struct TxMsg {
   char text[120];
 };
 
+static constexpr size_t CMD_LINE_BUF = sizeof(CmdMsg::line);
+static constexpr size_t BLE_RX_MTU = 20;
+
 static bool enqueueCmdFromISRorCB(const char* s) {
   if (!qCmd) return false;
   CmdMsg m;
@@ -361,8 +365,8 @@ static void enqueueTx(const char* s) {
 // ---------------------
 // OLED (U8g2)
 // ---------------------
-// SSD1306 128x64 I2C
-U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
+// SSD1306 128x64 I2C (rotacao 180 graus)
+U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R2, U8X8_PIN_NONE);
 
 static bool oledOk = false;
 static unsigned long oledNextMs = 0;
@@ -390,26 +394,10 @@ static void uiLogLine(const char* s) {
   portEXIT_CRITICAL(&uiMux);
 }
 
-// 12x12 BT icon
-static const uint8_t bt_icon_bits[] PROGMEM = {
-  0x08, 0x00,
-  0x18, 0x00,
-  0x1C, 0x00,
-  0x16, 0x00,
-  0x13, 0x00,
-  0x11, 0x80,
-  0x13, 0x00,
-  0x16, 0x00,
-  0x1C, 0x00,
-  0x18, 0x00,
-  0x08, 0x00,
-  0x00, 0x00
-};
-
 static void oledDrawBtIcon() {
-  const int w=12, h=12;
+  const int w=21, h=21;
   const int x = 128 - w - 2;
-  const int y = 1;
+  const int y = 2 + h; // baseline
 
   static uint32_t lastBlink=0;
   static bool blink=false;
@@ -417,10 +405,13 @@ static void oledDrawBtIcon() {
   if (connecting && (millis()-lastBlink > 200)) { blink=!blink; lastBlink=millis(); }
 
   bool draw = deviceConnected || !connecting || blink;
-  if (draw) u8g2.drawXBM(x, y, w, h, bt_icon_bits);
+  if (draw) {
+    u8g2.setFont(u8g2_font_streamline_all_t);
+    u8g2.drawGlyph(x, y, 0x150); // bluetooth
+  }
 
-  if (deviceConnected) u8g2.drawDisc(x+6, y+14, 2);
-  else if (connecting && blink) u8g2.drawCircle(x+6, y+14, 2);
+  if (deviceConnected) u8g2.drawDisc(x+10, y+6, 2);
+  else if (connecting && blink) u8g2.drawCircle(x+10, y+6, 2);
 }
 
 static void oledService(){
@@ -437,9 +428,9 @@ static void oledService(){
   portEXIT_CRITICAL(&uiMux);
 
   u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_6x10_tf);
-
   oledDrawBtIcon();
+
+  u8g2.setFont(u8g2_font_6x10_tf);
 
   u8g2.setCursor(0, 10);
   u8g2.print("SCOLLAR BLE/RF");
@@ -672,6 +663,10 @@ public:
     deviceConnected = true;
     bleEncrypted = ci.isEncrypted();
     bleBonded = ci.isBonded();
+    // solicita intervalo menor para reduzir latencia
+    if (s) {
+      s->updateConnParams(ci.getConnHandle(), 6, 12, 0, 200);
+    }
     uiLogLine("BLE conectado");
   }
 
@@ -710,26 +705,52 @@ public:
 
 class RxCallbacks : public NimBLECharacteristicCallbacks {
 public:
+  RxCallbacks() : pendingLine() {}
+
   void onWrite(NimBLECharacteristic* c) {
+    handleWrite(c);
+  }
+
+  void onWrite(NimBLECharacteristic* c, NimBLEConnInfo& ci) {
+    (void)ci;
+    handleWrite(c);
+  }
+
+private:
+  String pendingLine;
+
+  void handleWrite(NimBLECharacteristic* c) {
     if (!c) return;
     std::string rx = c->getValue();
     if (rx.empty()) return;
 
-    // Enfileira comando para Core1 (RF)
-    String line = String(rx.c_str());
-    line.replace("\r", "");
-    line.trim();
-    if (!line.length()) return;
+    bool sawNewline = false;
+    for (char ch : rx) {
+      if (ch == '\r' || ch == '\n') {
+        sawNewline = true;
+        flushPendingLine();
+      } else if (pendingLine.length() < CMD_LINE_BUF - 1) {
+        pendingLine += ch;
+      }
+    }
 
-    // Copia em buffer fixo (evita String entre tasks)
-    char buf[96];
+    if (!sawNewline && rx.size() < BLE_RX_MTU) {
+      flushPendingLine();
+    }
+  }
+
+  void flushPendingLine() {
+    pendingLine.trim();
+    if (!pendingLine.length()) {
+      pendingLine = "";
+      return;
+    }
+
+    char buf[CMD_LINE_BUF];
     memset(buf, 0, sizeof(buf));
-    line.toCharArray(buf, sizeof(buf));
-
+    pendingLine.toCharArray(buf, sizeof(buf));
     enqueueCmdFromISRorCB(buf);
-
-    // ACK rápido (opcional) - resposta real (OK/PONG/ERR) virá via qTx
-    // Para reduzir latência, podemos não notificar aqui.
+    pendingLine = "";
   }
 };
 
@@ -738,8 +759,21 @@ public:
 // ---------------------
 static void bleStartAdvertising() {
   NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
+  NimBLEAdvertisementData advData;
+  NimBLEAdvertisementData scanData;
+
   adv->stop();
-  adv->addServiceUUID(NUS_SERVICE_UUID);
+  adv->setMinInterval(80);
+  adv->setMaxInterval(160);
+
+  advData.setFlags(0x06);
+  advData.setName("SCOLLAR-CONTROL-BLE");
+  advData.addServiceUUID(NUS_SERVICE_UUID);
+
+  scanData.setName("SCOLLAR-CONTROL-BLE");
+
+  adv->setAdvertisementData(advData);
+  adv->setScanResponseData(scanData);
   adv->start();
 }
 
@@ -786,6 +820,7 @@ void setup() {
 
   // BLE init (Core0)
   NimBLEDevice::init("SCOLLAR-CONTROL-BLE");
+  NimBLEDevice::setMTU(185); // menor overhead por comando
   NimBLEDevice::setPower(ESP_PWR_LVL_P9);
 
   // Just Works + bonding (reconexão silenciosa após parear, quando SO permitir)
@@ -816,11 +851,13 @@ void setup() {
 
 void loop() {
   // 1) drena TX queue -> notify BLE (Core0)
+  bool didNotify = false;
   if (deviceConnected && pTxCharacteristic && qTx) {
     TxMsg m;
     while (xQueueReceive(qTx, &m, 0) == pdTRUE) {
       pTxCharacteristic->setValue((uint8_t*)m.text, strlen(m.text));
       pTxCharacteristic->notify();
+      didNotify = true;
     }
   } else {
     // se desconectado, podemos descartar mensagens acumuladas para evitar backlog
@@ -830,8 +867,10 @@ void loop() {
     }
   }
 
-  // 2) OLED (Core0)
-  oledService();
+  // 2) OLED (Core0) - reduz carga durante bursts de notify
+  if (!didNotify) {
+    oledService();
+  }
 
   // 3) Watchdog de advertising
   static unsigned long lastKick = 0;
@@ -842,8 +881,3 @@ void loop() {
 
   delay(1);
 }
-
-/*
-  Se seu display for SH1106, troque a linha do objeto u8g2 por:
-  U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
-*/

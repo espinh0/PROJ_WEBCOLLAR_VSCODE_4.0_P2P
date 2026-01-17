@@ -63,7 +63,7 @@
         </label>
       </div>
       <div id="hbka-keepawake-status" style="margin-top:.4rem;font-size:.8rem;color:#9ca3af;">
-        Envia CADENCE LIGHT,0,1,3,200 apenas se nenhum OK for visto por 1.5 minutos.
+        Envia CADENCE LIGHT,0,1,2,200 e CADENCE LIGHT,0,2,2,200 apenas se nenhum OK for visto por 1.5 minutos.
       </div>
       <div style="margin-top:.35rem;font-size:.78rem;color:#6b7280;line-height:1.35;">
         Observa RX para OK/ERR; ERR nao adia ping. Ignora eco de OK do proprio keep-awake por 500 ms.
@@ -131,7 +131,8 @@
   const HB_DEFAULT_MS = 500;
 
   const KA_INTERVAL_MS = 90000;        // 1.5 min
-  const KA_COMMAND = 'CADENCE LIGHT,0,1,2,200';
+  const KA_CHANNELS = [1, 2];
+  const getKeepAwakeCommand = (ch) => `CADENCE LIGHT,0,${ch},2,200`;
   const KA_OK_WINDOW_MS = 500;
   const HOST_REQUIRED_MSG = 'Somente host pode manter ativo (tag host).';
 
@@ -145,8 +146,8 @@
 
   let browserWakeLockSentinel = null;
 
-  let lastActivityTs = 0;
-  let lastKeepAwakeSendTs = 0;
+  let lastActivityByCh = { 1: 0, 2: 0 };
+  let lastKeepAwakeSendByCh = { 1: 0, 2: 0 };
 
   function isHost() {
     try {
@@ -359,17 +360,25 @@
     // Ex.: "OK BEEP,0,1" -> comando aceito
     if (upper.startsWith('OK')) {
       const now = Date.now();
-      const dt = now - lastKeepAwakeSendTs;
+      const lastInternalTs = Math.max(...KA_CHANNELS.map((ch) => lastKeepAwakeSendByCh[ch] || 0));
+      const dt = now - lastInternalTs;
 
       // Se o OK veio logo apos um ping do keep-awake, ignoramos como "uso"
-      if (dt >= 0 && dt <= KA_OK_WINDOW_MS) {
+      if (lastInternalTs && dt >= 0 && dt <= KA_OK_WINDOW_MS) {
         console.log('[HB+KA] OK eco do ping interno, ignorando como atividade:', trimmed);
         return;
       }
 
-      // OK de comando valido do usuario -> adia ping
-      lastActivityTs = now;
-      console.log('[HB+KA] OK de comando valido do usuario, atividade registrada:', trimmed);
+      const chMatch = trimmed.match(/\b(SHOCK|VIBRATION|BEEP|LIGHT)\b\s*,\s*\d+\s*,\s*(\d+)\b/i);
+      const ch = chMatch ? Number(chMatch[2]) : 0;
+
+      if (KA_CHANNELS.includes(ch)) {
+        // OK de comando valido do usuario -> adia ping do canal correspondente
+        lastActivityByCh[ch] = now;
+        console.log('[HB+KA] OK de comando valido do usuario (canal ' + ch + '), atividade registrada:', trimmed);
+      } else {
+        console.log('[HB+KA] OK sem canal reconhecido, ignorando para keep-awake:', trimmed);
+      }
       return;
     }
 
@@ -383,14 +392,14 @@
   }
 
   // ======== Escrita interna do KeepAwake ========
-  function writeSerialKeepAwake(line) {
+  function writeSerialKeepAwake(line, ch) {
     if (!(window.SerialBridge && typeof window.SerialBridge.send === 'function')) {
       console.log('[HB+KA] SerialBridge indisponivel (conecte a porta primeiro).');
       return;
     }
 
     try {
-      lastKeepAwakeSendTs = Date.now();
+      if (ch) lastKeepAwakeSendByCh[ch] = Date.now();
       window.SerialBridge.send(String(line || ''));
       console.log('[HB+KA] Enviado (keep-awake):', line);
     } catch (err) {
@@ -401,20 +410,23 @@
   function sendKeepAwakeIfIdle() {
     if (!keepAwakeEnabled || !isHost()) return;
     const now = Date.now();
-    if (!lastActivityTs) {
-      lastActivityTs = now;
-      console.log('[HB+KA] Inicializando keep-awake: aguardando o primeiro ciclo completo.');
-      return;
-    }
+    KA_CHANNELS.forEach((ch) => {
+      if (!lastActivityByCh[ch]) {
+        lastActivityByCh[ch] = now;
+        console.log('[HB+KA] Inicializando keep-awake canal ' + ch + ': aguardando o primeiro ciclo completo.');
+        return;
+      }
 
-    const diff = now - lastActivityTs;
+      const diff = now - lastActivityByCh[ch];
 
-    if (diff >= KA_INTERVAL_MS) {
-      writeSerialKeepAwake(KA_COMMAND);
-    } else {
-      const restante = Math.round((KA_INTERVAL_MS - diff) / 1000);
-      console.log('[HB+KA] Uso recente (OK). Ping adiado. Faltam ~' + restante + 's.');
-    }
+      if (diff >= KA_INTERVAL_MS) {
+        const cmd = getKeepAwakeCommand(ch);
+        writeSerialKeepAwake(cmd, ch);
+      } else {
+        const restante = Math.round((KA_INTERVAL_MS - diff) / 1000);
+        console.log('[HB+KA] Uso recente (OK) canal ' + ch + '. Ping adiado. Faltam ~' + restante + 's.');
+      }
+    });
   }
 
   function startKeepAwakeLoop() {
@@ -427,8 +439,9 @@
     // Ao ativar, so manda se ja estiver ocioso ha 1.5 min
     sendKeepAwakeIfIdle();
 
+    const kaSummary = KA_CHANNELS.map((ch) => getKeepAwakeCommand(ch)).join(' | ');
     setKeepAwakeStatus(
-      'Envia ' + KA_COMMAND +
+      'Envia ' + kaSummary +
       ' se nenhum OK chegar por 1.5 minutos.'
     );
     console.log('[HB+KA] Keep-awake ativado (baseado em OK/ERR de RX).');

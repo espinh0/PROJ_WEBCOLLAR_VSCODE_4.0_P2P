@@ -62,6 +62,8 @@ static inline void amareloLed(bool on){ digitalWrite(LED_AMARELO_PIN, on ? HIGH 
 static inline void verdeLed(bool on){ digitalWrite(LED_VERDE_PIN, on ? HIGH : LOW); }
 static void allLedsOff() { azulLed(false); vermelhoLed(false); amareloLed(false); verdeLed(false); }
 
+static volatile uint32_t rfFrameCount = 0;
+
 static inline void txHigh(unsigned int us) { digitalWrite(TX_PIN, HIGH); delayMicroseconds(us); }
 static inline void txLow (unsigned int us) { digitalWrite(TX_PIN, LOW ); delayMicroseconds(us); }
 static inline void sendPreamble_body() { txHigh(PREAMBLE_HIGH_US); txLow(T_LONG_US); }
@@ -116,6 +118,7 @@ static uint64_t composeFrame(const char* mode, uint8_t level, uint8_t channel) {
 }
 
 static void sendFrame_once(uint64_t frame) {
+  rfFrameCount++;
   rfLed(true);
   sendPreamble_body();
   for (int i=0;i<41;i++){
@@ -438,18 +441,12 @@ static void oledService(){
   u8g2.setCursor(0, 22);
   u8g2.print("BLE: ");
   u8g2.print(deviceConnected ? "ON" : "OFF");
-  u8g2.print(" Bond:");
-  u8g2.print(bleBonded ? "Y" : "N");
   u8g2.print(" Enc:");
   u8g2.print(bleEncrypted ? "Y" : "N");
 
   u8g2.setCursor(0, 38);
-  u8g2.print("MODE:");
-  u8g2.print(mode);
-  u8g2.print(" C");
-  u8g2.print((unsigned)ch);
-  u8g2.print(" L");
-  u8g2.print((unsigned)lvl);
+  u8g2.print("FR:");
+  u8g2.print((unsigned long)rfFrameCount);
 
   u8g2.setCursor(0, 58);
   u8g2.print("> ");
@@ -868,8 +865,14 @@ void loop() {
   }
 
   // 2) OLED (Core0) - reduz carga durante bursts de notify
+  static uint32_t oledAccumUs = 0;
+  static uint16_t oledSamples = 0;
+  static unsigned long oledLogAt = 0;
   if (!didNotify) {
+    uint32_t t0 = micros();
     oledService();
+    oledAccumUs += (uint32_t)(micros() - t0);
+    oledSamples++;
   }
 
   // 3) Watchdog de advertising
@@ -877,6 +880,17 @@ void loop() {
   if (!deviceConnected && (millis() - lastKick) > 15000) {
     NimBLEDevice::getAdvertising()->start();
     lastKick = millis();
+  }
+
+  // log simples do custo do OLED
+  if (oledSamples >= 20 || (millis() - oledLogAt) > 2000) {
+    if (oledSamples > 0) {
+      uint32_t avgUs = oledAccumUs / oledSamples;
+      Serial.printf("[OLED] avg=%lu us (%u samples)\n", (unsigned long)avgUs, (unsigned)oledSamples);
+    }
+    oledAccumUs = 0;
+    oledSamples = 0;
+    oledLogAt = millis();
   }
 
   delay(1);

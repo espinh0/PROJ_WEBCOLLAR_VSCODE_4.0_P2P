@@ -17,7 +17,7 @@
       <div class="col-12 col-md-4">
         <label class="form-label small text-muted mb-1">Password (opcional)</label>
         <input id="tr-pass" class="form-control form-control-sm" type="password" name="password"
-               autocomplete="current-password" placeholder="(mesma para todos)" />
+               autocomplete="new-password" placeholder="(mesma para todos)" />
       </div>
 
       <div class="col-12 col-md-4">
@@ -1593,6 +1593,8 @@
     let hubSuppressed = false;
     let hostNotFoundCount = 0;
     const HOST_NOT_FOUND_ROTATE_AFTER = 3;
+    let hostUnavailableUntil = 0;
+    const HOST_NOT_FOUND_COOLDOWN_MS = 2000;
     let hostConnectTimer = null;
     let hostConnectStartedAt = 0;
     let hostConnectFailures = 0;
@@ -1860,6 +1862,7 @@
         if (isHostConn) {
           hostConn = conn;
           hostNotFoundCount = 0;
+          hostUnavailableUntil = 0;
           setHubSuppressed(false, 'host-conn-open');
           hostConnLostAt = 0;
           hostReconnectDelay = 800;
@@ -1917,6 +1920,10 @@
       if (isHostMode || !activeHostId) return;
       if (hubSuppressed) {
         snapshotState('connectToHost-suppressed');
+        return;
+      }
+      if (hostUnavailableUntil && Date.now() < hostUnavailableUntil) {
+        snapshotState('connectToHost-cooldown', { until: hostUnavailableUntil });
         return;
       }
       snapshotState('connectToHost-start');
@@ -2196,6 +2203,7 @@
       snapshotState('host-disconnect', { reason });
       if (reason === 'host-not-found') {
         hostNotFoundCount = Math.min(hostNotFoundCount + 1, 99);
+        hostUnavailableUntil = Date.now() + HOST_NOT_FOUND_COOLDOWN_MS;
         if (isHostCandidate() && isPreferredHubSelf()) {
           scheduleHubClaimRetry('host-not-found', { reuseAttempt: true });
           return;
@@ -2293,6 +2301,7 @@
       hostReconnectDelay = 800;
       hostConnectFailures = 0;
       hostNotFoundCount = 0;
+      hostUnavailableUntil = 0;
       hostIdProbeAttempts = 0;
       lastHostRotateAt = 0;
       try {
@@ -2510,7 +2519,8 @@
       try {
         log(`Conectar acionado (${trigger}).`);
         snapshotState('connect-start', { trigger });
-        const preserveClaimAttempt = /^hub-(claim|takeover)/.test(String(trigger));
+        const isHubTrigger = /^hub-(claim|takeover)/.test(String(trigger));
+        const preserveClaimAttempt = isHubTrigger;
         if (room) {
           log('Conexao ativa, trocando de sala...');
           disconnect('room-switch');
@@ -2572,6 +2582,10 @@
               if (errType === 'unavailable-id') {
                 markHostIdTaken('unavailable-id');
                 teardownPeer({ preserveClaimAttempt: preserveClaimAttempt || errType === 'unavailable-id' });
+                if (isHubTrigger && advanceHostId('unavailable-id')) {
+                  resetHostIdTaken('rotate');
+                  continue;
+                }
                 break;
               }
               break;
@@ -2595,7 +2609,16 @@
           snapshotState('connect-peer-ready', { wantsHub: true });
         } else if (wantsHub) {
           const errType = lastHostErr?.type || '';
-          log(errType === 'unavailable-id' ? 'Host ocupado, entrando como visitante.' : 'Host indisponivel, entrando como visitante.');
+          if (errType === 'unavailable-id') {
+            log('Host ocupado (ghost), aguardando liberar o id original...');
+            setHubTag(false);
+            isHostMode = false;
+            teardownPeer({ preserveClaimAttempt: true });
+            scheduleHubClaimRetry('id-ocupado', { reuseAttempt: true });
+            snapshotState('connect-host-occupied', { errType });
+            return;
+          }
+          log('Host indisponivel, entrando como visitante.');
           setHubTag(false);
           isHostMode = false;
           teardownPeer({ preserveClaimAttempt: preserveClaimAttempt || errType === 'unavailable-id' });
@@ -2605,13 +2628,8 @@
             snapshotState('connect-error', { errType });
             return;
           }
-          if (errType === 'unavailable-id') {
-            scheduleHubClaimRetry('id-ocupado');
-            snapshotState('connect-host-occupied', { errType });
-          } else {
-            scheduleHubClaimRetry(`host-init-${errType || 'falha'}`);
-            snapshotState('connect-host-fallback', { errType });
-          }
+          scheduleHubClaimRetry(`host-init-${errType || 'falha'}`);
+          snapshotState('connect-host-fallback', { errType });
         } else {
           isHostMode = false;
           setHubTag(false);

@@ -110,7 +110,12 @@
 
     <div id="admin-log-wrap" class="mt-3">
       <hr class="my-3" />
-      <div class="fw-bold mb-2">Log</div>
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <div class="fw-bold">Log</div>
+        <button id="tr-copy-log-btn" type="button" class="btn btn-sm btn-outline-secondary">
+          <i class="fa-solid fa-copy me-1"></i>Copiar
+        </button>
+      </div>
       <div id="tr-log" class="border rounded p-2"
            style="height:140px; overflow:auto; font-size:12px; white-space:pre-wrap;"></div>
     </div>
@@ -160,6 +165,7 @@
 
     const adminLogWrap = $('admin-log-wrap');
     const logEl = $('tr-log');
+    const copyLogBtn = $('tr-copy-log-btn');
 
     const STORAGE_KEY = 'trystero_widget_state_v5';
     const DEFAULT_ROOM = 'PET998DR';
@@ -606,6 +612,13 @@
       }
       return mode;
     }
+    function shouldForceTurnFallback(reason) {
+      const preferred = sanitizeIceMode(preferredIceMode);
+      if (preferred === 'turn') return true;
+      if (preferred === 'stun') return false;
+      const autoMode = resolveAutoIceMode(reason || 'fallback');
+      return autoMode === 'turn';
+    }
     function handleNetworkChange() {
       if (preferredIceMode !== 'auto') return;
       const nextMode = resolveAutoIceMode('change');
@@ -708,7 +721,8 @@
           log(`TURN probe fail: no relay candidates (${label}, ${done}, cands=${candCount})`);
           const wantsTurn = sanitizeIceMode(preferredIceMode) !== 'stun';
           const hostConnecting = !!hostConnectTimer;
-          const shouldSwitch = wantsTurn && !connectInProgress && !hostConnecting && (!room || !isConnectionAlive() || !(hostConn && hostConn.open));
+          const allowSwitch = shouldForceTurnFallback('turn-probe');
+          const shouldSwitch = allowSwitch && wantsTurn && !connectInProgress && !hostConnecting && (!room || !isConnectionAlive() || !(hostConn && hostConn.open));
           if (shouldSwitch) {
             if (iceMode === 'turn') requestTurnFailover('turn-probe');
             else requestTurnFallback('turn-probe');
@@ -977,22 +991,21 @@
       if (!room) return;
       if (!isOn && hubTakeoverTimer) { clearTimeout(hubTakeoverTimer); hubTakeoverTimer = null; }
       if (isHostMode) {
-        log('Host alterado, reconectando...');
-        disconnect('host-toggle');
-        setTimeout(() => connect('host-toggle'), 200);
+        if (!isOn) {
+          log('Host hub desativado, reconectando como cliente...');
+          disconnect('host-toggle-off');
+          setTimeout(() => connect('host-toggle-off'), 200);
+        } else {
+          log('Host hub ativo.');
+        }
         return;
       }
       if (isOn) {
-        if (hostConn && hostConn.open) {
-          log('Host candidato ativo.');
-          return;
-        }
-        log('Host candidato ativo, tentando assumir hub...');
-        disconnect('host-toggle');
-        setTimeout(() => connect('host-toggle'), 200);
+        log('Host habilitado (nao exclusivo).');
+        maybeScheduleHubClaim('host-enabled');
         return;
       }
-      log('Host candidato desativado.');
+      log('Host desativado.');
     });
 
     // Eventos da serial (usa hifen no widget de serial, mas mantemos colon por compatibilidade)
@@ -1055,6 +1068,18 @@
 
     inviteEl.addEventListener('click', copyInviteLinkFromUi);
     inviteEl.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') copyInviteLinkFromUi(); });
+
+    copyLogBtn.addEventListener('click', async () => {
+      const logContent = logEl.textContent;
+      if (logContent) {
+        const ok = await copyText(logContent);
+        const originalText = copyLogBtn.innerHTML;
+        copyLogBtn.textContent = ok ? 'Copiado!' : 'Falhou!';
+        setTimeout(() => {
+          copyLogBtn.innerHTML = originalText;
+        }, 1500);
+      }
+    });
 
     roomInput.addEventListener('input', () => { saveState({ room: roomInput.value.trim() }); generateInviteLink(); });
     passInput.addEventListener('input', () => { saveState({ pass: passInput.value }); generateInviteLink(); });
@@ -1863,6 +1888,7 @@
         snapshotState('conn-close', { peer: shortPeer(conn.peer), isHostConn: !!isHostConn });
         if (isHostMode && !isHostConn) notifyPeerLeave(conn.peer, true);
         if (!isHostMode && isHostConn) {
+          clearHostConnectTimeout();
           notifyPeerLeave(conn.peer, false);
           if (hostConn === conn) hostConn = null;
           if (!hostConnLostAt) hostConnLostAt = Date.now();
@@ -1877,6 +1903,7 @@
           logNegotiationFailure(conn, err);
         }
         if (!isHostMode && isHostConn) {
+          clearHostConnectTimeout();
           if (/peer-unavailable/i.test(errText) || /Could not connect to peer/i.test(errText)) {
             handleHostDisconnect('host-not-found');
           } else {
@@ -2169,6 +2196,10 @@
       snapshotState('host-disconnect', { reason });
       if (reason === 'host-not-found') {
         hostNotFoundCount = Math.min(hostNotFoundCount + 1, 99);
+        if (isHostCandidate() && isPreferredHubSelf()) {
+          scheduleHubClaimRetry('host-not-found', { reuseAttempt: true });
+          return;
+        }
         if (hostNotFoundCount >= HOST_NOT_FOUND_ROTATE_AFTER) {
           if (activeHostId && roomHostId && activeHostId !== roomHostId) {
             forgetHostIdForRoom(roomHostId, 'host-not-found');
@@ -2187,7 +2218,9 @@
         return;
       }
       if (iceMode !== 'turn' && (reason === 'host-timeout' || reason === 'host-error')) {
-        requestTurnFallback(`host-${reason}`);
+        if (shouldForceTurnFallback(`host-${reason}`)) {
+          requestTurnFallback(`host-${reason}`);
+        }
         return;
       }
       if (iceMode === 'turn') {
@@ -2453,8 +2486,13 @@
           }
         });
         p.on('error', (err) => {
-          log(`erro peerjs: ${err?.type || err?.message || err}`);
+          const errText = String(err?.type || err?.message || err || '');
+          log(`erro peerjs: ${errText}`);
           snapshotState('peer-error', { type: err?.type || '', message: err?.message || '' });
+          if (!isHostMode && hostConnectTimer && (/peer-unavailable/i.test(errText) || /Could not connect to peer/i.test(errText))) {
+            clearHostConnectTimeout();
+            handleHostDisconnect('host-not-found');
+          }
           if (!settled) clearTimeout(openTimer);
           if (!settled) {
             settled = true;
@@ -2502,7 +2540,7 @@
           activeHostId = rememberedHostId;
           snapshotState('host-id-remember', { hostIdIndex, activeHostId: shortPeer(activeHostId) });
         }
-        const wantsHub = localTags.has('host') && !hubSuppressed;
+        const wantsHub = !hubSuppressed && (localTags.has('host-hub') || /^hub-/.test(String(trigger)));
         isHostMode = false;
         if (pendingTurnFallback || /^turn-(fallback|failover)/.test(String(trigger))) {
           iceMode = 'turn';
@@ -2777,7 +2815,7 @@
       userInput.value = nameVal;
       cbIncPass.checked = (typeof stored.includePass === 'boolean') ? stored.includePass : true;
       cbIncName.checked = (typeof stored.includeName === 'boolean') ? stored.includeName : false;
-      const hostStored = !!stored.localHost;
+      const hostStored = (typeof stored.localHost === 'boolean') ? stored.localHost : true;
       hostBtn.classList.toggle('active', hostStored);
       if (hostStored) window.__TRYSTERO_PEER__.addLocalTag('host');
 

@@ -426,6 +426,16 @@
       snapshotState('host-id-memory', { reason, base: shortPeer(base), host: shortPeer(host) });
       return true;
     }
+    function forgetHostIdForRoom(baseId, reason) {
+      const base = String(baseId || '').trim();
+      if (!base) return false;
+      const memory = getHostIdMemory();
+      if (!memory[base]) return false;
+      delete memory[base];
+      saveState({ hostIdByRoom: memory });
+      snapshotState('host-id-memory-clear', { reason, base: shortPeer(base) });
+      return true;
+    }
     function recallHostIdForRoom(baseId) {
       const base = String(baseId || '').trim();
       if (!base) return '';
@@ -528,6 +538,8 @@
     let lastTurnProbeTs = 0;
     let turnProbeInFlight = false;
     const TURN_PROBE_COOLDOWN_MS = 15000;
+    const TURN_SWITCH_COOLDOWN_MS = 12000;
+    let lastTurnSwitchAt = 0;
 
     const buildIceConfigs = (turnConfig) => {
       const toArray = (val) => Array.isArray(val) ? val : (val ? [val] : []);
@@ -576,7 +588,7 @@
       return parts.join(' ') || 'indisponivel';
     }
     function pickAutoIceMode(info) {
-      if (!info) return 'turn';
+      if (!info) return 'auto';
       const type = String(info.type || '').toLowerCase();
       const effective = String(info.effectiveType || '').toLowerCase();
       if (type === 'cellular' || type === 'none') return 'turn';
@@ -695,12 +707,16 @@
         } else {
           log(`TURN probe fail: no relay candidates (${label}, ${done}, cands=${candCount})`);
           const wantsTurn = sanitizeIceMode(preferredIceMode) !== 'stun';
-          const shouldSwitch = wantsTurn && !connectInProgress && (!room || !isConnectionAlive() || !(hostConn && hostConn.open));
+          const hostConnecting = !!hostConnectTimer;
+          const shouldSwitch = wantsTurn && !connectInProgress && !hostConnecting && (!room || !isConnectionAlive() || !(hostConn && hostConn.open));
           if (shouldSwitch) {
             if (iceMode === 'turn') requestTurnFailover('turn-probe');
             else requestTurnFallback('turn-probe');
           }
-          if (!isConnectionAlive()) setHubSuppressed(true, 'turn-probe-fail');
+          const forcedTurn = sanitizeIceMode(preferredIceMode) === 'turn';
+          if (forcedTurn && !isConnectionAlive()) {
+            setHubSuppressed(true, 'turn-probe-fail');
+          }
         }
       } catch (e) {
         log(`TURN probe erro: ${e?.message || e}`);
@@ -746,11 +762,17 @@
       if (turnFailoverPending) return false;
       if (TURN_PRESETS.length < 2) return false;
       if (connectInProgress) return false;
+      const now = Date.now();
+      if ((now - lastTurnSwitchAt) < TURN_SWITCH_COOLDOWN_MS) {
+        log(`TURN failover ignorado (cooldown ${TURN_SWITCH_COOLDOWN_MS}ms).`);
+        return false;
+      }
       const nextIndex = (activeTurnIndex + 1) % TURN_PRESETS.length;
       if (nextIndex === activeTurnIndex) return false;
       const from = TURN_PRESETS[activeTurnIndex];
       const to = TURN_PRESETS[nextIndex];
       turnFailoverPending = true;
+      lastTurnSwitchAt = now;
       activeTurnIndex = nextIndex;
       TURN_CONFIG = to.config;
       ICE_CONFIGS = buildIceConfigs(TURN_CONFIG);
@@ -1531,7 +1553,7 @@
     let hostIdTakenCount = 0;
     const HOST_ID_TAKEN_COOLDOWN_MS = 8000;
     const HOST_ID_SUFFIXES = ['', 'h2', 'h3'];
-    const HOST_ID_ROTATE_AFTER = 1;
+    const HOST_ID_ROTATE_AFTER = 2;
     let actionHandlers = new Map();
     let peerJoinHandlers = new Set();
     let peerLeaveHandlers = new Set();
@@ -1544,6 +1566,8 @@
     let pendingTurnFallback = false;
     let turnFailoverPending = false;
     let hubSuppressed = false;
+    let hostNotFoundCount = 0;
+    const HOST_NOT_FOUND_ROTATE_AFTER = 3;
     let hostConnectTimer = null;
     let hostConnectStartedAt = 0;
     let hostConnectFailures = 0;
@@ -1644,6 +1668,7 @@
       hostIdTakenAt = Date.now();
       hostIdTakenCount = Math.min(hostIdTakenCount + 1, 8);
       snapshotState('host-id-taken', { reason, count: hostIdTakenCount, activeHostId: shortPeer(activeHostId) });
+      if (reason === 'unavailable-id') return;
       if (!isHostMode && !(hostConn && hostConn.open) && hostIdTakenCount >= HOST_ID_ROTATE_AFTER) {
         if (advanceHostId('host-id-taken')) resetHostIdTaken('rotate');
       }
@@ -1809,6 +1834,7 @@
         clearHostConnectTimeout();
         if (isHostConn) {
           hostConn = conn;
+          hostNotFoundCount = 0;
           setHubSuppressed(false, 'host-conn-open');
           hostConnLostAt = 0;
           hostReconnectDelay = 800;
@@ -1844,17 +1870,28 @@
         }
       });
       conn.on('error', (err) => {
-        log(`erro conexao peerjs: ${err?.type || err?.message || err}`);
-        snapshotState('conn-error', { peer: shortPeer(conn.peer), isHostConn: !!isHostConn, err: err?.type || err?.message || '' });
-        if (/negotiation-failed/i.test(String(err?.type || err?.message || ''))) {
+        const errText = String(err?.type || err?.message || err || '');
+        log(`erro conexao peerjs: ${errText}`);
+        snapshotState('conn-error', { peer: shortPeer(conn.peer), isHostConn: !!isHostConn, err: errText });
+        if (/negotiation-failed/i.test(errText)) {
           logNegotiationFailure(conn, err);
         }
-        if (!isHostMode && isHostConn) handleHostDisconnect('host-error');
+        if (!isHostMode && isHostConn) {
+          if (/peer-unavailable/i.test(errText) || /Could not connect to peer/i.test(errText)) {
+            handleHostDisconnect('host-not-found');
+          } else {
+            handleHostDisconnect('host-error');
+          }
+        }
       });
     }
 
     function connectToHost() {
       if (isHostMode || !activeHostId) return;
+      if (hubSuppressed) {
+        snapshotState('connectToHost-suppressed');
+        return;
+      }
       snapshotState('connectToHost-start');
       if (!peer || !peer.open) {
         log('Host indisponivel: peer nao pronto, reagendando...');
@@ -2130,6 +2167,25 @@
       if (!hostConnLostAt) hostConnLostAt = Date.now();
       debugHostCandidates(`host-disconnect:${reason}`);
       snapshotState('host-disconnect', { reason });
+      if (reason === 'host-not-found') {
+        hostNotFoundCount = Math.min(hostNotFoundCount + 1, 99);
+        if (hostNotFoundCount >= HOST_NOT_FOUND_ROTATE_AFTER) {
+          if (activeHostId && roomHostId && activeHostId !== roomHostId) {
+            forgetHostIdForRoom(roomHostId, 'host-not-found');
+            setActiveHostId(roomHostId, 'host-not-found');
+            hostNotFoundCount = 0;
+            connectToHost();
+            return;
+          }
+          if (maybeRotateHostId('host-not-found')) {
+            hostNotFoundCount = 0;
+            connectToHost();
+            return;
+          }
+        }
+        scheduleHostReconnect();
+        return;
+      }
       if (iceMode !== 'turn' && (reason === 'host-timeout' || reason === 'host-error')) {
         requestTurnFallback(`host-${reason}`);
         return;
@@ -2178,7 +2234,13 @@
         return;
       }
       if (pendingTurnFallback) return;
+      const now = Date.now();
+      if ((now - lastTurnSwitchAt) < TURN_SWITCH_COOLDOWN_MS) {
+        log(`Fallback TURN ignorado (cooldown ${TURN_SWITCH_COOLDOWN_MS}ms).`);
+        return;
+      }
       pendingTurnFallback = true;
+      lastTurnSwitchAt = now;
       log(`Fallback TURN: ${reason || 'host'}`);
       reconnectWithTurn(reason);
     }
@@ -2197,6 +2259,7 @@
       clearHostConnectTimeout();
       hostReconnectDelay = 800;
       hostConnectFailures = 0;
+      hostNotFoundCount = 0;
       hostIdProbeAttempts = 0;
       lastHostRotateAt = 0;
       try {
@@ -2471,9 +2534,7 @@
               if (errType === 'unavailable-id') {
                 markHostIdTaken('unavailable-id');
                 teardownPeer({ preserveClaimAttempt: preserveClaimAttempt || errType === 'unavailable-id' });
-                if (!advanceHostId('unavailable-id')) break;
-                resetHostIdTaken('rotate');
-                continue;
+                break;
               }
               break;
             }

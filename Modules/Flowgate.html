@@ -163,7 +163,7 @@
 
     const STORAGE_KEY = 'trystero_widget_state_v5';
     const DEFAULT_ROOM = 'PET998DR';
-    const DEFAULT_PASS = 'trystero-pass-2f1b6d0f9c21419a92f2c0d4';
+    const DEFAULT_PASS = 'flowgate-pass-2f1b6d0f9c21419a92f2c0d4';
     const STABLE_ID_STORAGE = 'trystero_nostr_priv_hex'; // reuse legacy key for stable id
     const PEERJS_SERVER_HOST = '0.peerjs.com';
     const PEERJS_SERVER_PORT = 443;
@@ -226,6 +226,7 @@
         hubClaimAttempt,
         hubClaimTimer: !!hubClaimTimer,
         hubTakeoverTimer: !!hubTakeoverTimer,
+        hubSuppressed: !!hubSuppressed,
         hostReconnectTimer: !!hostReconnectTimer,
         hostConnectTimer: !!hostConnectTimer,
         hostIdTakenAt,
@@ -474,7 +475,11 @@
         urls: [
           'turn:34.95.255.8:3478',
           'turn:34.95.255.8:3478?transport=tcp',
-          'turns:34.95.255.8:3478?transport=tcp'
+          'turns:34.95.255.8:3478?transport=tcp',
+          'turn:34.95.255.8:443?transport=tcp',
+          'turns:34.95.255.8:443?transport=tcp',
+          'turn:34.95.255.8:5349?transport=tcp',
+          'turns:34.95.255.8:5349?transport=tcp'
         ]
       }
     ];
@@ -491,10 +496,30 @@
         ]
       }
     ];
+    const TURN_STORE_KEY = 'flowgate_turn_servers';
+    const TURN_STORE_FALLBACK = 'trystero_turn_servers';
+    function normalizeTurnConfig(list) {
+      if (!Array.isArray(list)) return [];
+      return list.filter((cfg) => cfg && cfg.urls && (Array.isArray(cfg.urls) || typeof cfg.urls === 'string'));
+    }
+    function loadStoredTurnConfig() {
+      try {
+        const raw = localStorage.getItem(TURN_STORE_KEY) || localStorage.getItem(TURN_STORE_FALLBACK);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return normalizeTurnConfig(parsed);
+      } catch {
+        return [];
+      }
+    }
+    const STORED_TURN_CONFIG = loadStoredTurnConfig();
     const TURN_PRESETS = [
       { id: 'turn-primary-34-95-255-8', label: 'Principal - Google Cloud', config: TURN_PRIMARY },
       { id: 'turn-current-metered', label: 'metered.ca', config: TURN_DEFAULTS }
     ];
+    if (STORED_TURN_CONFIG.length) {
+      TURN_PRESETS.push({ id: 'turn-stored-local', label: 'LocalStorage', config: STORED_TURN_CONFIG });
+    }
     const TURN_DEFAULT_ID = 'turn-primary-34-95-255-8';
     const ICE_MODE_DEFAULT = 'auto';
     const ICE_MODE_ALLOWED = new Set(['auto', 'turn', 'stun']);
@@ -551,7 +576,7 @@
       return parts.join(' ') || 'indisponivel';
     }
     function pickAutoIceMode(info) {
-      if (!info) return 'auto';
+      if (!info) return 'turn';
       const type = String(info.type || '').toLowerCase();
       const effective = String(info.effectiveType || '').toLowerCase();
       if (type === 'cellular' || type === 'none') return 'turn';
@@ -666,8 +691,16 @@
         });
         if (relayFound) {
           log(`TURN probe ok: relay candidate found (${label}, ${done}, cands=${candCount})`);
+          setHubSuppressed(false, 'turn-probe-ok');
         } else {
           log(`TURN probe fail: no relay candidates (${label}, ${done}, cands=${candCount})`);
+          const wantsTurn = sanitizeIceMode(preferredIceMode) !== 'stun';
+          const shouldSwitch = wantsTurn && !connectInProgress && (!room || !isConnectionAlive() || !(hostConn && hostConn.open));
+          if (shouldSwitch) {
+            if (iceMode === 'turn') requestTurnFailover('turn-probe');
+            else requestTurnFallback('turn-probe');
+          }
+          if (!isConnectionAlive()) setHubSuppressed(true, 'turn-probe-fail');
         }
       } catch (e) {
         log(`TURN probe erro: ${e?.message || e}`);
@@ -1482,12 +1515,12 @@
     let activeRoomId = '';
     let isHostMode = false;
     let hubTakeoverTimer = null;
-    const HUB_TAKEOVER_MIN_DELAY = 400;
-    const HUB_TAKEOVER_MAX_DELAY = 1200;
+    const HUB_TAKEOVER_MIN_DELAY = 250;
+    const HUB_TAKEOVER_MAX_DELAY = 700;
     let hubClaimTimer = null;
     let hubClaimAttempt = 0;
-    const HUB_CLAIM_BASE_DELAY = 1200;
-    const HUB_CLAIM_MAX_DELAY = 12000;
+    const HUB_CLAIM_BASE_DELAY = 600;
+    const HUB_CLAIM_MAX_DELAY = 5000;
     let peerConnections = new Map();
     let hostConn = null;
     let hostConnLostAt = 0;
@@ -1496,28 +1529,29 @@
     let activeHostId = '';
     let hostIdTakenAt = 0;
     let hostIdTakenCount = 0;
-    const HOST_ID_TAKEN_COOLDOWN_MS = 20000;
+    const HOST_ID_TAKEN_COOLDOWN_MS = 8000;
     const HOST_ID_SUFFIXES = ['', 'h2', 'h3'];
-    const HOST_ID_ROTATE_AFTER = 2;
+    const HOST_ID_ROTATE_AFTER = 1;
     let actionHandlers = new Map();
     let peerJoinHandlers = new Set();
     let peerLeaveHandlers = new Set();
     let knownPeers = new Set();
     let outboundQueue = [];
     let hostReconnectTimer = null;
-    let hostReconnectDelay = 1500;
+    let hostReconnectDelay = 800;
     let turnStateByPeer = new Map();
     let iceMode = ICE_MODE_DEFAULT;
     let pendingTurnFallback = false;
     let turnFailoverPending = false;
+    let hubSuppressed = false;
     let hostConnectTimer = null;
     let hostConnectStartedAt = 0;
     let hostConnectFailures = 0;
-    const HOST_CONNECT_TIMEOUT_MS = 8000;
+    const HOST_CONNECT_TIMEOUT_MS = 5000;
     const HOST_CONNECT_GRACE_MS = HOST_CONNECT_TIMEOUT_MS;
-    const HUB_OVERRIDE_AFTER_MS = 9000;
-    const HOST_CONNECT_ROTATE_AFTER = 2;
-    const HOST_CONNECT_ROTATE_COOLDOWN_MS = 12000;
+    const HUB_OVERRIDE_AFTER_MS = 6000;
+    const HOST_CONNECT_ROTATE_AFTER = 1;
+    const HOST_CONNECT_ROTATE_COOLDOWN_MS = 5000;
     let hostIdProbeAttempts = 0;
     let lastHostRotateAt = 0;
 
@@ -1538,6 +1572,19 @@
       if (isPreferredHubSelf()) return true;
       if (!hostConnLostAt) return false;
       return (Date.now() - hostConnLostAt) >= HUB_OVERRIDE_AFTER_MS;
+    }
+
+    function setHubSuppressed(next, reason) {
+      const desired = !!next;
+      if (hubSuppressed === desired) return false;
+      hubSuppressed = desired;
+      log(`Hub ${desired ? 'desativado' : 'reativado'}: ${reason || 'auto'}`);
+      snapshotState('hub-suppressed', { reason, active: hubSuppressed });
+      if (hubSuppressed && isHostMode && !connectInProgress) {
+        disconnect('hub-suppressed');
+        setTimeout(() => connect('hub-suppressed'), 200);
+      }
+      return true;
     }
 
     function buildHostIdWithSuffix(baseId, suffix) {
@@ -1762,8 +1809,9 @@
         clearHostConnectTimeout();
         if (isHostConn) {
           hostConn = conn;
+          setHubSuppressed(false, 'host-conn-open');
           hostConnLostAt = 0;
-          hostReconnectDelay = 1500;
+          hostReconnectDelay = 800;
           hostConnectFailures = 0;
           hostIdProbeAttempts = 0;
           resetHostIdTaken('host-conn-open');
@@ -1827,6 +1875,10 @@
         scheduleHostConnectTimeout();
       } catch {
         log('Falha ao iniciar conexao com host, agendando retry.');
+        if (maybeRotateHostId('connect-exception')) {
+          setTimeout(() => connectToHost(), 150);
+          return;
+        }
         scheduleHostReconnect();
       }
     }
@@ -1930,6 +1982,7 @@
         const usesRelay = (lType === 'relay' || rType === 'relay');
         if (conn?.peer) {
           turnStateByPeer.set(conn.peer, usesRelay);
+          if (usesRelay) setHubSuppressed(false, 'ice-relay');
           refreshRelayUi();
         }
       } catch (e) {
@@ -1946,12 +1999,12 @@
       hostReconnectTimer = setTimeout(() => {
         hostReconnectTimer = null;
         connectToHost();
-        hostReconnectDelay = Math.min(hostReconnectDelay * 1.6, 8000);
+        hostReconnectDelay = Math.min(hostReconnectDelay * 1.3, 5000);
       }, hostReconnectDelay);
     }
 
     function isHostCandidate() {
-      return localTags.has('host');
+      return localTags.has('host') && !hubSuppressed;
     }
 
     function getHostCandidates() {
@@ -2142,7 +2195,7 @@
       if (hubTakeoverTimer) { clearTimeout(hubTakeoverTimer); hubTakeoverTimer = null; }
       resetHubClaimRetry({ preserveAttempt: preserveClaimAttempt });
       clearHostConnectTimeout();
-      hostReconnectDelay = 1500;
+      hostReconnectDelay = 800;
       hostConnectFailures = 0;
       hostIdProbeAttempts = 0;
       lastHostRotateAt = 0;
@@ -2386,7 +2439,7 @@
           activeHostId = rememberedHostId;
           snapshotState('host-id-remember', { hostIdIndex, activeHostId: shortPeer(activeHostId) });
         }
-        const wantsHub = localTags.has('host');
+        const wantsHub = localTags.has('host') && !hubSuppressed;
         isHostMode = false;
         if (pendingTurnFallback || /^turn-(fallback|failover)/.test(String(trigger))) {
           iceMode = 'turn';
@@ -2481,6 +2534,8 @@
       peers = new Map();
       syncSelfPeer();
       renderPeerList();
+
+      if (!hubSuppressed) setHubSuppressed(false, 'connect-complete');
 
       // presence
       const [sendPresence, onPresence] = room.makeAction('presence');

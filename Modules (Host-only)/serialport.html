@@ -1,4 +1,4 @@
-<!-- CONEXAO SERIAL (Web Serial) -->
+<!-- CONEXAO SERIAL (Web Serial / Bluetooth / BLE) -->
 <div class="host-only">
   <div class="card shadow-sm serial-hidden" id="serialPortCard" style="background:#111;border:1px solid #333;border-radius:.75rem;color:#e5e7eb;display:none;">
     <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2" style="background:#0c0c0e;border-bottom:1px solid #333;color:#e5e7eb;border-top-left-radius:.65rem;border-top-right-radius:.65rem;">
@@ -10,6 +10,7 @@
         <div class="d-flex align-items-center gap-1">
           <label class="small text-secondary">Transporte</label>
           <select id="wsTransport" class="form-select form-select-sm" style="width:auto;">
+            <option value="ble">Bluetooth LE (BLE)</option>
             <option value="serial">Serial</option>
             <option value="bluetooth">Bluetooth</option>
           </select>
@@ -17,11 +18,11 @@
         <div class="d-flex align-items-center gap-1">
           <label class="small text-secondary">Baud</label>
           <select id="wsBaud" class="form-select form-select-sm" style="width:auto;">
-            <option />115200
-            <option />57600
-            <option />38400
-            <option />19200
-            <option />9600
+            <option />115200</option>
+            <option />57600</option>
+            <option />38400</option>
+            <option />19200</option>
+            <option />9600</option>
           </select>
         </div>
         <div class="form-check form-switch m-0">
@@ -38,27 +39,26 @@
     </div>
     <div class="card-body p-3">
       <div class="row g-2 align-items-center">
-      <div class="col-12 col-md-6">
-        <div class="small text-secondary">Status</div>
-        <div id="wsStatus" class="fw-semibold">Desconectado</div>
+        <div class="col-12 col-md-6">
+          <div class="small text-secondary">Status</div>
+          <div id="wsStatus" class="fw-semibold">Desconectado</div>
+        </div>
+        <div class="col-12 col-md-6">
+          <div class="small text-secondary">Porta</div>
+          <div id="wsPortInfo" class="text-truncate"><em>--</em></div>
+        </div>
       </div>
-      <div class="col-12 col-md-6">
-        <div class="small text-secondary">Porta</div>
-        <div id="wsPortInfo" class="text-truncate"><em>--</em></div>
+      <div class="mt-2 small text-secondary">
+        Dica: o Web Serial precisa de <strong>HTTPS</strong> (ou <code>localhost</code>) e um gesto do usuario para abrir a porta.
       </div>
-    </div>
-
-    <div class="mt-2 small text-secondary">
-      Dica: o Web Serial precisa de <strong>HTTPS</strong> (ou <code>localhost</code>) e um gesto do usuario para abrir a porta.
-    </div>
     </div>
   </div>
+</div>
 
 <script>
 (() => {
-  console.log("🔌 [SERIAL] Script iniciando...");
-  
   const $ = s => document.querySelector(s);
+
   const statusEl = $("#wsStatus");
   const portInfoEl = $("#wsPortInfo");
   const btnConnect = $("#wsConnect");
@@ -67,18 +67,8 @@
   const autoChk = $("#wsAuto");
   const transportSel = $("#wsTransport");
 
-  console.log("🔌 [SERIAL] Elementos:", {
-    statusEl: !!statusEl,
-    portInfoEl: !!portInfoEl,
-    btnConnect: !!btnConnect,
-    btnDisconnect: !!btnDisconnect,
-    baudSel: !!baudSel,
-    autoChk: !!autoChk
-  });
-
   const hasWebSerial = !!navigator.serial;
-  console.log("🔌 [SERIAL] Web Serial disponível:", hasWebSerial);
-  
+
   const HOST_REQUIRED_MSG = "Habilite 'host' para abrir a serial";
   const LAST_BAUD_KEY = "ws.lastBaud";
   const WANT_AUTO_KEY = "ws.autoReconnect";
@@ -89,16 +79,26 @@
     reader: null,
     readPipeClosed: null,
     portOpening: null,
-    transport: 'serial',
-    // Bluetooth
+    transport: 'ble',
+
+    // Bluetooth clássico (GATT SPP-like) - opcional
     btDevice: null,
     btServer: null,
     btService: null,
     btCharRx: null,
     btCharTx: null,
-    btNotifyAbort: null
+    btNotifyAbort: null,
+
+    // BLE NUS
+    bleDevice: null,
+    bleServer: null,
+    bleService: null,
+    bleCharRx: null, // write
+    bleCharTx: null, // notify
+    bleNotifyAbort: null
   };
 
+  // ===== BUS RX (linhas) =====
   const SERIAL_BUS_KEY = "__SERIAL_RX_LISTENERS__";
   window[SERIAL_BUS_KEY] = window[SERIAL_BUS_KEY] || [];
 
@@ -114,7 +114,6 @@
         };
       };
     }
-
     if (typeof window.removeSerialRxListener !== "function") {
       window.removeSerialRxListener = function(listener) {
         if (typeof listener !== "function") return;
@@ -124,11 +123,7 @@
       };
     }
   }
-
   ensureSerialBusHelpers();
-  try {
-    window.dispatchEvent(new Event("serial-bus-ready"));
-  } catch(_) {}
 
   function log(msg, level = "info") {
     try {
@@ -150,39 +145,49 @@
   }
 
   function setStatus(text, portText) {
-    statusEl.textContent = text;
-    portInfoEl.textContent = portText ?? portInfoEl.textContent;
+    if (statusEl) statusEl.textContent = text;
+    if (portText != null && portInfoEl) portInfoEl.textContent = portText;
   }
+
   function setButtons(connected) {
     const host = isHost();
     const isSerial = state.transport === 'serial';
     const serialOk = isSerial ? hasWebSerial : true;
     const disabled = connected || !serialOk || !host || !!state.portOpening;
-    btnConnect.disabled = disabled;
-    btnDisconnect.disabled = !connected;
-    baudSel.disabled = !isSerial;
+    if (btnConnect) btnConnect.disabled = disabled;
+    if (btnDisconnect) btnDisconnect.disabled = !connected;
+    if (baudSel) baudSel.disabled = !isSerial;
   }
 
   function syncGlobals() {
+    // Mantém compatibilidade com códigos legados
     window.port = state.port;
     window.writer = state.writer;
     window.reader = state.reader;
   }
 
-  async function refreshHostGuard() {
-    const host = isHost();
-    if (!host) {
-      if (state.port) {
-        try { await disconnectSerial(); } catch {}
+  function dispatchSerialLine(line) {
+    try {
+      const listeners = window[SERIAL_BUS_KEY];
+      if (Array.isArray(listeners) && listeners.length) {
+        listeners.slice().forEach((cb) => { try { cb(line); } catch(_) {} });
       }
-      setButtons(false);
-      if (!state.port) setStatus(HOST_REQUIRED_MSG);
-    } else {
-      setButtons(!!state.port);
-      if (!state.port) {
-        setStatus("Desconectado");
-        if (autoChk.checked) scheduleReconnect();
+      if (typeof window.logSerialLine === "function") {
+        window.logSerialLine(line);
+      } else {
+        log('RX: ' + line, "info");
       }
+    } catch {}
+  }
+
+  // split em linhas com CRLF/LF
+  function dispatchChunkAsLines(chunk) {
+    const text = String(chunk ?? "");
+    const norm = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    const parts = norm.split("\n");
+    for (const p of parts) {
+      const line = p.trimEnd();
+      if (line.length) dispatchSerialLine(line);
     }
   }
 
@@ -210,11 +215,12 @@
     return true;
   }
 
+  // ===== SERIAL (WebSerial) =====
   async function openPort(port, baud) {
     await port.open({ baudRate: baud, bufferSize: 255 });
     try { await port.setSignals({ dataTerminalReady: true, requestToSend: false }); } catch {}
-    state.port = port;
 
+    state.port = port;
     state.writer = port.writable ? port.writable.getWriter() : null;
 
     const textDecoder = new TextDecoderStream();
@@ -243,743 +249,357 @@
       }
     })();
 
-    setStatus("Conectado");
+    setStatus("Conectado", describePortText(port));
     setButtons(true);
-    describePort(port);
     syncGlobals();
     window.dispatchEvent(new Event("serial-connected"));
     log('Porta aberta @' + baud + ' bps');
   }
 
-  function dispatchSerialLine(line) {
-    try {
-      const listeners = window[SERIAL_BUS_KEY];
-      if (Array.isArray(listeners) && listeners.length) {
-        listeners.slice().forEach((cb) => {
-          try { cb(line); } catch(_) {}
-        });
-      }
-
-      if (typeof window.logSerialLine === "function") {
-        // Log module already formats/prints; avoid duplicar aqui
-        window.logSerialLine(line);
-      } else {
-        log('SERIAL: ' + line, "info");
-      }
-    } catch {}
-  }
-
-  function describePort(port) {
+  function describePortText(port) {
     try {
       const info = port.getInfo ? port.getInfo() : {};
       const vid = info.usbVendorId != null ? "0x" + info.usbVendorId.toString(16).padStart(4, "0") : "--";
       const pid = info.usbProductId != null ? "0x" + info.usbProductId.toString(16).padStart(4, "0") : "--";
-      portInfoEl.textContent = `VID: ${vid} PID: ${pid}`;
-    } catch { portInfoEl.textContent = "--"; }
+      return `VID: ${vid} PID: ${pid}`;
+    } catch { return "--"; }
   }
 
+  function onBLEDisconnected(event) {
+    const device = event.target;
+    log(`Dispositivo BLE desconectado: ${device.name || device.id}`, 'warn');
+    disconnectSerial({ isEvent: true }).catch(()=>{});
+  }
+
+  function handleBLENotifications(event) {
+      try {
+        const value = event.target.value;
+        const text = new TextDecoder().decode(value);
+        dispatchChunkAsLines(text); 
+      } catch (e) {
+        log("Erro ao decodificar notificação BLE: " + (e.message || e), "error");
+      }
+  }
+
+  // ====== BLE (NUS) ======
+  async function connectBLE() {
+    const SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+    const CHAR_TX_UUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
+    const CHAR_RX_UUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
+
+    log("Procurando por dispositivos BLE com o serviço UART...");
+    let device;
+    try {
+      device = await navigator.bluetooth.requestDevice({
+        filters: [{ services: [SERVICE_UUID] }],
+        optionalServices: [SERVICE_UUID]
+      });
+      if (!device) throw new Error("Nenhum dispositivo selecionado.");
+    } catch (e) {
+      throw new Error(`Seleção de dispositivo BLE falhou: ${e.message}`);
+    }
+
+    log(`Dispositivo selecionado: ${device.name || 'ID: ' + device.id}`);
+    state.bleDevice = device;
+    
+    device.addEventListener('gattserverdisconnected', onBLEDisconnected);
+
+    log("Conectando ao servidor GATT...");
+    const server = await device.gatt.connect();
+    state.bleServer = server;
+    log("Servidor GATT conectado.");
+
+    const service = await server.getPrimaryService(SERVICE_UUID);
+    log("Serviço UART (NUS) encontrado.");
+
+    const [charTx, charRx] = await Promise.all([
+        service.getCharacteristic(CHAR_TX_UUID),
+        service.getCharacteristic(CHAR_RX_UUID)
+    ]);
+    
+    state.bleCharTx = charTx;
+    state.bleCharRx = charRx;
+    log("Características RX/TX encontradas.");
+
+    await charTx.startNotifications();
+    log("Inscrição para notificações ativada (TX).");
+
+    state.bleNotifyAbort = new AbortController();
+    charTx.addEventListener('characteristicvaluechanged', handleBLENotifications, { signal: state.bleNotifyAbort.signal });
+
+    setStatus("Conectado (BLE)", device.name || device.id);
+    setButtons(true);
+    syncGlobals();
+    window.dispatchEvent(new Event("serial-connected"));
+    log('Conexão BLE estabelecida com ' + (device.name || '(sem nome)'));
+  }
+
+  // ====== Bluetooth clássico (mantido, mas opcional) ======
+  async function connectBTClassic() {
+    // Esta função é um placeholder e não será usada, mas é mantida para não quebrar a estrutura.
+    log("Bluetooth Clássico não é suportado para este firmware.", "warn");
+    throw new Error("Transporte 'Bluetooth Clássico' não suportado.");
+  }
+
+  // ===== ensureSerial (principal) =====
   async function ensureSerial(opts = {}) {
     const prompt = opts.prompt !== false;
     const quiet = opts.quiet === true;
 
-    if (state.transport === 'serial') {
-      if (state.port && state.port.readable && state.port.writable) return;
-      if (state.portOpening) return state.portOpening;
-      if (!prelimCheck()) {
-        if (!isHost()) throw new Error(HOST_REQUIRED_MSG);
-        throw new Error("Web Serial indisponivel neste contexto.");
-      }
-      state.portOpening = (async () => {
+    if (state.portOpening) return state.portOpening;
+
+    if (!prelimCheck()) {
+      if (!isHost()) throw new Error(HOST_REQUIRED_MSG);
+      throw new Error("Transporte indisponível neste contexto.");
+    }
+
+    state.portOpening = (async () => {
+      if (state.transport === 'serial') {
+        if (state.port && state.port.readable && state.port.writable) return;
+
         const baud = parseInt(baudSel.value || localStorage.getItem(LAST_BAUD_KEY) || "115200", 10);
         localStorage.setItem(LAST_BAUD_KEY, String(baud));
+
         const granted = await navigator.serial.getPorts();
         if (granted && granted.length) {
           const port = granted[0];
-          log("Usando porta previamente concedida.");
+          if (!quiet) log("Usando porta previamente concedida.");
           await openPort(port, baud);
           return;
         }
+
         if (!prompt) {
           if (!quiet) log("Auto-reconnect ignorado: nenhuma porta previamente concedida.", "warn");
           return;
         }
-        const filters = [];
-        const port = await navigator.serial.requestPort({ filters }).catch(e => { throw e; });
+
+        const port = await navigator.serial.requestPort({ filters: [] });
         await openPort(port, baud);
-      })();
-      try { await state.portOpening; }
-      finally { state.portOpening = null; }
-    } else if (state.transport === 'bluetooth') {
-      if (state.btDevice && state.btCharTx && state.btCharRx) return;
-      if (state.portOpening) return state.portOpening;
-      if (!prelimCheck()) {
-        if (!isHost()) throw new Error(HOST_REQUIRED_MSG);
-        throw new Error("Bluetooth indisponível neste contexto.");
+        return;
       }
-      state.portOpening = (async () => {
-        // UUIDs típicos para Serial Bluetooth (modifique conforme necessário)
-        const SERVICE_UUID = '0000ffe0-0000-1000-8000-00805f9b34fb';
-        const CHAR_TX_UUID = '0000ffe1-0000-1000-8000-00805f9b34fb'; // TX: escrita
-        const CHAR_RX_UUID = '0000ffe1-0000-1000-8000-00805f9b34fb'; // RX: notificação
-        let device;
-        try {
-          device = await navigator.bluetooth.requestDevice({
-            acceptAllDevices: true,
-            optionalServices: [SERVICE_UUID]
-          });
-        } catch (e) {
-          throw new Error("Seleção de dispositivo Bluetooth cancelada ou falhou.");
-        }
-        state.btDevice = device;
-        const server = await device.gatt.connect();
-        state.btServer = server;
-        const service = await server.getPrimaryService(SERVICE_UUID);
-        state.btService = service;
-        const charTx = await service.getCharacteristic(CHAR_TX_UUID);
-        state.btCharTx = charTx;
-        const charRx = await service.getCharacteristic(CHAR_RX_UUID);
-        state.btCharRx = charRx;
-        // Notificações RX
-        await charRx.startNotifications();
-        state.btNotifyAbort = new AbortController();
-        charRx.addEventListener('characteristicvaluechanged', (event) => {
-          const value = event.target.value;
-          const decoder = new TextDecoder();
-          const line = decoder.decode(value);
-          dispatchSerialLine(line);
-        }, { signal: state.btNotifyAbort.signal });
-        setStatus("Conectado (Bluetooth)", device.name || "BT");
-        setButtons(true);
-        syncGlobals();
-        window.dispatchEvent(new Event("serial-connected"));
-        log('Bluetooth conectado: ' + device.name);
-      })();
-      try { await state.portOpening; }
-      finally { state.portOpening = null; }
-    }
+
+      if (state.transport === 'bluetooth') {
+        await connectBTClassic();
+        return;
+      }
+
+      if (state.transport === 'ble') {
+        if (state.bleDevice && state.bleDevice.gatt.connected) return;
+        await connectBLE();
+        return;
+      }
+    })();
+
+    try { await state.portOpening; }
+    finally { state.portOpening = null; }
   }
 
+  // ===== disconnect =====
   async function disconnectSerial(opts = {}) {
-    const forgetGrant = opts.forgetPermission === true;
-    const portRef = state.port;
-    try {
-      if (state.transport === 'serial') {
-        if (state.reader) {
-          try { await state.reader.cancel(); } catch {}
-          try { state.reader.releaseLock && state.reader.releaseLock(); } catch {}
-        }
-        if (state.readPipeClosed) { try { await state.readPipeClosed; } catch {} }
-        if (state.writer) {
-          try { await state.writer.close?.(); } catch {}
-          try { state.writer.releaseLock && state.writer.releaseLock(); } catch {}
-        }
-        if (state.port) {
-          try { await state.port.close(); } catch {}
-        }
-        state.reader = null;
-        state.writer = null;
-        state.port = null;
-        state.readPipeClosed = null;
-        state.portOpening = null;
-        syncGlobals();
-        setStatus("Desconectado");
-        setButtons(false);
-        portInfoEl.textContent = "--";
-        window.dispatchEvent(new Event("serial-disconnected"));
-        log("Porta desconectada.");
+    const isEvent = opts.isEvent === true;
+
+    if (state.transport === 'serial' && state.port) {
+        const forgetGrant = opts.forgetPermission === true;
+        const portRef = state.port;
+        
+        if (state.reader) { try { await state.reader.cancel(); } catch {} }
+        if (state.writer) { try { await state.writer.close(); } catch {} }
+        if (state.port) { try { await state.port.close(); } catch {} }
+
+        state.reader = null; state.writer = null; state.port = null;
+
         if (forgetGrant && portRef && typeof portRef.forget === "function") {
-          try {
-            await portRef.forget();
-            log("Permissao da porta esquecida (requer nova confirmacao do navegador).");
-          } catch (e) {
-            log('Nao foi possivel limpar a permissao: ' + (e && e.message ? e.message : e), "warn");
-          }
+          try { await portRef.forget(); log("Permissão da porta esquecida."); }
+          catch (e) { log('Não foi possível limpar a permissão: ' + (e?.message || e), "warn"); }
         }
-      } else if (state.transport === 'bluetooth') {
-        if (state.btNotifyAbort) {
-          try { state.btNotifyAbort.abort(); } catch {}
-        }
-        if (state.btDevice && state.btDevice.gatt && state.btDevice.gatt.connected) {
-          try { await state.btDevice.gatt.disconnect(); } catch {}
-        }
-        state.btDevice = null;
-        state.btServer = null;
-        state.btService = null;
-        state.btCharRx = null;
-        state.btCharTx = null;
-        state.btNotifyAbort = null;
-        setStatus("Desconectado");
-        setButtons(false);
-        portInfoEl.textContent = "--";
-        window.dispatchEvent(new Event("serial-disconnected"));
-        log("Bluetooth desconectado.");
-      }
-    } finally {
-      // nothing
     }
+
+    if (state.transport === 'ble' && state.bleDevice) {
+        if (state.bleNotifyAbort) { try { state.bleNotifyAbort.abort(); state.bleNotifyAbort = null; } catch {} }
+        if (state.bleDevice.gatt.connected) { try { state.bleDevice.gatt.disconnect(); } catch {} }
+        if (!isEvent) {
+            state.bleDevice.removeEventListener('gattserverdisconnected', onBLEDisconnected);
+        }
+        state.bleDevice = null; state.bleServer = null; state.bleCharRx = null; state.bleCharTx = null;
+    }
+
+    state.portOpening = null;
+    setStatus("Desconectado", "--");
+    setButtons(false);
+    syncGlobals();
+    window.dispatchEvent(new Event("serial-disconnected"));
+    log(`${state.transport.toUpperCase()} desconectado.`);
   }
 
+  // ===== Auto-reconnect =====
   let reconnectTimer = null;
   let reconnectDelay = 1000;
+
   function scheduleReconnect() {
-    if (!autoChk.checked) return;
+    if (!autoChk?.checked) return;
     if (!isHost()) return;
     if (reconnectTimer) return;
+
     reconnectTimer = setTimeout(async () => {
       reconnectTimer = null;
-      if (autoChk.checked && !state.port && isHost()) {
-        try { await ensureSerial({ prompt: false, quiet: true }); }
-        catch (e) {
-          log('Auto-reconnect falhou: ' + (e.message || e), "warn");
-          reconnectDelay = Math.min(reconnectDelay * 2, 10000);
-          scheduleReconnect();
-        } finally {
-          reconnectDelay = 1000;
-        }
+      try {
+        await ensureSerial({ prompt: false, quiet: true });
+        reconnectDelay = 1000;
+      } catch (e) {
+        log('Auto-reconnect falhou: ' + (e?.message || e), "warn");
+        reconnectDelay = Math.min(reconnectDelay * 2, 10000);
+        scheduleReconnect();
       }
     }, reconnectDelay);
   }
 
-  if (hasWebSerial) {
-    navigator.serial.addEventListener("connect", async () => {
-      log("Dispositivo serial conectado (evento).");
-      scheduleReconnect();
-    });
-    navigator.serial.addEventListener("disconnect", async () => {
-      log("Dispositivo serial desconectado (evento).", "warn");
-      await disconnectSerial().catch(() => {});
-      scheduleReconnect();
-    });
-  }
-
-  btnConnect.addEventListener("click", async () => {
-    console.log("✓ Botão conectar clicado");
-    try { 
-      console.log("Iniciando ensureSerial...");
-      await ensureSerial(); 
-    }
-    catch (e) {
-      const msg = e && e.name === "NotFoundError" ? "Usuario cancelou a selecao da porta." : (e.message || String(e));
-      console.error("Erro ao conectar:", msg, e);
-      log('Falha ao conectar: ' + msg, e && e.name === "NotFoundError" ? "warn" : "error");
-      setStatus("Desconectado");
-      setButtons(false);
-    }
-  });
-
-  transportSel.addEventListener("change", () => {
-    state.transport = transportSel.value;
-    setButtons(false);
-    setStatus("Desconectado");
-    portInfoEl.textContent = "--";
-    // Desconecta qualquer conexão ativa ao trocar
-    disconnectSerial().catch(()=>{});
-  });
-
-  btnDisconnect.addEventListener("click", async () => {
-    await disconnectSerial({ forgetPermission: true });
-  });
-
-  baudSel.addEventListener("change", () => {
-    localStorage.setItem(LAST_BAUD_KEY, baudSel.value);
-    if (state.port) {
-      log('Baud alterado para ' + baudSel.value + '. Desconecte e reconecte para aplicar.', "warn");
-    }
-  });
-
-  autoChk.addEventListener("change", () => {
-    localStorage.setItem(WANT_AUTO_KEY, autoChk.checked ? "1" : "0");
-    if (autoChk.checked) scheduleReconnect();
-  });
-
-  window.addEventListener("flowgate:local_tags_changed", refreshHostGuard);
-  window.addEventListener("trystero:localTags", refreshHostGuard);
-
-  const savedBaud = localStorage.getItem(LAST_BAUD_KEY);
-  if (savedBaud) baudSel.value = savedBaud;
-  const savedAuto = localStorage.getItem(WANT_AUTO_KEY);
-  if (savedAuto != null) autoChk.checked = savedAuto === "1";
-  else autoChk.checked = true;
-
-  setButtons(false);
-  if (!hasWebSerial) {
-    setStatus("Navegador sem Web Serial");
-  } else {
-    setStatus("Desconectado");
-    navigator.serial.getPorts().then((ports) => {
-      if (ports.length && autoChk.checked && isHost()) {
-        log("Abrindo porta previamente concedida (auto).");
-        ensureSerial({ prompt: false, quiet: true }).catch(e => log('Auto open falhou: ' + (e.message || e), "warn"));
-      } else if (!isHost()) {
-        setStatus(HOST_REQUIRED_MSG);
-      }
-    });
-  }
-  refreshHostGuard();
-
-  syncGlobals();
-  window.ensureSerial = ensureSerial;
-  window.disconnectSerial = disconnectSerial;
-
-  // --- PATCH: Abstração para envio de dados (serial/bluetooth) ---
+  // ===== UNIVERSAL SEND =====
   async function sendLineUniversal(line) {
     line = String(line ?? "").trim();
     if (!line) return;
+
+    const payload = line + "\n";
+    const bytes = new TextEncoder().encode(payload);
+
     if (state.transport === 'serial') {
-      if (!window.port || !window.port.writable) throw new Error("Porta serial indisponivel");
-      if (!window.writer) {
-        try { window.writer = window.port.writable.getWriter(); }
-        catch (e) { if (!/locked/i.test(String(e))) throw e; }
-      }
-      const payload = /(\r\n|\n)$/.test(line) ? line : (line + "\n");
-      await window.writer.write(new TextEncoder().encode(payload));
-      try { (window.appLog || console.log)('TX: ' + payload.replace(/\n$/, "")); } catch {}
-    } else if (state.transport === 'bluetooth') {
-      if (!state.btCharTx) throw new Error("Bluetooth TX indisponível");
-      const payload = /(\r\n|\n)$/.test(line) ? line : (line + "\n");
-      await state.btCharTx.writeValue(new TextEncoder().encode(payload));
-      try { (window.appLog || console.log)('TX: ' + payload.replace(/\n$/, "") + ' (BT)'); } catch {}
-    }
-  }
-  window.collarSend = async (line) => sendLineUniversal(line);
-  window.SerialBridge = window.SerialBridge || {};
-  window.SerialBridge.send = window.collarSend;
-
-  console.log("🔌 [SERIAL] Script carregado com sucesso!");
-  console.log("🔌 [SERIAL] btnConnect.disabled:", btnConnect ? btnConnect.disabled : "BOTÃO NÃO ENCONTRADO");
-
-})();
-</script>
-
-<!-- PATCH: habilita receber comandos externos (chat -> serial) -->
-<script>
-(() => {
-  const enc = new TextEncoder();
-
-  async function writeLine(line) {
-    line = String(line ?? "").trim();
-    if (!line) return;
-
-    try {
-      if (!window.port || !window.port.writable) {
-        throw new Error("Porta serial indisponivel");
-      }
-
-      if (!window.writer) {
-        try { window.writer = window.port.writable.getWriter(); }
-        catch (e) { if (!/locked/i.test(String(e))) throw e; }
-      }
-
-      const payload = /(\r\n|\n)$/.test(line) ? line : (line + "\n");
-      await window.writer.write(enc.encode(payload));
-
-      try { (window.appLog || console.log)('TX: ' + payload.replace(/\n$/, "")); } catch {}
-    } catch (err) {
-      try { (window.appLog || console.error)('TX erro: ' + (err && err.message ? err.message : err)); } catch {}
-    }
-  }
-
-  window.collarSend = async (line) => writeLine(line);
-  window.SerialBridge = window.SerialBridge || {};
-  window.SerialBridge.send = window.collarSend;
-  if (!window.executorLogs) window.executorLogs = [];
-  if (typeof window.getExecutorLogs !== 'function') {
-    window.getExecutorLogs = function(){ return window.executorLogs; };
-  }
-  if (typeof window.executorLog !== 'function') {
-    window.executorLog = function(action, cmd, origin, details){
-      try {
-        const entry = {
-          ts: Date.now(),
-          tsStr: new Date().toLocaleTimeString(),
-          action,
-          cmd,
-          origin: origin || 'unknown',
-          details: details || {}
-        };
-        window.executorLogs.push(entry);
-        if (window.executorLogs.length > 1000) window.executorLogs.shift();
-      } catch(_) {}
-    };
-  }
-  if (!window.SerialBridge._executorHooked) {
-    window.SerialBridge._executorHooked = true;
-    const origSend = window.SerialBridge.send;
-    window.SerialBridge.send = function(line) {
-      try {
-        if (typeof window.executorLog === 'function') {
-          window.executorLog('sent', String(line || ''), 'SerialBridge', { path: 'SerialBridge.send' });
-        }
-      } catch(_) {}
-      return origSend.apply(this, arguments);
-    };
-  }
-
-  window.addEventListener("collar:tx", (e) => {
-    const line = e?.detail?.line ? e.detail.line : "";
-    if (!line) return;
-    writeLine(line);
-  });
-
-  try { (window.appLog || console.log)("PATCH serial forwarder: pronto (escutando 'collar:tx')."); } catch {}
-})();
-</script>
-
-<!-- EXECUTOR FLOW LOG ÔÇö Painel de log do fluxo de comandos -->
-<div class="host-only">
-  <div id="executor-flow-card" class="card shadow-sm" style="background:#111;border:1px solid #333;border-radius:.75rem;color:#e5e7eb;">
-    <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2" style="background:#0c0c0e;border-bottom:1px solid #333;color:#e5e7eb;border-top-left-radius:.65rem;border-top-right-radius:.65rem;">
-      <div class="d-flex align-items-center gap-2">
-        <i class="fa-solid fa-flow-branch"></i>
-        <div class="fw-semibold">Executor Flow Log</div>
-      </div>
-      <div class="d-flex flex-wrap gap-2">
-        <button id="efClear" class="btn btn-sm btn-outline-light" title="Limpar">Limpar</button>
-        <button id="efExport" class="btn btn-sm btn-outline-light" title="Exportar como JSON">Exportar</button>
-        
-        <div class="form-check form-switch m-0 ms-2">
-          <input class="form-check-input" type="checkbox" id="efAutoScroll" checked />
-          <label class="form-check-label small" for="efAutoScroll">Auto-scroll</label>
-        </div>
-      </div>
-        </div>
-        <div class="card-body p-3">
-        <div id="executor-flow-log" class="border rounded p-3" 
-          style="height: 300px; overflow-y: auto; font-size: 0.9em; font-family: 'Monaco', 'Courier New', monospace; background: rgba(0,0,0,0.08);">
-      <div class="text-muted text-center py-4"><small>Aguardando eventos...</small></div>
-    </div>
-
-    <div class="form-text mt-2">
-      <i class="fa-solid fa-circle-info me-1"></i>
-      Mostra o fluxo de comandos: origem → Executor → Serial. 
-      Origem: <span class="badge bg-warning text-dark">chat</span>
-      <span class="badge bg-primary">flowgate</span>
-      <span class="badge bg-success">serial adapter</span>
-      <span class="badge bg-danger">error</span>
-    </div>
-    </div>
-    </div>
-  </div>
-</div>
-
-<style>
-  .executor-log-entry {
-    background-color: rgba(255, 255, 255, 0.02);
-    border-radius: 4px;
-    font-size: 0.85rem;
-    line-height: 1.4;
-  }
-
-  .executor-log-entry .badge {
-    font-size: 0.7rem;
-    padding: 0.25rem 0.5rem;
-    font-weight: 600;
-  }
-
-  .executor-log-entry code {
-    background-color: rgba(0, 0, 0, 0.3);
-    padding: 0.25rem 0.4rem;
-    border-radius: 3px;
-    display: block;
-    word-break: break-all;
-  }
-
-  #executor-flow-log {
-    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
-    scrollbar-width: thin;
-  }
-
-  #executor-flow-log::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  #executor-flow-log::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  #executor-flow-log::-webkit-scrollbar-thumb {
-    background-color: rgba(255, 255, 255, 0.2);
-    border-radius: 3px;
-  }
-
-  #executor-flow-log::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(255, 255, 255, 0.4);
-  }
-</style>
-
-<script>
-(() => {
-  const logPanel = document.getElementById('executor-flow-log');
-  const btnClear = document.getElementById('efClear');
-  const btnExport = document.getElementById('efExport');
-  const cbAutoScroll = document.getElementById('efAutoScroll');
-
-  function updateLogDisplay() {
-    if (typeof window.getExecutorLogs !== 'function') return;
-    
-    const logs = window.getExecutorLogs();
-    const recent = logs.slice(-30);
-    
-    let html = '';
-    
-    if (recent.length === 0) {
-      html = '<div class="text-muted text-center py-4"><small>Aguardando eventos...</small></div>';
-    } else {
-      for (let i = 0; i < recent.length; i++) {
-        const log = recent[i];
-        const badgeClass = getActionBadgeClass(log.action);
-        const originBg = getOriginBadgeClass(log.origin);
-        
-        html += `<div class="executor-log-entry mb-2 p-2 border-start border-3" style="border-color: var(--bs-${badgeClass.replace('bg-', '')});">
-          <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
-            <span class="badge ${badgeClass}">${getActionIcon(log.action)} ${log.action.toUpperCase()}</span>
-            <span class="badge ${originBg}" title="Origem">${escapeHtml(log.origin)}</span>
-            <small class="text-muted">${log.tsStr}</small>
-          </div>
-          <code class="text-break">${escapeHtml(log.cmd)}</code>`;
-        
-        if (log.details && Object.keys(log.details).length > 0) {
-          html += `<div class="small text-muted mt-1">
-            ${Object.entries(log.details).map(([k, v]) => `${escapeHtml(k)}: ${escapeHtml(JSON.stringify(v))}`).join(' | ')}
-          </div>`;
-        }
-        
-        html += `</div>`;
-      }
-    }
-    
-    logPanel.innerHTML = html;
-    if (cbAutoScroll.checked) {
-      logPanel.scrollTop = logPanel.scrollHeight;
-    }
-  }
-
-  function getActionBadgeClass(action) {
-    switch(action) {
-      case 'received': return 'bg-info';
-      case 'sent': return 'bg-success';
-      case 'error': return 'bg-danger';
-      case 'init': return 'bg-secondary';
-      default: return 'bg-dark';
-    }
-  }
-
-  function getActionIcon(action) {
-    switch(action) {
-      case 'received': return '↓';
-      case 'sent': return '↑';
-      case 'error': return '⚠';
-      case 'init': return '●';
-      default: return '•';
-    }
-  }
-
-  function getOriginBadgeClass(origin) {
-    if (origin.includes('chat')) return 'bg-warning text-dark';
-    if (origin.includes('trystero') || origin.includes('flowgate')) return 'bg-primary';
-    if (origin.includes('holdSync')) return 'bg-purple';
-    if (origin.includes('SerialBridge') || origin.includes('collarSend') || origin.includes('sendSerial')) return 'bg-success';
-    if (origin.includes('executor')) return 'bg-secondary';
-    if (origin.includes('error')) return 'bg-danger';
-    return 'bg-dark';
-  }
-
-  function escapeHtml(text) {
-    const map = {
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#039;'
-    };
-    return String(text).replace(/[&<>"']/g, m => map[m]);
-  }
-
-  btnClear.addEventListener('click', () => {
-    if (typeof window.executorLogs !== 'undefined') {
-      window.executorLogs.length = 0;
-      updateLogDisplay();
-    }
-  });
-
-  btnExport.addEventListener('click', () => {
-    if (typeof window.getExecutorLogs !== 'function') {
-      alert('Executor logs não disponíveis');
+      if (!state.port || !state.port.writable) throw new Error("Porta serial indisponível");
+      if (!state.writer) state.writer = state.port.writable.getWriter();
+      await state.writer.write(bytes);
       return;
     }
-    
-    const logs = window.getExecutorLogs();
-    const json = JSON.stringify(logs, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `executor-flow-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  });
 
-  cbAutoScroll.addEventListener('change', () => {
-    if (cbAutoScroll.checked) {
-      logPanel.scrollTop = logPanel.scrollHeight;
-    }
-  });
-
-  let logTimer = null;
-
-  function isSerialUiOpen() {
-    const modal = document.getElementById("serial-module-modal");
-    if (modal) {
-      const ariaHidden = modal.getAttribute("aria-hidden");
-      if (modal.classList.contains("show") && ariaHidden !== "true") return true;
-    }
-    const card = document.getElementById("serialPortCard");
-    if (card && card.offsetParent !== null && card.style.display !== "none") return true;
-    return false;
-  }
-
-  function setExecutorPanelVisible(visible) {
-    const card = document.getElementById("executor-flow-card");
-    if (!card) return;
-    if (visible) {
-      card.classList.remove("executor-flow-hidden");
-      card.style.display = "";
-    } else {
-      card.classList.add("executor-flow-hidden");
-      card.style.display = "none";
-    }
-  }
-
-  function setSerialMonitorVisible(visible) {
-    const card = document.getElementById("serial-monitor-card");
-    if (!card) return;
-    if (visible) {
-      card.classList.remove("serial-monitor-hidden");
-      card.style.display = "";
-    } else {
-      card.classList.add("serial-monitor-hidden");
-      card.style.display = "none";
-    }
-  }
-
-    function setLogMonitorVisible(visible) {
-    const card = document.getElementById("log-monitor-card");
-    if (!card) return;
-    if (visible) {
-      card.classList.remove("log-monitor-hidden");
-      card.style.display = "";
-    } else {
-      card.classList.add("log-monitor-hidden");
-      card.style.display = "none";
-    }
-  }
-function startLogUpdates() {
-    if (logTimer) return;
-    updateLogDisplay();
-    logTimer = setInterval(updateLogDisplay, 500);
-  }
-
-  function stopLogUpdates() {
-    if (!logTimer) return;
-    clearInterval(logTimer);
-    logTimer = null;
-  }
-
-  function syncExecutorFlowVisibility() {
-    const open = isSerialUiOpen();
-    setExecutorPanelVisible(open);
-    setSerialMonitorVisible(open);\r\n    setLogMonitorVisible(open);
-    if (open) startLogUpdates();
-    else stopLogUpdates();
-  }
-
-  function bindSerialModalWatcher() {
-    const modal = document.getElementById("serial-module-modal");
-    if (!modal) {
-      setTimeout(bindSerialModalWatcher, 400);
+    if (state.transport === 'ble') {
+      if (!state.bleCharRx) throw new Error("BLE RX indisponível");
+      // Revertido para writeValue para maior compatibilidade
+      await state.bleCharRx.writeValue(bytes);
       return;
     }
-    const observer = new MutationObserver(syncExecutorFlowVisibility);
-    observer.observe(modal, { attributes: true, attributeFilter: ["class", "style", "aria-hidden"] });
-    modal.addEventListener("shown.bs.modal", syncExecutorFlowVisibility);
-    modal.addEventListener("hidden.bs.modal", syncExecutorFlowVisibility);
-    syncExecutorFlowVisibility();
   }
 
-  bindSerialModalWatcher();
+  // ===== UI handlers =====
+  if (btnConnect) {
+    btnConnect.addEventListener("click", async () => {
+      try {
+        await ensureSerial({ prompt: true });
+      } catch (e) {
+        log('Falha ao conectar: ' + e.message, "error");
+        setStatus("Falha na conexão", "--");
+        setButtons(false);
+      }
+    });
+  }
+
+  if (btnDisconnect) {
+    btnDisconnect.addEventListener("click", () => {
+      disconnectSerial({ forgetPermission: true }).catch(()=>{});
+    });
+  }
+
+  if (transportSel) {
+    transportSel.addEventListener("change", () => {
+      disconnectSerial().finally(() => {
+          state.transport = transportSel.value;
+          setStatus("Desconectado", "--");
+          setButtons(false);
+      });
+    });
+  }
+
+  if (autoChk) {
+    autoChk.addEventListener("change", () => {
+      localStorage.setItem(WANT_AUTO_KEY, autoChk.checked ? "1" : "0");
+      if (autoChk.checked && !btnConnect.disabled) {
+        scheduleReconnect();
+      } else {
+        clearTimeout(reconnectTimer);
+      }
+    });
+  }
+
+  // ===== Expor API global p/ Serial Monitor / Executor =====
+  window.ensureSerial = ensureSerial;
+  window.disconnectSerial = disconnectSerial;
+  window.SerialBridge = window.SerialBridge || {};
+  window.SerialBridge.send = sendLineUniversal;
+  window.collarSend = sendLineUniversal;
+
+  // ===== Inicialização =====
+  function initialize() {
+    const hasWebBluetooth = !!navigator.bluetooth;
+    state.transport = hasWebBluetooth ? (transportSel?.value || 'ble') : 'serial';
+    if (transportSel) transportSel.value = state.transport;
+
+    const savedAuto = localStorage.getItem(WANT_AUTO_KEY);
+    if (savedAuto != null && autoChk) autoChk.checked = savedAuto === "1";
+
+    let statusMsg = "Desconectado";
+    if (state.transport === 'serial' && !hasWebSerial) statusMsg = "Web Serial indisponível";
+    if (state.transport === 'ble' && !hasWebBluetooth) statusMsg = "Web Bluetooth indisponível";
+    
+    setStatus(statusMsg, "--");
+    setButtons(false);
+    syncGlobals();
+
+    if (autoChk?.checked && isHost()) {
+        scheduleReconnect();
+    }
+  }
+  
+  initialize();
+
+  // watchers de host tag
+  window.addEventListener("flowgate:local_tags_changed", () => { setButtons(!!state.port || !!state.bleDevice); });
+  window.addEventListener("trystero:localTags", () => { setButtons(!!state.port || !!state.bleDevice); });
+
 })();
 </script>
 
-<!-- SERIAL MONITOR ÔÇö bloco independente (sempre aberto / admin-only) -->
+
+<!-- SERIAL MONITOR - bloco independente (sempre aberto / admin-only) -->
 <div class="host-only">
-  <div id="serial-monitor-card" class="card shadow-sm" style="background:#111;border:1px solid #333;border-radius:.75rem;color:#e5e7eb;">
+  <div id="serial-monitor-card" class="card shadow-sm mt-3" style="background:#111;border:1px solid #333;border-radius:.75rem;color:#e5e7eb;">
     <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2" style="background:#0c0c0e;border-bottom:1px solid #333;color:#e5e7eb;border-top-left-radius:.65rem;border-top-right-radius:.65rem;">
       <div class="d-flex align-items-center gap-2">
         <i class="fa-solid fa-terminal"></i>
         <div class="fw-semibold">Serial Monitor</div>
       </div>
-      <div class="d-flex flex-wrap gap-2">
+      <div class="d-flex flex-wrap gap-2 align-items-center">
         <button id="smPause" class="btn btn-sm btn-outline-light" title="Pausar/Continuar">Pausar</button>
         <button id="smClear" class="btn btn-sm btn-outline-light" title="Limpar">Limpar</button>
-
         <div class="form-check form-switch m-0 ms-2">
           <input class="form-check-input" type="checkbox" id="smTimestamps" checked />
           <label class="form-check-label small" for="smTimestamps">Timestamps</label>
         </div>
-
         <div class="form-check form-switch m-0 ms-2">
           <input class="form-check-input" type="checkbox" id="smWrap" checked />
           <label class="form-check-label small" for="smWrap">Quebra de linha</label>
         </div>
-
-        <div class="ms-2">
-          <label class="small me-1" for="smEOL">EOL</label>
-          <select id="smEOL" class="form-select form-select-sm d-inline-block" style="width:auto;">
-            <option value="\n" />LF (\n)
-            <option value="\r\n" selected />CRLF (\r\n)
-            <option value="" />Nenhum
-          </select>
-        </div>
       </div>
-        </div>
-        <div class="card-body p-3">
+    </div>
+    <div class="card-body p-3">
     
-        <div id="smView" class="border rounded p-2 bg-black text-monospace"
-          style="height: 280px; overflow:auto; white-space: pre-wrap;"></div>
+        <div id="smView" class="border rounded p-2 bg-black"
+          style="height: 280px; overflow-y:auto; white-space: pre-wrap; font-family: 'Fira Code', 'Consolas', monospace; font-size: 0.85rem;"></div>
 
     <div class="input-group mt-3">
-      <input id="smInput" type="text" class="form-control" placeholder="Digite um comando e pressione EnterÔÇª" />
+      <input id="smInput" type="text" class="form-control" placeholder="Digite um comando e pressione Enter..." />
       <button id="smSend" class="btn btn-primary"><i class="fa-solid fa-paper-plane me-1"></i>Enviar</button>
-    </div>
-
-    <div class="form-text mt-1">
-      Dica: selecione o final de linha (EOL) acima. Enter tamb├®m envia.
     </div>
     </div>
   </div>
 </div>
 
 <style>
-  #smView .sm-line { line-height: 1.25; padding: 2px 0; }
-  #smView .sm-ts { opacity: .75; margin-right: 6px; }
-
-  #smView .sm-dir { display:inline-flex; align-items:center; gap:.45rem; min-width: 3.2rem; }
-  #smView .sm-icon { width: 1.2rem; text-align:center; }
-
-  /* RX/TX */
+  #smView .sm-line { line-height: 1.3; padding: 1px 0; }
+  #smView .sm-ts { opacity: .6; margin-right: 8px; font-size: 0.9em; }
+  #smView .sm-dir { display:inline-flex; align-items:center; gap:.4rem; min-width: 2.8rem; opacity: 0.7; }
   #smView .sm-rx { color: #22c55e; } /* verde */
   #smView .sm-tx { color: #ef4444; } /* vermelho */
-
-  /* Tipos de comando (texto do comando) */
-  #smView .cmd-shock     { color: #3b82f6; } /* azul */
-  #smView .cmd-beep      { color: #22c55e; } /* verde */
-  #smView .cmd-vibration { color: #eab308; } /* amarelo */
-  #smView .cmd-light     { color: #ef4444; } /* vermelho */
-
-  /* Contador de repeti├º├úo */
-  #smView .sm-dup { opacity: .85; margin-left: 8px; }
+  #smView .cmd-shock     { color: #60a5fa; }
+  #smView .cmd-beep      { color: #4ade80; }
+  #smView .cmd-vibration { color: #facc15; }
+  #smView .cmd-light     { color: #f87171; }
+  #smView .sm-dup { opacity: .7; margin-left: 8px; font-style: italic; }
 </style>
 
 <script>
@@ -992,121 +612,24 @@ function startLogUpdates() {
   const btnClear = $("#smClear");
   const cbTs  = $("#smTimestamps");
   const cbWrap= $("#smWrap");
-  const selEOL= $("#smEOL");
 
   let paused = false;
   let autoscroll = true;
+  let lastKey = null, lastLineEl = null, lastCount = 1;
 
-  // Compacta├º├úo
-  let lastKey = null;
-  let lastLineEl = null;
-  let lastCount = 1;
-
-  function nowTs() {
-    const d = new Date();
-    const pad = n => String(n).padStart(2, "0");
-    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-  }
-
-  function iconEl(cls) {
-    const i = document.createElement("i");
-    i.className = `fa-solid ${cls}`;
-    i.setAttribute("aria-hidden", "true");
-    return i;
-  }
-
-  // Remove sufixos "(3x)" vindos do pr├│prio texto para n├úo quebrar a compacta├º├úo
-  function stripInlineCounter(s) {
-    return String(s ?? "").replace(/\(\s*\d+\s*x\s*\)\s*$/i, "").trim();
-  }
-
-  // Normaliza entidades ÔÇ£cruasÔÇØ que chegam como texto
-  function normalizeIncoming(s) {
-    let t = String(s ?? "");
-
-    // Entidades vistas nos seus logs (literal, n├úo renderiza como emoji)
-    t = t
-      .replace(/&#11013;(&#65039;)?/g, "")   // seta esquerda literal
-      .replace(/&#10145;(&#65039;)?/g, "")  // seta direita literal
-      .replace(/&#9889;?/g, "")             // raio literal
-
-      // tamb├®m remove entidades nomeadas se vierem cruas
-      .replace(/&larr;?/gi, "")
-      .replace(/&rarr;?/gi, "");
-
-    // remove setas unicode se vierem embutidas
-    t = t.replace(/[ÔåÉÔåÆ]/g, "");
-
-    // limpa espa├ºos duplicados
-    return t.replace(/\s{2,}/g, " ").trim();
-  }
-
-  // Extrai (modo, n├¡vel, canal)
-  // Suporta: SHOCK, BEEP/BIP, VIBRATION, LIGHT/LUZ
-  // Ex: "OK SHOCK,12,1" / "OK VIBRATION,8,1" / "LIGHT,0,1"
-  function parseTuple(text) {
-    const cleaned = stripInlineCounter(normalizeIncoming(text))
-      .replace(/^(OK|ERR|ERROR|INFO|WARN|WARNING|DBG|DEBUG)\s+/i, "");
-
-    const re = /\b(SHOCK|BEEP|BIP|VIBRATION|LIGHT|LUZ)\b\s*,\s*(\d+)\s*,\s*(\d+)\b/i;
-    const m = cleaned.match(re);
-    if (!m) return null;
-
-    const raw = m[1].toUpperCase();
-    const mode =
-      raw === "BIP" ? "BEEP" :
-      raw === "LUZ" ? "LIGHT" :
-      raw; // VIBRATION permanece VIBRATION
-
-    return { mode, lvl: Number(m[2]), ch: Number(m[3]) };
-  }
-
-  function cmdMeta(mode) {
-    switch (mode) {
-      case "SHOCK":
-        return { cls: "cmd-shock", icon: "fa-bolt", label: "SHOCK" };
-      case "BEEP":
-        return { cls: "cmd-beep", icon: "fa-volume-high", label: "BEEP" };
-      case "VIBRATION":
-        return { cls: "cmd-vibration", icon: "fa-mobile-screen-button", label: "VIBRATION" };
-      case "LIGHT":
-        return { cls: "cmd-light", icon: "fa-lightbulb", label: "LUZ" };
-      default:
-        return { cls: "", icon: "", label: mode };
-    }
-  }
-
-  function makeKey(dir, originalText) {
-    const normalized = stripInlineCounter(normalizeIncoming(originalText));
-    const tuple = parseTuple(normalized);
-
-    if (tuple) return `${dir}|${tuple.mode}|${tuple.lvl}|${tuple.ch}`;
-    return `${dir}|RAW|${normalized}`;
-  }
-
-  function setDupCounter(el, count) {
-    let dup = el.querySelector(".sm-dup");
-    if (count <= 1) {
-      if (dup) dup.remove();
-      return;
-    }
-    if (!dup) {
-      dup = document.createElement("span");
-      dup.className = "sm-dup";
-      el.appendChild(dup);
-    }
-    dup.textContent = `(${count}x)`;
-  }
+  const nowTs = () => new Date().toLocaleTimeString();
 
   function appendLine(text, dir = "in") {
     if (paused) return;
+    if (!text) return;
 
-    const key = makeKey(dir, text);
-
-    // Compacta somente quando id├¬ntico (mesmo modo/nivel/canal ou RAW id├¬ntico)
+    const key = `${dir}|${text}`;
     if (key === lastKey && lastLineEl) {
-      lastCount += 1;
-      setDupCounter(lastLineEl, lastCount);
+      lastCount++;
+      const dupEl = lastLineEl.querySelector(".sm-dup") || document.createElement("span");
+      dupEl.className = "sm-dup";
+      dupEl.textContent = `(${lastCount}x)`;
+      if (!dupEl.parentElement) lastLineEl.appendChild(dupEl);
       if (autoscroll) view.scrollTop = view.scrollHeight;
       return;
     }
@@ -1118,164 +641,73 @@ function startLogUpdates() {
     line.className = "sm-line";
     lastLineEl = line;
 
-    // Timestamp
-    if (cbTs.checked) {
+    if (cbTs?.checked) {
       const ts = document.createElement("span");
       ts.className = "sm-ts";
       ts.textContent = `[${nowTs()}]`;
       line.appendChild(ts);
-      line.appendChild(document.createTextNode(" "));
     }
-
-    // Dire├º├úo RX/TX com Font Awesome
+    
     const dirSpan = document.createElement("span");
-    dirSpan.className = `sm-dir ${dir === "out" ? "sm-tx" : "sm-rx"}`;
-
-    const arrowWrap = document.createElement("span");
-    arrowWrap.className = "sm-icon";
-    arrowWrap.appendChild(iconEl(dir === "out" ? "fa-arrow-right" : "fa-arrow-left"));
-    dirSpan.appendChild(arrowWrap);
-
+    dirSpan.className = `sm-dir ${dir === 'out' ? 'sm-tx' : 'sm-rx'}`;
+    const icon = document.createElement("i");
+    icon.className = `fa-solid fa-arrow-${dir === 'out' ? 'up' : 'down'}`;
+    dirSpan.appendChild(icon);
     line.appendChild(dirSpan);
-    line.appendChild(document.createTextNode(" "));
-
-    // Conte├║do normalizado
-    const normalizedText = stripInlineCounter(normalizeIncoming(text));
-    const tuple = parseTuple(normalizedText);
-
-    if (tuple) {
-      const meta = cmdMeta(tuple.mode);
-
-      // Prefixo (OK, etc.) preservado quando poss├¡vel
-      const cleaned = normalizeIncoming(text);
-      const upper = cleaned.toUpperCase();
-      const idx = upper.indexOf(tuple.mode);
-      const prefix = (idx > 0 ? cleaned.slice(0, idx).trim() : "")
-        .replace(/\s{2,}/g, " ")
-        .trim();
-
-      if (prefix) {
-        const pre = document.createElement("span");
-        pre.textContent = prefix + " ";
-        line.appendChild(pre);
-      }
-
-      // ├ìcone + label com cor
-      const cmd = document.createElement("span");
-      cmd.className = meta.cls;
-
-      if (meta.icon) {
-        const ic = iconEl(meta.icon);
-        ic.style.marginRight = ".35rem";
-        cmd.appendChild(ic);
-      }
-      cmd.appendChild(document.createTextNode(meta.label));
-      line.appendChild(cmd);
-
-      // Restante ",lvl,ch"
-      const rest = document.createElement("span");
-      rest.textContent = `,${tuple.lvl},${tuple.ch}`;
-      line.appendChild(rest);
-    } else {
-      const msg = document.createElement("span");
-      msg.textContent = normalizedText;
-      line.appendChild(msg);
-    }
+    
+    const msg = document.createElement("span");
+    msg.textContent = text;
+    line.appendChild(msg);
 
     view.appendChild(line);
-    setDupCounter(line, 1);
-
     if (autoscroll) view.scrollTop = view.scrollHeight;
   }
 
-  // UI
-  btnPause.addEventListener("click", () => {
-    paused = !paused;
-    btnPause.textContent = paused ? "Continuar" : "Pausar";
-  });
-
-  btnClear.addEventListener("click", () => {
-    view.innerHTML = "";
-    lastKey = null;
-    lastLineEl = null;
-    lastCount = 1;
-  });
-
-  cbWrap.addEventListener("change", () => {
-    view.style.whiteSpace = cbWrap.checked ? "pre-wrap" : "pre";
-  });
-
-  view.addEventListener("scroll", () => {
-    autoscroll = (view.scrollHeight - view.scrollTop - view.clientHeight) < 8;
-  });
-
-  // Envio TX
   async function writeRaw(raw) {
-    if (!raw?.length) return;
-
-    const eolVal = selEOL.value
-      .replaceAll("\\n", "\n")
-      .replaceAll("\\r", "\r");
-    const payload = raw + eolVal;
-
-    // Somente envia se a porta já estiver aberta; não tenta abrir sozinho
-    let useWriter = (typeof writer !== "undefined" && writer) ? writer : null;
-    if (!useWriter && window.port?.writable) {
-      try { useWriter = await window.port.writable.getWriter(); } catch(_) {}
-    }
-
-    if (!useWriter) {
-      appendLine(`(sem porta) ${raw}`, "out");
-      return;
-    }
-
+    if (!raw.length) return;
     try {
-      await useWriter.write(new TextEncoder().encode(payload));
-      appendLine(raw, "out");
+      if (window.SerialBridge?.send) {
+        await window.SerialBridge.send(raw);
+        appendLine(raw, "out");
+      } else {
+        throw new Error("SerialBridge não está disponível.");
+      }
     } catch (e) {
-      appendLine(`ERRO envio: ${e?.message || e}`, "out");
-    } finally {
-      try { if (useWriter !== writer) useWriter.releaseLock(); } catch(_) {}
+      appendLine(`ERRO: ${e?.message || e}`, "out");
+      log(`Falha no envio: ${e?.message}`, "error");
     }
   }
 
-  btnSend.addEventListener("click", async () => {
-    const txt = inp.value.trimEnd();
-    await writeRaw(txt);
+  btnSend?.addEventListener("click", () => {
+    writeRaw(inp.value.trim());
     inp.value = "";
     inp.focus();
   });
-
-  inp.addEventListener("keydown", async (ev) => {
+  inp?.addEventListener("keydown", (ev) => {
     if (ev.key === "Enter") {
       ev.preventDefault();
-      const txt = inp.value.trimEnd();
-      await writeRaw(txt);
+      writeRaw(inp.value.trim());
       inp.value = "";
     }
   });
 
-  // Hook RX
-  const prevLogSerialLine = window.logSerialLine;
+  btnPause?.addEventListener("click", () => { paused = !paused; btnPause.textContent = paused ? "Continuar" : "Pausar"; });
+  btnClear?.addEventListener("click", () => { view.innerHTML = ""; lastKey = null; lastLineEl = null; });
+  cbWrap?.addEventListener("change", () => { view.style.whiteSpace = cbWrap.checked ? "pre-wrap" : "pre"; });
+  view?.addEventListener("scroll", () => { autoscroll = (view.scrollHeight - view.scrollTop - view.clientHeight) < 10; });
+
+  const originalLogSerialLine = window.logSerialLine;
   window.logSerialLine = function(line) {
-    try {
-      if (line != null && line !== "") {
-        const parts = String(line)
-          .replace(/\r\n/g, "\n")
-          .replace(/\r/g, "\n")
-          .split("\n");
-        for (const p of parts) if (p.length) appendLine(p, "in");
-      }
-    } catch(_) {}
-    if (typeof prevLogSerialLine === "function") prevLogSerialLine(line);
+    appendLine(line, "in");
+    if (typeof originalLogSerialLine === 'function') originalLogSerialLine(line);
   };
-
-  window.addEventListener?.("serial-connected", () => appendLine("Porta conectada.", "in"));
-  window.addEventListener?.("serial-disconnected", () => appendLine("Porta desconectada.", "in"));
-
-  view.style.whiteSpace = cbWrap.checked ? "pre-wrap" : "pre";
+  
+  if(view && cbWrap) view.style.whiteSpace = cbWrap.checked ? "pre-wrap" : "pre";
+  appendLine("Monitor iniciado. Aguardando conexão...", "in");
 })();
 </script>
+
+
 <div class="host-only">
   <div id="log-monitor-card" class="card p-3">
     <div class="d-flex align-items-center justify-content-between mb-2">

@@ -57,6 +57,7 @@
     BTN_STATE: { label: "BTN STATE", color: "#f43f5e", iconClass: "fa-toggle-on", glyph: "\u23FB" }
   };
   const MAX_POINTS = 1000;
+  const DEFAULT_PULSE_SEC = 0.18;
 
   const state = {
     chart: null,
@@ -210,12 +211,16 @@
     if (requireOk && !ok) return null;
     const cleaned = ok ? raw.replace(/^OK\s+/i, "").trim() : raw;
 
-    const isHoldOff = /\bHOLDOFF\b/i.test(cleaned);
+    const holdoffMatch = cleaned.match(/\bHOLDOFF\b(?:\s*,\s*(\d+))?/i);
+    const isHoldOff = !!holdoffMatch;
     const isHoldOn = /\bHOLDON\b/i.test(cleaned);
 
-    if (isHoldOff) return { kind: "holdoff" };
+    if (isHoldOff) {
+      const durationMs = (holdoffMatch && holdoffMatch[1] != null) ? Number(holdoffMatch[1]) : null;
+      return { kind: "holdoff", durationMs: Number.isFinite(durationMs) ? Math.max(0, durationMs) : null };
+    }
 
-    const match = cleaned.match(/\b(SHOCK|BEEP|BIP|VIBRATION|LIGHT|LUZ)\b\s*,\s*([+-]?\d+(?:\.\d+)?)\s*,\s*(\d+)/i);
+    const match = cleaned.match(/\b(SHOCK|BEEP|BIP|VIBRATION|LIGHT|LUZ)\b\s*,\s*([+-]?\d+(?:\.\d+)?)\s*,\s*(\d+)(?:\s*,\s*(\d+))?/i);
     if (!match) return null;
 
     const rawMode = match[1].toUpperCase();
@@ -226,8 +231,15 @@
 
     const level = clampLevel(match[2]);
     const channel = Math.max(1, Math.min(2, Number(match[3]) || 1));
+    const durationMs = match[4] != null ? Number(match[4]) : null;
 
-    return { kind: isHoldOn ? "holdon" : "pulse", mode, level, channel };
+    return {
+      kind: isHoldOn ? "holdon" : "pulse",
+      mode,
+      level,
+      channel,
+      durationMs: Number.isFinite(durationMs) ? Math.max(0, durationMs) : null
+    };
   }
 
   function emitChartEvent(payload, meta = {}) {
@@ -244,7 +256,7 @@
     if (payload.origin && payload.origin === CHART_ORIGIN) return;
     const ts = Number(payload.ts) || Date.now();
     if (payload.kind === "holdoff") {
-      finalizeHold(ts);
+      finalizeHold(ts, { durationMs: payload.durationMs, durationSec: payload.durationSec });
       return;
     }
     if (!payload.mode) return;
@@ -252,7 +264,9 @@
       kind: payload.kind || "pulse",
       mode: payload.mode,
       level: payload.level ?? 0,
-      channel: payload.channel ?? "-"
+      channel: payload.channel ?? "-",
+      durationMs: Number.isFinite(payload.durationMs) ? payload.durationMs : null,
+      durationSec: Number.isFinite(payload.durationSec) ? payload.durationSec : null
     };
     if (payload.btnState) parsed.btnState = payload.btnState;
     enqueuePoint(makePoint(parsed, { ts, source: payload.source || "peer" }));
@@ -282,8 +296,8 @@
     state.serialStats.parsed += 1;
     const ts = Date.now();
     if (parsed.kind === "holdoff") {
-      finalizeHold(ts);
-      emitChartEvent({ kind: "holdoff" }, { ts, source: "serial" });
+      finalizeHold(ts, { durationMs: parsed.durationMs });
+      emitChartEvent({ kind: "holdoff", durationMs: parsed.durationMs }, { ts, source: "serial" });
       return;
     }
     emitChartEvent(parsed, { ts, source: "serial" });
@@ -453,6 +467,9 @@
     if (!(mode in state.counters)) state.counters[mode] = 0;
     const isHold = parsed.kind === "holdon";
     const isPulse = parsed.kind === "pulse";
+    const explicitDurationSec = Number.isFinite(parsed.durationSec)
+      ? Math.max(0, parsed.durationSec)
+      : (Number.isFinite(parsed.durationMs) ? Math.max(0, parsed.durationMs / 1000) : null);
     let holdId = null;
     if (isHold) {
       holdId = ++state.holdSeq;
@@ -466,21 +483,36 @@
       source: meta && meta.source ? meta.source : "bus",
       hold: isHold,
       holdId,
-      durationSec: isPulse ? 0.05 : null
+      durationSec: isPulse ? (explicitDurationSec ?? DEFAULT_PULSE_SEC) : null
     };
   }
 
-  function finalizeHold(endTs) {
+  function finalizeHold(endTs, opts = {}) {
     const active = state.activeHold;
     if (!active) return;
+    const durationSec = Number.isFinite(opts.durationSec)
+      ? Math.max(0, opts.durationSec)
+      : (Number.isFinite(opts.durationMs) ? Math.max(0, opts.durationMs / 1000) : null);
+    const fallbackSec = Number.isFinite(endTs) ? Math.max(0, (endTs - active.ts) / 1000) : null;
+    let updated = false;
+
+    const applyDuration = (point) => {
+      if (!point || point.holdId !== active.id) return false;
+      const next = durationSec != null ? durationSec : fallbackSec;
+      if (next != null) point.durationSec = next;
+      return true;
+    };
     const ds = state.chart?.data?.datasets?.find((d) => d.mode === active.mode);
     if (ds && Array.isArray(ds.data)) {
       for (let i = ds.data.length - 1; i >= 0; i--) {
         const p = ds.data[i];
-        if (p && p.holdId === active.id) {
-          p.durationSec = Math.max(0, (endTs - active.ts) / 1000);
-          break;
-        }
+        if (applyDuration(p)) { updated = true; break; }
+      }
+    }
+    if (!updated && state.pending.length) {
+      for (let i = state.pending.length - 1; i >= 0; i--) {
+        const p = state.pending[i];
+        if (applyDuration(p)) { updated = true; break; }
       }
     }
     state.activeHold = null;

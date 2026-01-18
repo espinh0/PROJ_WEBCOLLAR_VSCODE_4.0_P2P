@@ -32,6 +32,13 @@
           <span>Host</span>
         </button>
         <div class="d-flex flex-column">
+          <label class="form-label small text-muted mb-1">Transporte</label>
+          <select id="tr-signal-select" class="form-select form-select-sm" style="min-width: 220px;">
+            <option value="peerjs">PeerJS (P2P)</option>
+            <option value="firebase">Firebase (RTDB)</option>
+          </select>
+        </div>
+        <div class="d-flex flex-column">
           <label class="form-label small text-muted mb-1">Servidor TURN</label>
           <select id="tr-turn-select" class="form-select form-select-sm" style="min-width: 220px;"></select>
         </div>
@@ -88,6 +95,10 @@
           <input id="tr-link-include-name" class="form-check-input" type="checkbox" />
           <label class="form-check-label small text-muted" for="tr-link-include-name">Incluir username</label>
         </div>
+        <div class="form-check mt-1">
+          <input id="tr-link-include-signal" class="form-check-input" type="checkbox" checked />
+          <label class="form-check-label small text-muted" for="tr-link-include-signal">Incluir transporte</label>
+        </div>
         <div id="tr-invite-link" class="form-control form-control-sm" role="button" tabindex="0" title="Clique para copiar" style="cursor:pointer; user-select:all; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width: 380px;">-</div>
         <div id="tr-invite-hint" class="small text-muted mt-1">Clique no link acima para copiar.</div>
       </div>
@@ -135,6 +146,7 @@
     const relaysEl = $('tr-relays');
     const turnStateEl = $('tr-turn-state');
     const turnSelectEl = $('tr-turn-select');
+    const signalSelectEl = $('tr-signal-select');
 
     const uiBody   = $('tr-body');
 
@@ -159,6 +171,7 @@
 
     const cbIncPass   = $('tr-link-include-pass');
     const cbIncName   = $('tr-link-include-name');
+    const cbIncSignal = $('tr-link-include-signal');
     const inviteEl    = $('tr-invite-link');
     const inviteHint  = $('tr-invite-hint');
     const qrCanvas    = $('tr-qr-canvas');
@@ -175,6 +188,17 @@
     const PEERJS_SERVER_PORT = 443;
     const PEERJS_SERVER_PATH = '/';
     const PEERJS_SERVER_KEY = 'peerjs';
+    const SIGNALING_DEFAULT = 'peerjs';
+    const SIGNALING_ALLOWED = new Set(['peerjs', 'firebase']);
+    const FIREBASE_CONFIG = {
+      apiKey: "AIzaSyCwlgt8N4S6iFL_w0_-YFiB2T94vvOguOQ",
+      authDomain: "ptrainer-sinal.firebaseapp.com",
+      databaseURL: "https://ptrainer-sinal-default-rtdb.firebaseio.com",
+      projectId: "ptrainer-sinal",
+      storageBucket: "ptrainer-sinal.firebasestorage.app",
+      messagingSenderId: "701767192850",
+      appId: "1:701767192850:web:02cfab83d9d419540463cb"
+    };
 
     // Persiste ID estavel usado para presenca e lista de peers
     const PERSISTED_STABLE_ID = ensureStableId();
@@ -222,6 +246,7 @@
       const snap = {
         reason,
         room: activeRoomId || '',
+        transport: activeTransport || signalingMode || '',
         hostId: roomHostId ? shortPeer(roomHostId) : '',
         peerOpen: !!(peer && peer.open),
         peerId: shortPeer(peerId || selfIdFn?.() || ''),
@@ -470,13 +495,20 @@
         ice: p.get('ice') || ''
       };
     }
-    function resolveSignalingMode() {
+    function sanitizeSignalingMode(raw) {
+      const val = String(raw || '').trim().toLowerCase();
+      if (!val) return '';
+      return SIGNALING_ALLOWED.has(val) ? val : '';
+    }
+    function resolveSignalingMode(stored) {
       const url = new URL(window.location.href);
       const signal = (url.searchParams.get('signal') || '').trim().toLowerCase();
-      if (signal && signal !== 'peerjs') {
-        log(`Sinalizador ignorado: ${signal}`);
-      }
-      return 'peerjs';
+      const fromUrl = sanitizeSignalingMode(signal);
+      if (fromUrl) return fromUrl;
+      if (signal) log(`Sinalizador ignorado: ${signal}`);
+      const fromStored = sanitizeSignalingMode(stored);
+      if (fromStored) return fromStored;
+      return SIGNALING_DEFAULT;
     }
 
     function setUiExpanded(expanded) {
@@ -623,6 +655,7 @@
       return autoMode === 'turn';
     }
     function handleNetworkChange() {
+      if (activeTransport === 'firebase') return;
       if (preferredIceMode !== 'auto') return;
       const nextMode = resolveAutoIceMode('change');
       if (!room) return;
@@ -677,6 +710,7 @@
     }
 
     async function runTurnProbe(reason) {
+      if (activeTransport === 'firebase') return;
       if (turnProbeInFlight) return;
       if (typeof RTCPeerConnection === 'undefined') {
         log('TURN probe: RTCPeerConnection indisponivel.');
@@ -815,6 +849,24 @@
     ];
     const PEERJS_UMD_FALLBACK = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js';
     const PEER_OPEN_TIMEOUT_MS = 12000;
+    const FIREBASE_ROOM_ROOT = 'flowgate/rooms';
+    const FIREBASE_SESSION_GRACE_MS = 10000;
+    const FIREBASE_MESSAGE_TTL_MS = 45000;
+    const FIREBASE_SEEN_MAX = 1200;
+
+    let firebaseApp = null;
+    let firebaseDb = null;
+    let firebaseApi = null;
+    let firebaseRoomKey = '';
+    let firebaseSessionStart = 0;
+    let firebaseConnected = false;
+    let firebaseActionUnsubs = new Map();
+    let firebasePresenceUnsubs = [];
+    let firebasePresenceSelfRef = null;
+    let firebasePresenceOnDisconnect = null;
+    let firebaseCleanupTimers = new Set();
+    let firebaseSeenMessages = new Set();
+    let firebaseSeenQueue = [];
 
     function loadScriptOnce(src, id) {
       return new Promise((resolve) => {
@@ -841,6 +893,223 @@
       });
     }
 
+    function firebaseRoomPath(roomKey) {
+      return `${FIREBASE_ROOM_ROOT}/${roomKey}`;
+    }
+
+    function rememberFirebaseMessage(id) {
+      if (!id) return false;
+      if (firebaseSeenMessages.has(id)) return false;
+      firebaseSeenMessages.add(id);
+      firebaseSeenQueue.push(id);
+      if (firebaseSeenQueue.length > FIREBASE_SEEN_MAX) {
+        const old = firebaseSeenQueue.shift();
+        if (old) firebaseSeenMessages.delete(old);
+      }
+      return true;
+    }
+
+    function resetFirebaseSeen() {
+      firebaseSeenMessages = new Set();
+      firebaseSeenQueue = [];
+    }
+
+    function clearFirebaseCleanupTimers() {
+      for (const timer of firebaseCleanupTimers) {
+        clearTimeout(timer);
+      }
+      firebaseCleanupTimers.clear();
+    }
+
+    function stopFirebaseActionListeners() {
+      for (const unsub of firebaseActionUnsubs.values()) {
+        try { unsub(); } catch {}
+      }
+      firebaseActionUnsubs = new Map();
+    }
+
+    function stopFirebasePresenceListeners() {
+      for (const unsub of firebasePresenceUnsubs) {
+        try { unsub(); } catch {}
+      }
+      firebasePresenceUnsubs = [];
+    }
+
+    function teardownFirebase() {
+      firebaseConnected = false;
+      stopFirebaseActionListeners();
+      stopFirebasePresenceListeners();
+      clearFirebaseCleanupTimers();
+      try { firebasePresenceOnDisconnect?.cancel?.(); } catch {}
+      firebasePresenceOnDisconnect = null;
+      if (firebasePresenceSelfRef && firebaseApi?.remove) {
+        try { firebaseApi.remove(firebasePresenceSelfRef); } catch {}
+      }
+      firebasePresenceSelfRef = null;
+      firebaseRoomKey = '';
+      firebaseSessionStart = 0;
+      resetFirebaseSeen();
+    }
+
+    async function ensureFirebase() {
+      if (firebaseApi && firebaseDb) return firebaseApi;
+      try {
+        const appMod = await import('https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js');
+        const authMod = await import('https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js');
+        const dbMod = await import('https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js');
+        const apps = (typeof appMod.getApps === 'function') ? appMod.getApps() : [];
+        const app = apps && apps.length ? appMod.getApp() : appMod.initializeApp(FIREBASE_CONFIG);
+        const auth = authMod.getAuth(app);
+        await authMod.signInAnonymously(auth);
+        const db = dbMod.getDatabase(app);
+        firebaseApp = app;
+        firebaseDb = db;
+        firebaseApi = {
+          ref: dbMod.ref,
+          set: dbMod.set,
+          push: dbMod.push,
+          remove: dbMod.remove,
+          onValue: dbMod.onValue,
+          onChildAdded: dbMod.onChildAdded,
+          onChildChanged: dbMod.onChildChanged,
+          onChildRemoved: dbMod.onChildRemoved,
+          onDisconnect: dbMod.onDisconnect,
+          query: dbMod.query,
+          orderByChild: dbMod.orderByChild,
+          startAt: dbMod.startAt,
+          limitToLast: dbMod.limitToLast,
+          db
+        };
+        return firebaseApi;
+      } catch (e) {
+        log(`Firebase indisponivel: ${e?.message || e}`);
+        return null;
+      }
+    }
+
+    function scheduleFirebaseCleanup(action, key) {
+      if (!firebaseApi || !firebaseRoomKey || !key) return;
+      const api = firebaseApi;
+      const ref = api.ref(api.db, `${firebaseRoomPath(firebaseRoomKey)}/actions/${action}/${key}`);
+      const timer = setTimeout(() => {
+        try {
+          const remove = api.remove(ref);
+          if (remove && typeof remove.catch === 'function') remove.catch(() => {});
+        } catch {}
+      }, FIREBASE_MESSAGE_TTL_MS);
+      firebaseCleanupTimers.add(timer);
+    }
+
+    function ensureFirebaseActionListener(action) {
+      if (!firebaseConnected || !firebaseApi || !firebaseRoomKey) return;
+      if (firebaseActionUnsubs.has(action)) return;
+      const api = firebaseApi;
+      const baseRef = api.ref(api.db, `${firebaseRoomPath(firebaseRoomKey)}/actions/${action}`);
+      const startAtTs = (firebaseSessionStart || Date.now()) - FIREBASE_SESSION_GRACE_MS;
+      const queryRef = api.query(baseRef, api.orderByChild('ts'), api.startAt(startAtTs));
+      const unsub = api.onChildAdded(queryRef, (snap) => {
+        const data = snap.val();
+        if (!data || data.__flowgate !== FLOWGATE_PROTO) return;
+        const id = snap.key;
+        if (!rememberFirebaseMessage(id)) return;
+        const from = String(data.from || '');
+        if (from && from === selfIdFn()) return;
+        const target = data.target ? String(data.target) : '';
+        if (target && target !== String(selfIdFn()) && target !== String(STABLE_SELF_ID)) return;
+        handleEnvelope(data, null);
+      });
+      firebaseActionUnsubs.set(action, unsub);
+    }
+
+    function markFirebasePeerOffline(peerId) {
+      if (!peerId) return;
+      const key = String(peerId);
+      const cur = peers.get(key);
+      if (!cur || cur.online === false) return;
+      cur.online = false;
+      cur.lastSeen = Date.now();
+      peers.set(key, cur);
+      if (key !== STABLE_SELF_ID) emitPeerEvent('peer-leave', key, cur);
+      if (activeTransport === 'firebase') notifyPeerLeave(key, false);
+      renderPeerList();
+      updateStatusDetails();
+    }
+
+    function ensureFirebasePresenceListener() {
+      if (!firebaseConnected || !firebaseApi || !firebaseRoomKey) return;
+      if (firebasePresenceUnsubs.length) return;
+      const api = firebaseApi;
+      const baseRef = api.ref(api.db, `${firebaseRoomPath(firebaseRoomKey)}/presence`);
+      const handleUpsert = (snap) => {
+        const val = snap.val();
+        if (!val) return;
+        const peerId = String(val.peerId || snap.key || '');
+        if (!peerId) return;
+        if (peerId === selfIdFn()) return;
+        const payload = { ...val, peerId };
+        dispatchAction('presence', payload, peerId);
+      };
+      const handleRemove = (snap) => {
+        const peerId = String(snap.key || '');
+        if (!peerId) return;
+        if (peerId === selfIdFn()) return;
+        markFirebasePeerOffline(peerId);
+      };
+      firebasePresenceUnsubs = [
+        api.onChildAdded(baseRef, handleUpsert),
+        api.onChildChanged(baseRef, handleUpsert),
+        api.onChildRemoved(baseRef, handleRemove)
+      ];
+    }
+
+    function firebaseSendPresence(payload) {
+      if (!firebaseConnected || !firebaseApi || !firebaseRoomKey) return false;
+      const api = firebaseApi;
+      const key = String(selfIdFn() || STABLE_SELF_ID);
+      const ref = api.ref(api.db, `${firebaseRoomPath(firebaseRoomKey)}/presence/${key}`);
+      firebasePresenceSelfRef = ref;
+      if (!firebasePresenceOnDisconnect) {
+        try {
+          firebasePresenceOnDisconnect = api.onDisconnect(ref);
+          firebasePresenceOnDisconnect.remove();
+        } catch {}
+      }
+      const data = { ...(payload || {}) };
+      data.peerId = key;
+      data.sid = data.sid || STABLE_SELF_ID;
+      data.t = Date.now();
+      try {
+        const write = api.set(ref, data);
+        if (write && typeof write.catch === 'function') {
+          write.catch((err) => log(`Firebase presence falhou: ${err?.message || err}`));
+        }
+      } catch (err) {
+        log(`Firebase presence falhou: ${err?.message || err}`);
+      }
+      return true;
+    }
+
+    function firebaseSendAction(action, payload, targetPeerId) {
+      if (!firebaseConnected || !firebaseApi || !firebaseRoomKey) return false;
+      const api = firebaseApi;
+      const envelope = buildEnvelope(action, payload, targetPeerId);
+      const baseRef = api.ref(api.db, `${firebaseRoomPath(firebaseRoomKey)}/actions/${action}`);
+      const msgRef = api.push(baseRef);
+      const msgKey = msgRef?.key || '';
+      if (msgKey) envelope.id = msgKey;
+      try {
+        const write = api.set(msgRef, envelope);
+        if (write && typeof write.catch === 'function') {
+          write.catch((err) => log(`Firebase send falhou: ${err?.message || err}`));
+        }
+      } catch (err) {
+        log(`Firebase send falhou: ${err?.message || err}`);
+        return false;
+      }
+      if (msgKey) scheduleFirebaseCleanup(action, msgKey);
+      return true;
+    }
+
     async function loadPeerCtor() {
       const errors = [];
       for (const url of PEERJS_IMPORT_CDNS) {
@@ -863,9 +1132,8 @@
     try {
       PeerCtor = await loadPeerCtor();
     } catch (e) {
-      setStatus('erro: import');
+      PeerCtor = null;
       log(`PeerJS indisponivel: ${e?.message || e}`);
-      throw e;
     }
 
     let QR = null;
@@ -926,7 +1194,8 @@
       const ratio = Number.isFinite(num) ? (num / 0xffffffff) : 0.5;
       return min + (max - min) * ratio;
     }
-    let signalingMode = resolveSignalingMode();
+    let signalingMode = SIGNALING_DEFAULT;
+    let activeTransport = '';
 
     // ======= Tags locais (host/serial/etc.) =======
     function normalizeTag(t) { return String(t || '').trim().toLowerCase().replace(/\s+/g, '-'); }
@@ -1028,7 +1297,11 @@
 
       base.searchParams.set('room', roomId);
       base.searchParams.set('autojoin', '1');
-      base.searchParams.delete('signal');
+      if (cbIncSignal.checked && signalingMode && signalingMode !== SIGNALING_DEFAULT) {
+        base.searchParams.set('signal', signalingMode);
+      } else {
+        base.searchParams.delete('signal');
+      }
 
       if (cbIncName.checked && name) base.searchParams.set('name', name);
       else base.searchParams.delete('name');
@@ -1036,8 +1309,13 @@
       if (cbIncPass.checked && password) base.searchParams.set('pass', password);
       else base.searchParams.delete('pass');
 
-      if (preferredIceMode && preferredIceMode !== ICE_MODE_DEFAULT) base.searchParams.set('ice', preferredIceMode);
-      else base.searchParams.delete('ice');
+      if (signalingMode === 'firebase') {
+        base.searchParams.delete('ice');
+      } else if (preferredIceMode && preferredIceMode !== ICE_MODE_DEFAULT) {
+        base.searchParams.set('ice', preferredIceMode);
+      } else {
+        base.searchParams.delete('ice');
+      }
 
       const link = base.toString();
       inviteEl.textContent = link;
@@ -1090,9 +1368,24 @@
     // autoJoinCb removido: autojoin sempre ativo
     cbIncPass.addEventListener('change', () => { generateInviteLink(); saveState({ includePass: !!cbIncPass.checked }); });
     cbIncName.addEventListener('change', () => { generateInviteLink(); saveState({ includeName: !!cbIncName.checked }); });
+    cbIncSignal.addEventListener('change', () => { generateInviteLink(); saveState({ includeSignal: !!cbIncSignal.checked }); });
     if (turnSelectEl) {
       turnSelectEl.addEventListener('change', () => {
         applyTurnPreset(turnSelectEl.value, { reconnect: true });
+      });
+    }
+    if (signalSelectEl) {
+      signalSelectEl.addEventListener('change', () => {
+        const next = sanitizeSignalingMode(signalSelectEl.value) || SIGNALING_DEFAULT;
+        if (next === signalingMode) return;
+        signalingMode = next;
+        saveState({ signalingMode });
+        generateInviteLink();
+        refreshRelayUi();
+        if (room) {
+          disconnect('signal-change');
+          setTimeout(() => connect(`signal-change:${signalingMode}`), 200);
+        }
       });
     }
 
@@ -1362,7 +1655,10 @@
       cur.sid = meta.sid || cur.sid;
       const wasOnline = peers.has(key) ? peers.get(key).online !== false : false;
       peers.set(key, cur);
-      if (!wasOnline && cur.online !== false && key !== STABLE_SELF_ID) emitPeerEvent('peer-join', key, cur);
+      if (!wasOnline && cur.online !== false && key !== STABLE_SELF_ID) {
+        emitPeerEvent('peer-join', key, cur);
+        if (activeTransport === 'firebase') notifyPeerJoin(key, false);
+      }
       updateStatusDetails();
     }
 
@@ -1545,6 +1841,7 @@
         if (isStale && meta.online !== false) {
           meta.online = false;
           if (key !== STABLE_SELF_ID) emitPeerEvent('peer-leave', key, meta);
+          if (activeTransport === 'firebase') notifyPeerLeave(key, false);
           changed = true;
         }
       }
@@ -1619,6 +1916,7 @@
 
     function isConnectionAlive() {
       if (!room) return false;
+      if (activeTransport === 'firebase') return firebaseConnected;
       if (isHostMode) return !!(peer && peer.open);
       return !!(hostConn && hostConn.open);
     }
@@ -1810,6 +2108,25 @@
       }
     }
 
+    function makeActionFirebase(action) {
+      let handlers = actionHandlers.get(action);
+      if (!handlers) {
+        handlers = new Set();
+        actionHandlers.set(action, handlers);
+      }
+      if (action === 'presence') {
+        ensureFirebasePresenceListener();
+      } else {
+        ensureFirebaseActionListener(action);
+      }
+      const send = (payload, targetPeerId) => {
+        if (action === 'presence') return firebaseSendPresence(payload);
+        return firebaseSendAction(action, payload, targetPeerId);
+      };
+      const get = (cb) => { if (typeof cb === 'function') handlers.add(cb); };
+      return [send, get];
+    }
+
     function makeAction(action) {
       let handlers = actionHandlers.get(action);
       if (!handlers) {
@@ -1922,6 +2239,7 @@
     }
 
     function connectToHost() {
+      if (activeTransport === 'firebase') return;
       if (isHostMode || !activeHostId) return;
       if (hubSuppressed) {
         snapshotState('connectToHost-suppressed');
@@ -2098,6 +2416,7 @@
     }
 
     function scheduleHostReconnect() {
+      if (activeTransport === 'firebase') return;
       if (isHostMode) return;
       if (hubTakeoverTimer) return;
       if (hostReconnectTimer) return;
@@ -2144,6 +2463,7 @@
     }
 
     function maybeScheduleHubClaim(reason) {
+      if (activeTransport === 'firebase') return false;
       if (!room || isHostMode) return false;
       snapshotState('hub-claim-check', { reason });
       if (hostConn && hostConn.open) { resetHubClaimRetry(); return false; }
@@ -2159,6 +2479,7 @@
     }
 
     function scheduleHubClaimRetry(reason, opts = {}) {
+      if (activeTransport === 'firebase') return;
       if (!isHostCandidate()) return;
       if (!isPreferredHubSelf() && !canOverridePreferredHub()) return;
       if (isHostMode) return;
@@ -2213,6 +2534,7 @@
     }
 
     function scheduleHubTakeover(reason) {
+      if (activeTransport === 'firebase') return;
       if (isHostMode) return;
       if (!isHostCandidate()) return;
       if (!isPreferredHubSelf() && !canOverridePreferredHub()) return;
@@ -2232,6 +2554,7 @@
     }
 
     function handleHostDisconnect(reason) {
+      if (activeTransport === 'firebase') return;
       if (isHostMode) return;
       hostConnectFailures = Math.min(hostConnectFailures + 1, 999);
       if (!hostConnLostAt) hostConnLostAt = Date.now();
@@ -2306,6 +2629,7 @@
     }
 
     function requestTurnFallback(reason) {
+      if (activeTransport === 'firebase') return;
       if (iceMode === 'turn') {
         requestTurnFailover(reason || 'ice-failed');
         return;
@@ -2362,17 +2686,30 @@
     }
 
     function createRoomApi() {
+      const apiMakeAction = (activeTransport === 'firebase') ? makeActionFirebase : makeAction;
       return {
-        makeAction,
+        makeAction: apiMakeAction,
         onPeerJoin: (cb) => { if (typeof cb === 'function') peerJoinHandlers.add(cb); },
         onPeerLeave: (cb) => { if (typeof cb === 'function') peerLeaveHandlers.add(cb); },
-        leave: () => teardownPeer()
+        leave: () => {
+          if (activeTransport === 'firebase') teardownFirebase();
+          else teardownPeer();
+        }
       };
     }
 
     function refreshRelayUi() {
       const sid = (typeof selfIdFn === 'function') ? selfIdFn() : '';
       selfEl.textContent = sid || '-';
+      const transport = activeTransport || signalingMode;
+      if (transport === 'firebase') {
+        if (relaysEl) relaysEl.textContent = '-';
+        if (turnStateEl) turnStateEl.textContent = 'firebase';
+        if (turnSelectEl) turnSelectEl.disabled = true;
+        updateStatusDetails();
+        return;
+      }
+      if (turnSelectEl) turnSelectEl.disabled = false;
       const open = Array.from(peerConnections.values()).filter((c) => c && c.open);
       if (open.length) relaysEl.textContent = open.map((c) => shortPeer(c.peer)).join(', ');
       else relaysEl.textContent = '(nenhum conectado)';
@@ -2462,7 +2799,13 @@
     }
 
     async function initPeer(wantHost, useRoomId) {
-      if (!PeerCtor) throw new Error('PeerJS indisponivel');
+      if (!PeerCtor) {
+        try {
+          PeerCtor = await loadPeerCtor();
+        } catch (e) {
+          throw new Error(`PeerJS indisponivel: ${e?.message || e}`);
+        }
+      }
       log(`Init PeerJS: modo=${wantHost ? 'host' : 'cliente'} signal=${signalingMode}`);
       const requestedIceMode = sanitizeIceMode(iceMode || preferredIceMode);
       const iceOptions = resolveIceOptions(requestedIceMode);
@@ -2555,7 +2898,7 @@
       connectInProgress = true;
       try {
         log(`Conectar acionado (${trigger}).`);
-        snapshotState('connect-start', { trigger });
+        snapshotState('connect-start', { trigger, signal: signalingMode });
         const isHubTrigger = /^hub-(claim|takeover)/.test(String(trigger));
         const preserveClaimAttempt = isHubTrigger;
         if (room) {
@@ -2568,8 +2911,9 @@
         const name = (userInput.value || '').trim();
         const autojoin = true;
 
-        saveState({ room: roomId, pass: password, name, autojoin });
+        saveState({ room: roomId, pass: password, name, autojoin, signalingMode });
         generateInviteLink();
+        const useFirebase = signalingMode === 'firebase';
 
         activeRoomId = roomId;
         roomHostId = buildRoomHostId(roomId, password);
@@ -2587,7 +2931,7 @@
           activeHostId = rememberedHostId;
           snapshotState('host-id-remember', { hostIdIndex, activeHostId: shortPeer(activeHostId) });
         }
-        const wantsHub = !hubSuppressed && (localTags.has('host-hub') || /^hub-/.test(String(trigger)));
+        const wantsHub = !useFirebase && !hubSuppressed && (localTags.has('host-hub') || /^hub-/.test(String(trigger)));
         isHostMode = false;
         if (pendingTurnFallback || /^turn-(fallback|failover)/.test(String(trigger))) {
           iceMode = 'turn';
@@ -2596,103 +2940,124 @@
         }
         pendingTurnFallback = false;
         turnFailoverPending = false;
-        log(`Sala=${roomId} host=${wantsHub ? 'sim' : 'nao'} signal=${signalingMode} ice=${iceMode}`);
-
-        setStatus(wantsHub ? 'conectando host...' : 'conectando peerjs...');
-        runTurnProbe(trigger);
+        if (useFirebase) {
+          log(`Sala=${roomId} host=nao signal=${signalingMode}`);
+          setStatus('conectando firebase...');
+        } else {
+          log(`Sala=${roomId} host=${wantsHub ? 'sim' : 'nao'} signal=${signalingMode} ice=${iceMode}`);
+          setStatus(wantsHub ? 'conectando host...' : 'conectando peerjs...');
+          runTurnProbe(trigger);
+        }
         teardownPeer({ preserveClaimAttempt });
+        if (useFirebase) teardownFirebase();
 
-        const useRoomId = true;
-        let hostReady = false;
-        let lastHostErr = null;
+        if (!useFirebase) {
+          const useRoomId = true;
+          let hostReady = false;
+          let lastHostErr = null;
 
-        if (wantsHub) {
-          const maxAttempts = HOST_ID_SUFFIXES.length;
-          for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-            try {
-              await initPeer(true, useRoomId);
-              hostReady = true;
-              break;
-            } catch (e) {
-              lastHostErr = e;
-              const errType = e?.type || '';
-              if (errType === 'unavailable-id') {
-                markHostIdTaken('unavailable-id');
-                teardownPeer({ preserveClaimAttempt: preserveClaimAttempt || errType === 'unavailable-id' });
-                if (isHubTrigger && advanceHostId('unavailable-id')) {
-                  resetHostIdTaken('rotate');
-                  continue;
+          if (wantsHub) {
+            const maxAttempts = HOST_ID_SUFFIXES.length;
+            for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+              try {
+                await initPeer(true, useRoomId);
+                hostReady = true;
+                break;
+              } catch (e) {
+                lastHostErr = e;
+                const errType = e?.type || '';
+                if (errType === 'unavailable-id') {
+                  markHostIdTaken('unavailable-id');
+                  teardownPeer({ preserveClaimAttempt: preserveClaimAttempt || errType === 'unavailable-id' });
+                  if (isHubTrigger && advanceHostId('unavailable-id')) {
+                    resetHostIdTaken('rotate');
+                    continue;
+                  }
+                  break;
                 }
                 break;
               }
-              break;
+            }
+          } else {
+            try {
+              await initPeer(false, useRoomId);
+            } catch (e) {
+              setStatus('erro ao conectar');
+              snapshotState('connect-error', { errType: e?.type || '' });
+              return;
             }
           }
-        } else {
-          try {
-            await initPeer(false, useRoomId);
-          } catch (e) {
-            setStatus('erro ao conectar');
-            snapshotState('connect-error', { errType: e?.type || '' });
-            return;
-          }
-        }
 
-        if (wantsHub && hostReady) {
-          isHostMode = true;
-          setHubTag(true);
-          resetHubClaimRetry();
-          resetHostIdTaken('host-acquired');
-          snapshotState('connect-peer-ready', { wantsHub: true });
-        } else if (wantsHub) {
-          const errType = lastHostErr?.type || '';
-          if (errType === 'unavailable-id') {
-            log('Host ocupado (ghost), aguardando liberar o id original...');
+          if (wantsHub && hostReady) {
+            isHostMode = true;
+            setHubTag(true);
+            resetHubClaimRetry();
+            resetHostIdTaken('host-acquired');
+            snapshotState('connect-peer-ready', { wantsHub: true });
+          } else if (wantsHub) {
+            const errType = lastHostErr?.type || '';
+            if (errType === 'unavailable-id') {
+              log('Host ocupado (ghost), aguardando liberar o id original...');
+              setHubTag(false);
+              isHostMode = false;
+              teardownPeer({ preserveClaimAttempt: true });
+              scheduleHubClaimRetry('id-ocupado', { reuseAttempt: true });
+              snapshotState('connect-host-occupied', { errType });
+              return;
+            }
+            log('Host indisponivel, entrando como visitante.');
             setHubTag(false);
             isHostMode = false;
-            teardownPeer({ preserveClaimAttempt: true });
-            scheduleHubClaimRetry('id-ocupado', { reuseAttempt: true });
-            snapshotState('connect-host-occupied', { errType });
-            return;
+            teardownPeer({ preserveClaimAttempt: preserveClaimAttempt || errType === 'unavailable-id' });
+            try { await initPeer(false, useRoomId); }
+            catch {
+              setStatus('erro ao conectar');
+              snapshotState('connect-error', { errType });
+              return;
+            }
+            scheduleHubClaimRetry(`host-init-${errType || 'falha'}`);
+            snapshotState('connect-host-fallback', { errType });
+          } else {
+            isHostMode = false;
+            setHubTag(false);
+            snapshotState('connect-peer-ready', { wantsHub: false });
           }
-          log('Host indisponivel, entrando como visitante.');
-          setHubTag(false);
-          isHostMode = false;
-          teardownPeer({ preserveClaimAttempt: preserveClaimAttempt || errType === 'unavailable-id' });
-          try { await initPeer(false, useRoomId); }
-          catch {
-            setStatus('erro ao conectar');
-            snapshotState('connect-error', { errType });
-            return;
-          }
-          scheduleHubClaimRetry(`host-init-${errType || 'falha'}`);
-          snapshotState('connect-host-fallback', { errType });
         } else {
+          const api = await ensureFirebase();
+          if (!api) {
+            setStatus('erro: firebase');
+            snapshotState('connect-error', { errType: 'firebase' });
+            return;
+          }
+          firebaseConnected = true;
+          firebaseRoomKey = buildRoomHostId(roomId, password);
+          firebaseSessionStart = Date.now();
+          resetFirebaseSeen();
           isHostMode = false;
-          setHubTag(false);
-          snapshotState('connect-peer-ready', { wantsHub: false });
+          snapshotState('connect-peer-ready', { wantsHub: false, transport: 'firebase' });
         }
 
+        activeTransport = useFirebase ? 'firebase' : 'peerjs';
         room = createRoomApi();
 
-      // APLICA PATCH ANTES de expor a sala
-      patchChatActionLoopback(room);
+        // APLICA PATCH ANTES de expor a sala
+        patchChatActionLoopback(room);
 
-      window.__TRYSTERO_ROOM__ = room;
-      window.dispatchEvent(new CustomEvent('trystero:room', { detail: { room } }));
-      window.__TRYSTERO_CHAT__?._bindToRoom?.(room);
-      ensureFlowgateApi();
-      emitFlowgateEvent('room_changed', { room, roomId: activeRoomId, connected: true });
+        window.__TRYSTERO_ROOM__ = room;
+        window.dispatchEvent(new CustomEvent('trystero:room', { detail: { room } }));
+        window.__TRYSTERO_CHAT__?._bindToRoom?.(room);
+        ensureFlowgateApi();
+        emitFlowgateEvent('room_changed', { room, roomId: activeRoomId, connected: true });
 
-      // reset peers
-      peers = new Map();
-      syncSelfPeer();
-      renderPeerList();
+        // reset peers
+        peers = new Map();
+        syncSelfPeer();
+        renderPeerList();
 
-      if (!hubSuppressed) setHubSuppressed(false, 'connect-complete');
+        if (!hubSuppressed) setHubSuppressed(false, 'connect-complete');
 
-      // presence
-      const [sendPresence, onPresence] = room.makeAction('presence');
+        // presence
+        const [sendPresence, onPresence] = room.makeAction('presence');
 
       function currentLocalPresence() {
         const nm = (userInput.value || '').trim() || '';
@@ -2773,7 +3138,7 @@
       localTagsListener = () => announcePresence();
       window.addEventListener('trystero:localTags', localTagsListener);
 
-      if (!isHostMode) connectToHost();
+      if (!isHostMode && activeTransport !== 'firebase') connectToHost();
 
       // ping diagnostico (opcional)
       const [sendPing, getPing] = room.makeAction('ping');
@@ -2792,7 +3157,7 @@
 
       syncTimer = setInterval(refreshRelayUi, 1000);
 
-        setStatus('conectado');
+        setStatus(activeTransport === 'firebase' ? 'conectado (firebase)' : 'conectado');
         refreshRelayUi();
         snapshotState('connect-complete');
       } catch (err) {
@@ -2809,8 +3174,10 @@
       if (!room) return;
       const preserveClaimAttempt = /^hub-(claim|takeover)/.test(String(reason));
       snapshotState('disconnect-start', { reason });
+      try { teardownFirebase(); } catch {}
       try { teardownPeer({ preserveClaimAttempt }); } catch {}
       room = null;
+      activeTransport = '';
       activeRoomId = '';
       roomHostId = '';
       activeHostId = '';
@@ -2851,6 +3218,8 @@
     (function init() {
       const stored = loadState();
       const qp = readUrlParams();
+      signalingMode = resolveSignalingMode(stored.signalingMode || stored.signal);
+      if (signalSelectEl) signalSelectEl.value = signalingMode;
       const storedTurnId = stored.turnPresetId || TURN_DEFAULT_ID;
       preferredIceMode = sanitizeIceMode(qp.ice || stored.iceMode || ICE_MODE_DEFAULT);
       iceMode = preferredIceMode;
@@ -2870,6 +3239,7 @@
       userInput.value = nameVal;
       cbIncPass.checked = (typeof stored.includePass === 'boolean') ? stored.includePass : true;
       cbIncName.checked = (typeof stored.includeName === 'boolean') ? stored.includeName : false;
+      cbIncSignal.checked = (typeof stored.includeSignal === 'boolean') ? stored.includeSignal : true;
       const hostStored = (typeof stored.localHost === 'boolean') ? stored.localHost : true;
       hostBtn.classList.toggle('active', hostStored);
       if (hostStored) window.__TRYSTERO_PEER__.addLocalTag('host');
@@ -2881,9 +3251,11 @@
         autojoin: true,
         includePass: cbIncPass.checked,
         includeName: cbIncName.checked,
+        includeSignal: cbIncSignal.checked,
         localHost: hostStored,
         iceMode: preferredIceMode,
-        turnPresetId: storedTurnId
+        turnPresetId: storedTurnId,
+        signalingMode
       });
 
       setUiExpanded(true);

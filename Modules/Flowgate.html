@@ -597,8 +597,11 @@
       if (!info) return 'auto';
       const type = String(info.type || '').toLowerCase();
       const effective = String(info.effectiveType || '').toLowerCase();
+      const isUnknownType = !type || type === 'unknown';
+      if (info.saveData) return 'turn';
       if (type === 'cellular' || type === 'none') return 'turn';
       if (effective === 'slow-2g' || effective === '2g' || effective === '3g') return 'turn';
+      if (effective === '4g' && (type === 'cellular' || isUnknownType)) return 'turn';
       return 'auto';
     }
     function resolveAutoIceMode(reason) {
@@ -1603,6 +1606,7 @@
     const HUB_OVERRIDE_AFTER_MS = 6000;
     const HOST_CONNECT_ROTATE_AFTER = 1;
     const HOST_CONNECT_ROTATE_COOLDOWN_MS = 5000;
+    const ICE_DISCONNECT_GRACE_MS = 4000;
     let hostIdProbeAttempts = 0;
     let lastHostRotateAt = 0;
 
@@ -1884,6 +1888,7 @@
       });
       conn.on('data', (data) => handleEnvelope(data, conn));
       conn.on('close', () => {
+        clearIceDisconnectTimer(conn);
         peerConnections.delete(conn.peer);
         turnStateByPeer.delete(conn.peer);
         refreshRelayUi();
@@ -1969,6 +1974,26 @@
       return true;
     }
 
+    function clearIceDisconnectTimer(conn) {
+      if (!conn || !conn.__ICE_DISCONNECT_TIMER__) return;
+      clearTimeout(conn.__ICE_DISCONNECT_TIMER__);
+      conn.__ICE_DISCONNECT_TIMER__ = null;
+    }
+
+    function scheduleIceDisconnectRecovery(conn, label) {
+      if (!conn || conn.__ICE_DISCONNECT_TIMER__) return;
+      const pc = conn.peerConnection;
+      if (!pc) return;
+      conn.__ICE_DISCONNECT_TIMER__ = setTimeout(() => {
+        conn.__ICE_DISCONNECT_TIMER__ = null;
+        if (!room || connectInProgress) return;
+        if (!conn.open) return;
+        if (pc.iceConnectionState !== 'disconnected') return;
+        log(`ICE ${label}: desconectado > ${ICE_DISCONNECT_GRACE_MS}ms, tentando relay`);
+        requestTurnFallback('ice-disconnected');
+      }, ICE_DISCONNECT_GRACE_MS);
+    }
+
     function attachPeerConnectionDebug(conn, label) {
       if (!conn || conn.__PC_DEBUG_ATTACHED__) return;
       const pc = conn.peerConnection;
@@ -1981,7 +2006,18 @@
       const maxCand = 8;
       pc.addEventListener('iceconnectionstatechange', () => {
         log(`${prefix} iceState=${pc.iceConnectionState}`);
-        if (pc.iceConnectionState === 'failed') requestTurnFallback('ice-failed');
+        if (pc.iceConnectionState === 'failed') {
+          clearIceDisconnectTimer(conn);
+          requestTurnFallback('ice-failed');
+          return;
+        }
+        if (pc.iceConnectionState === 'disconnected') {
+          scheduleIceDisconnectRecovery(conn, label);
+          return;
+        }
+        if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed' || pc.iceConnectionState === 'closed') {
+          clearIceDisconnectTimer(conn);
+        }
       });
       pc.addEventListener('connectionstatechange', () => {
         log(`${prefix} connState=${pc.connectionState}`);
@@ -2306,6 +2342,7 @@
       lastHostRotateAt = 0;
       try {
         for (const conn of peerConnections.values()) {
+          clearIceDisconnectTimer(conn);
           try { conn.close(); } catch {}
         }
       } catch {}

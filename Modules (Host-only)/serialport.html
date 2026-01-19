@@ -93,6 +93,7 @@
     readPipeClosed: null,
     portOpening: null,
     transport: 'ble',
+    userDisconnect: false,
 
     // Bluetooth clássico (GATT SPP-like) - opcional
     btDevice: null,
@@ -265,11 +266,15 @@
         log('Leitura interrompida: ' + (e.message || e), "warn");
       } finally {
         try { reader.releaseLock(); } catch {}
+        if (state.transport === 'serial' && state.port === port) {
+          disconnectSerial({ isEvent: true }).catch(()=>{});
+        }
       }
     })();
 
     setStatus("Conectado", describePortText(port));
     setButtons(true);
+    state.userDisconnect = false;
     syncGlobals();
     window.dispatchEvent(new Event("serial-connected"));
     log('Porta aberta @' + baud + ' bps');
@@ -339,6 +344,7 @@
 
     setStatus("Conectado (BLE)", device.name || device.id);
     setButtons(true);
+    state.userDisconnect = false;
     syncGlobals();
     window.dispatchEvent(new Event("serial-connected"));
     log('Conex??o BLE estabelecida com ' + (device.name || '(sem nome)'));
@@ -506,6 +512,7 @@
   function scheduleReconnect() {
     if (!autoChk?.checked) return;
     if (!isHost()) return;
+    if (state.userDisconnect) return;
     if (reconnectTimer) return;
 
     reconnectTimer = setTimeout(async () => {
@@ -598,6 +605,7 @@
 
   if (btnDisconnect) {
     btnDisconnect.addEventListener("click", () => {
+      state.userDisconnect = true;
       disconnectSerial({ forgetPermission: true }).catch(()=>{});
     });
   }
@@ -662,8 +670,14 @@
   initialize();
 
   // watchers de host tag
-  window.addEventListener("flowgate:local_tags_changed", () => { setButtons(!!state.port || !!state.bleDevice); });
-  window.addEventListener("trystero:localTags", () => { setButtons(!!state.port || !!state.bleDevice); });
+  window.addEventListener("flowgate:local_tags_changed", () => {
+    setButtons(!!state.port || !!state.bleDevice);
+    if (autoChk?.checked && isHost()) scheduleReconnect();
+  });
+  window.addEventListener("trystero:localTags", () => {
+    setButtons(!!state.port || !!state.bleDevice);
+    if (autoChk?.checked && isHost()) scheduleReconnect();
+  });
 
   if (navigator.serial && typeof navigator.serial.addEventListener === "function") {
     navigator.serial.addEventListener("disconnect", (event) => {

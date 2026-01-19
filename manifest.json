@@ -1,0 +1,29 @@
+{
+"name": "Petrainer PET998DR - Web Controller",
+"short_name": "Pet-Controller",
+"start_url": "index.html",
+"display": "standalone",
+"description": "Interface web responsiva que simula o controle e envia comandos via Web Serial para transmissor 433 MHz.",
+"lang": "pt-BR",
+"dir": "auto",
+"theme_color": "#0f0f12",
+"background_color": "#0f0f12",
+"orientation": "any",
+"icons": [
+    {
+        "src": "Ico.ico",
+        "sizes": "any",
+        "type": "image/x-icon",
+        "purpose": "any"
+    }
+],
+"screenshots": [
+    {
+      "src": "screenshot.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Aplicação principal"
+    }
+  ]
+}

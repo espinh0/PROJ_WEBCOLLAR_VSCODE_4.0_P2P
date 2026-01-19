@@ -269,6 +269,12 @@
   // ---------- CONFIG ----------
   const POLL_MS   = 35;     // leitura do audio (mais rapida)
   const COMMIT_MS = 120;    // commit do estado hold (baixo delay / baixo jitter)
+  const LEVEL_BROADCAST_MS = 90; // minimo entre pacotes quando acima do threshold
+  const LEVEL_BROADCAST_MS_IDLE = 260; // mais lento quando abaixo do threshold
+  const LEVEL_KEEPALIVE_MS = 2000; // keepalive acima do threshold
+  const LEVEL_KEEPALIVE_MS_IDLE = 8000; // keepalive abaixo do threshold
+  const LEVEL_DELTA_PCT = 1; // mudanca minima para enviar nivel antes do keepalive
+  const CFG_BROADCAST_MS = 180; // throttle de envio de config ao arrastar sliders
   const STEP_PCT  = 10;
   const LS_PREFIX = 'audioCollarWidget.';
 
@@ -289,7 +295,7 @@
   const LEVEL_SYNC_ACTION = 'audioLevel';
 
   // Bridge: converte hold.state em chat:message HOLDON/HOLDOFF (para seu executor legado)
-  const EMIT_CHAT_BRIDGE = true;
+  const EMIT_CHAT_BRIDGE = false;
   const SIMPLIFY_LEGACY_COMMANDS = false;
 
   // ---------- STORAGE ----------
@@ -367,7 +373,11 @@
   let lastLevelTs = 0;
   let lastLevelSentAt = 0;
   let lastLevelSentPeak = 0;
+  let lastLevelSentPct = 0;
   let remoteLevel = null;
+  let cfgBroadcastTimer = null;
+  let lastCfgBroadcastAt = 0;
+  let pendingCfgReason = '';
 
   // Controle por estado
   let seq = 1;
@@ -626,6 +636,41 @@
     } catch(_){}
   }
 
+  function requestCfgBroadcast(reason){
+    if (!cfgSyncTx) return;
+    const now = Date.now();
+    const elapsed = now - lastCfgBroadcastAt;
+    if (reason) pendingCfgReason = reason;
+    if (elapsed >= CFG_BROADCAST_MS) {
+      lastCfgBroadcastAt = now;
+      const r = pendingCfgReason || 'update';
+      pendingCfgReason = '';
+      broadcastCfg(r);
+      return;
+    }
+    if (!cfgBroadcastTimer) {
+      const delay = Math.max(0, CFG_BROADCAST_MS - elapsed);
+      cfgBroadcastTimer = setTimeout(() => {
+        cfgBroadcastTimer = null;
+        lastCfgBroadcastAt = Date.now();
+        const r = pendingCfgReason || 'update';
+        pendingCfgReason = '';
+        broadcastCfg(r);
+      }, delay);
+    }
+  }
+
+  function flushCfgBroadcast(reason){
+    if (!cfgSyncTx) return;
+    if (cfgBroadcastTimer) {
+      clearTimeout(cfgBroadcastTimer);
+      cfgBroadcastTimer = null;
+    }
+    pendingCfgReason = '';
+    lastCfgBroadcastAt = Date.now();
+    broadcastCfg(reason || 'update');
+  }
+
   function bindCfgSyncToRoom(room){
     cfgSyncTx = null;
     cfgSyncRxBound = false;
@@ -674,9 +719,19 @@
   function broadcastLevel(pct, peakPct){
     if (!levelSyncTx) return;
     const now = Date.now();
-    if ((now - lastLevelSentAt) < 30) return;
+    const since = now - lastLevelSentAt;
+    const peakDelta = Math.abs(peakPct - lastLevelSentPeak);
+    const pctDelta = Math.abs(pct - lastLevelSentPct);
+    const hasChange = peakDelta >= LEVEL_DELTA_PCT || pctDelta >= LEVEL_DELTA_PCT;
+    const thresholdPct = clamp(cfg.thresholdPct || 0, 0, 100);
+    const isHot = peakPct >= thresholdPct;
+    const minInterval = isHot ? LEVEL_BROADCAST_MS : LEVEL_BROADCAST_MS_IDLE;
+    const keepaliveInterval = isHot ? LEVEL_KEEPALIVE_MS : LEVEL_KEEPALIVE_MS_IDLE;
+    if (!hasChange && since < keepaliveInterval) return;
+    if (hasChange && since < minInterval) return;
     lastLevelSentAt = now;
     lastLevelSentPeak = peakPct;
+    lastLevelSentPct = pct;
     try {
       levelSyncTx({ type: 'audio.level', pct, peakPct, ts: now });
     } catch(_){}
@@ -1102,8 +1157,9 @@
         cfg.gamma = parseFloat(g.value) || 1.0;
         gl.textContent = g.value;
         LS.set('gamma', cfg.gamma);
-        broadcastCfg('gamma');
+        requestCfgBroadcast('gamma');
       });
+      g.addEventListener('change', ()=> flushCfgBroadcast('gamma'));
     }
     if (nf && nfl){
       nf.value = String(cfg.noiseFloorPct);
@@ -1112,25 +1168,30 @@
         cfg.noiseFloorPct = parseInt(nf.value, 10) || 0;
         nfl.textContent = cfg.noiseFloorPct + '%';
         LS.set('noiseFloorPct', cfg.noiseFloorPct);
-        broadcastCfg('noise');
+        requestCfgBroadcast('noise');
       });
+      nf.addEventListener('change', ()=> flushCfgBroadcast('noise'));
     }
 
     const sensInput = $('#audio-collar-sens');
     const sensDec   = $('#audio-collar-sens-dec');
     const sensInc   = $('#audio-collar-sens-inc');
 
-    function setSensDb(val){
+    function setSensDb(val, opts){
       const v = clamp(parseFloat(val) || 0, SENS_DB_MIN, SENS_DB_MAX);
       cfg.sensDb = v;
       LS.set('sensDb', cfg.sensDb);
-      broadcastCfg('sens');
+      if (opts && opts.flush) {
+        flushCfgBroadcast('sens');
+      } else {
+        requestCfgBroadcast('sens');
+      }
       updateSensUI();
     }
 
     if (sensInput){
       sensInput.value = cfg.sensDb.toFixed(0);
-      sensInput.addEventListener('change', ()=> setSensDb(sensInput.value));
+      sensInput.addEventListener('change', ()=> setSensDb(sensInput.value, { flush: true }));
     }
     sensDec && sensDec.addEventListener('click', ()=> setSensDb(cfg.sensDb - SENS_DB_STEP));
     sensInc && sensInc.addEventListener('click', ()=> setSensDb(cfg.sensDb + SENS_DB_STEP));
@@ -1145,7 +1206,7 @@
         cfg.thresholdPct = pct;
         LS.set('thresholdPct', pct);
         updateThresholdUI();
-        broadcastCfg('threshold');
+        requestCfgBroadcast('threshold');
       };
       bar.addEventListener('pointerdown', ev=>{
         dragging = true;
@@ -1157,6 +1218,7 @@
         if (!dragging) return;
         dragging = false;
         try { bar.releasePointerCapture(ev.pointerId); } catch(_){}
+        flushCfgBroadcast('threshold');
       });
     }
 

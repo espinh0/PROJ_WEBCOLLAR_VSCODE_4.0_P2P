@@ -1583,3 +1583,5 @@ Backups Bak agent-ignore/migrationpatch.json
 Backups Bak agent-ignore/migrationpatch.json
 Backups Bak agent-ignore/app_documentation.json
 Backups Bak agent-ignore/General_Rules.txt
+Backups Bak agent-ignore/firmware_ESP32_BLE_FULL.ino
+Backups Bak agent-ignore/epd_bitmap.h

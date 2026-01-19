@@ -4,6 +4,7 @@
     <div class="fw-bold">Flowgate</div>
     <div class="d-flex align-items-center gap-2">
       <small id="connection-status" class="text-muted trystero-status">desconectado</small>
+      <small id="tr-bandwidth" class="text-muted"><i class="fa-solid fa-arrow-up"></i> 0 B / <i class="fa-solid fa-arrow-down"></i> 0 B</small>
     </div>
   </div>
 
@@ -142,6 +143,7 @@
     const $ = (id) => document.getElementById(id);
 
     const statusEl = $('connection-status');
+    const bandwidthEl = $('tr-bandwidth');
     const selfEl   = $('tr-self');
     const relaysEl = $('tr-relays');
     const turnStateEl = $('tr-turn-state');
@@ -210,6 +212,65 @@
       const ts = new Date().toLocaleTimeString();
       logEl.textContent += `[${ts}] ${line}\n`;
       logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    const textEncoder = (typeof TextEncoder !== 'undefined') ? new TextEncoder() : null;
+    let bytesSent = 0;
+    let bytesRecv = 0;
+    let lastBytesSent = 0;
+    let lastBytesRecv = 0;
+    let bandwidthTimer = null;
+
+    function estimateBytes(obj) {
+      if (!obj) return 0;
+      let str = '';
+      try { str = JSON.stringify(obj); } catch { return 0; }
+      if (!str) return 0;
+      if (textEncoder) return textEncoder.encode(str).length;
+      try { return unescape(encodeURIComponent(str)).length; } catch { return str.length; }
+    }
+
+    function formatBytes(bytes) {
+      const units = ['B', 'KB', 'MB', 'GB'];
+      let val = Math.max(0, Number(bytes) || 0);
+      let idx = 0;
+      while (val >= 1024 && idx < units.length - 1) {
+        val /= 1024;
+        idx += 1;
+      }
+      const decimals = (idx === 0 || val >= 10) ? 0 : 1;
+      return `${val.toFixed(decimals)} ${units[idx]}`;
+    }
+
+    function updateBandwidthLabel() {
+      if (!bandwidthEl) return;
+      const sentRate = bytesSent - lastBytesSent;
+      const recvRate = bytesRecv - lastBytesRecv;
+      lastBytesSent = bytesSent;
+      lastBytesRecv = bytesRecv;
+      bandwidthEl.innerHTML = `<i class="fa-solid fa-arrow-up"></i> ${formatBytes(bytesSent)} (${formatBytes(sentRate)}/s) / <i class="fa-solid fa-arrow-down"></i> ${formatBytes(bytesRecv)} (${formatBytes(recvRate)}/s)`;
+    }
+
+    function startBandwidthTimer() {
+      if (bandwidthTimer) return;
+      bandwidthTimer = setInterval(updateBandwidthLabel, 1000);
+      updateBandwidthLabel();
+    }
+
+    function resetBandwidthCounters() {
+      bytesSent = 0;
+      bytesRecv = 0;
+      lastBytesSent = 0;
+      lastBytesRecv = 0;
+      updateBandwidthLabel();
+    }
+
+    function trackSend(obj) {
+      bytesSent += estimateBytes(obj);
+    }
+
+    function trackRecv(obj) {
+      bytesRecv += estimateBytes(obj);
     }
     const DEBUG_FLOWGATE = (() => {
       try {
@@ -1047,6 +1108,7 @@
         if (!peerId) return;
         if (peerId === selfIdFn()) return;
         const payload = { ...val, peerId };
+        trackRecv(payload);
         dispatchAction('presence', payload, peerId);
       };
       const handleRemove = (snap) => {
@@ -1078,6 +1140,7 @@
       data.peerId = key;
       data.sid = data.sid || STABLE_SELF_ID;
       data.t = Date.now();
+      trackSend(data);
       try {
         const write = api.set(ref, data);
         if (write && typeof write.catch === 'function') {
@@ -1093,6 +1156,7 @@
       if (!firebaseConnected || !firebaseApi || !firebaseRoomKey) return false;
       const api = firebaseApi;
       const envelope = buildEnvelope(action, payload, targetPeerId);
+      trackSend(envelope);
       const baseRef = api.ref(api.db, `${firebaseRoomPath(firebaseRoomKey)}/actions/${action}`);
       const msgRef = api.push(baseRef);
       const msgKey = msgRef?.key || '';
@@ -1832,12 +1896,15 @@
       }
     }
 
-    function sweepPeers(timeoutMs = 9000) {
+    function sweepPeers(timeoutMs) {
+      const effectiveTimeout = (Number.isFinite(timeoutMs) && timeoutMs > 0)
+        ? timeoutMs
+        : (activeTransport === 'firebase' ? 180000 : 9000);
       const now = Date.now();
       let changed = false;
       for (const [key, meta] of peers.entries()) {
         if (!meta?.lastSeen) continue;
-        const isStale = (now - meta.lastSeen) > timeoutMs;
+        const isStale = (now - meta.lastSeen) > effectiveTimeout;
         if (isStale && meta.online !== false) {
           meta.online = false;
           if (key !== STABLE_SELF_ID) emitPeerEvent('peer-leave', key, meta);
@@ -2047,7 +2114,13 @@
 
     function sendEnvelope(conn, envelope) {
       if (!conn || !conn.open) return false;
-      try { conn.send(envelope); return true; } catch { return false; }
+      try {
+        conn.send(envelope);
+        trackSend(envelope);
+        return true;
+      } catch {
+        return false;
+      }
     }
 
     function logNegotiationFailure(conn, err, label) {
@@ -2150,6 +2223,7 @@
       if (!data || data.__flowgate !== FLOWGATE_PROTO) return;
       const action = data.action;
       if (!action) return;
+      trackRecv(data);
 
       if (action === SYS_PEER_JOIN) {
         notifyPeerJoin(data?.payload?.peerId, false);
@@ -2898,6 +2972,7 @@
       connectInProgress = true;
       try {
         log(`Conectar acionado (${trigger}).`);
+        resetBandwidthCounters();
         snapshotState('connect-start', { trigger, signal: signalingMode });
         const isHubTrigger = /^hub-(claim|takeover)/.test(String(trigger));
         const preserveClaimAttempt = isHubTrigger;
@@ -3119,19 +3194,27 @@
       if (presenceSweepTimer) clearInterval(presenceSweepTimer);
       if (presenceBurstTimer) clearInterval(presenceBurstTimer);
 
-      let burstCount = 0;
-      // Burst inicial para evitar esperar o intervalo padrao no primeiro anuncio
-      presenceBurstTimer = setInterval(() => {
+      // Burst inicial: anuncio unico no firebase, repetido no peerjs
+      if (activeTransport === 'firebase') {
         announcePresence();
-        burstCount += 1;
-        if (burstCount >= 4) {
-          clearInterval(presenceBurstTimer);
-          presenceBurstTimer = null;
-        }
-      }, 500);
+      } else {
+        let burstCount = 0;
+        const burstEveryMs = 500;
+        const burstMax = 4;
+        presenceBurstTimer = setInterval(() => {
+          announcePresence();
+          burstCount += 1;
+          if (burstCount >= burstMax) {
+            clearInterval(presenceBurstTimer);
+            presenceBurstTimer = null;
+          }
+        }, burstEveryMs);
+      }
 
-      presenceTimer = setInterval(() => announcePresence(), 1000);
-      presenceSweepTimer = setInterval(() => sweepPeers(9000), 1500);
+      const presenceInterval = (activeTransport === 'firebase') ? 60000 : 1000;
+      presenceTimer = setInterval(() => announcePresence(), presenceInterval);
+      const sweepInterval = (activeTransport === 'firebase') ? 6000 : 1500;
+      presenceSweepTimer = setInterval(() => sweepPeers(), sweepInterval);
 
       // re-anuncia tags quando mudarem
       if (localTagsListener) window.removeEventListener('trystero:localTags', localTagsListener);
@@ -3206,6 +3289,7 @@
       peers = new Map();
       renderPeerList();
 
+      resetBandwidthCounters();
       setStatus('desconectado');
       refreshRelayUi();
       updateStatusDetails();
@@ -3216,6 +3300,7 @@
     btnLeave.addEventListener('click', () => disconnect('click'));
     // ======= Init =======
     (function init() {
+      startBandwidthTimer();
       const stored = loadState();
       const qp = readUrlParams();
       signalingMode = resolveSignalingMode(stored.signalingMode || stored.signal);

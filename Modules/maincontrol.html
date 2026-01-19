@@ -231,9 +231,16 @@
   .control-status-groups {
     display: flex;
     flex-wrap: wrap;
-    align-items: center;
+    align-items: flex-start;
     gap: 12px;
     flex: 1 1 auto;
+    min-width: 0;
+  }
+  .control-status-groups .status-pill-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    flex: 1 1 360px;
     min-width: 0;
   }
   .control-peer-list {
@@ -260,6 +267,11 @@
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.12);
     color: #e5e7eb;
+    flex-wrap: wrap;
+    max-width: 100%;
+    min-width: 0;
+    row-gap: 0.2rem;
+    white-space: normal;
   }
   #remoteControlCard .status-pill[data-status="ok"] { border-color: rgba(34, 197, 94, 0.6); color: #bbf7d0; }
   #remoteControlCard .status-pill[data-status="warn"] { border-color: rgba(249, 115, 22, 0.6); color: #fed7aa; }
@@ -1236,7 +1248,7 @@
           </button>
         </div>
         <div class="control-status-groups">
-          <div class="d-flex align-items-center flex-wrap gap-2">
+          <div class="status-pill-group">
           <div id="fg-status-pill" class="status-pill" data-status="off">
             <span class="status-icon"><i class="fa-solid fa-tower-broadcast" aria-hidden="true"></i></span>
             <span class="visually-hidden">Flowgate:</span>
@@ -1249,6 +1261,10 @@
           <div class="status-pill host-only" aria-label="Bots conectados" title="Bots conectados">
             <span class="status-icon"><i class="fa-solid fa-robot"></i></span>
             <span id="fg-bot-count">0</span>
+          </div>
+          <div class="status-pill host-only" aria-label="Consumo Flowgate" title="Consumo Flowgate">
+            <span class="status-icon"><i class="fa-solid fa-chart-line"></i></span>
+            <span id="fg-bandwidth"><i class="fa-solid fa-arrow-up"></i> 0 B / <i class="fa-solid fa-arrow-down"></i> 0 B</span>
           </div>
           <div id="serial-devices-pill" class="status-pill" data-status="off" aria-label="Peers com serial aberta" title="Peers com serial aberta">
             <span class="status-icon"><i class="fa-solid fa-microchip"></i></span>
@@ -1543,6 +1559,7 @@
   })();
   const lastControlTs = new Map(); // origin -> ts
   let levelDebounce = null;
+  let lastLevelCommitAt = 0;
   const ADV_DEFAULTS = { pulses: 1, durationMs: 180, delayMs: 1000, preDelayMs: 0 };
   const ADV_LIMITS = {
     pulses: { min: 1, max: Infinity },
@@ -2726,7 +2743,7 @@
     level = n; window.level = n;
     $("#levelSlider").value=n;
     updateLevelUi(n);
-    if (broadcast && changed) {
+    if (broadcast && (changed || opts.force)) {
       clearTimeout(levelDebounce);
       levelDebounce = setTimeout(()=> emitControlPatch({ level: n, reason: opts.reason || LEVEL_PATCH_REASON }), 80);
     }
@@ -3383,10 +3400,19 @@
     });
   }
 
+  const commitSliderLevel = (value) => {
+    const now = Date.now();
+    if ((now - lastLevelCommitAt) < 120) return;
+    lastLevelCommitAt = now;
+    setLevel(value, { force: true });
+  };
+
   // Controles
   $$(".mode-btn").forEach(b => b.addEventListener("click", () => setMode(b.dataset.mode)));
   $("#chanSwitch").addEventListener("change", e => setChannel(e.target.checked ? 2 : 1));
-  $("#levelSlider").addEventListener("input", e => setLevel(e.target.value));
+  $("#levelSlider").addEventListener("input", e => setLevel(e.target.value, { broadcast: false }));
+  $("#levelSlider").addEventListener("change", e => commitSliderLevel(e.target.value));
+  $("#levelSlider").addEventListener("pointerup", e => commitSliderLevel(e.target.value));
   $("#levelSlider").addEventListener("pointerenter", showSliderTooltip);
   $("#levelSlider").addEventListener("pointerleave", hideSliderTooltip);
   $("#levelSlider").addEventListener("focus", showSliderTooltip);
@@ -3456,6 +3482,7 @@
       const flowgateStateEl = document.getElementById("fg-conn-state");
       const peerCountEl = document.getElementById("fg-peer-count");
       const botCountEl = document.getElementById("fg-bot-count");
+      const bandwidthEl = document.getElementById("fg-bandwidth");
       const peerListEl = document.getElementById("fg-peer-list");
       const peerEmptyEl = document.getElementById("fg-peer-empty");
       const serialPill = document.getElementById("serial-status-pill");
@@ -3571,6 +3598,8 @@
     const refreshFlowgate = () => {
       const status = document.getElementById("connection-status");
       if (status) setFlowgateState(status.textContent || "desconectado");
+      const liveBandwidth = document.getElementById("tr-bandwidth");
+      if (bandwidthEl && liveBandwidth) bandwidthEl.innerHTML = liveBandwidth.innerHTML || "<i class=\"fa-solid fa-arrow-up\"></i> 0 B / <i class=\"fa-solid fa-arrow-down\"></i> 0 B";
       renderPeers();
     };
 
@@ -3578,11 +3607,18 @@
       const hostList = document.getElementById("tr-host-list");
       const peerList = document.getElementById("tr-peer-list");
       const botList = document.getElementById("tr-bot-list");
+      const flowgateBandwidth = document.getElementById("tr-bandwidth");
       if (!hostList || !peerList) return false;
       const observer = new MutationObserver(() => renderPeers());
       observer.observe(hostList, { childList: true, subtree: true });
       observer.observe(peerList, { childList: true, subtree: true });
       if (botList) observer.observe(botList, { childList: true, subtree: true });
+      if (flowgateBandwidth && bandwidthEl) {
+        const bwObserver = new MutationObserver(() => {
+          bandwidthEl.innerHTML = flowgateBandwidth.innerHTML || "<i class=\"fa-solid fa-arrow-up\"></i> 0 B / <i class=\"fa-solid fa-arrow-down\"></i> 0 B";
+        });
+        bwObserver.observe(flowgateBandwidth, { childList: true, subtree: true });
+      }
       return true;
     };
 

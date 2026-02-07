@@ -1094,6 +1094,23 @@
     const txt = String(line||'').trim();
     if (!txt) return;
     if (!isHost()) { console.warn('ignorado: comandos so em host'); return; }
+    const api = window.__CONTROL_LED_API__;
+    const upper = txt.toUpperCase();
+    if (upper.startsWith("HOLDON ")) {
+      if (api && typeof api.beginCommand === "function") {
+        if (sendCommand._holdToken && typeof api.endCommand === "function") {
+          api.endCommand(sendCommand._holdToken);
+        }
+        sendCommand._holdToken = api.beginCommand("fscore", 0);
+      }
+    } else if (upper.startsWith("HOLDOFF")) {
+      if (api && typeof api.endCommand === "function" && sendCommand._holdToken) {
+        api.endCommand(sendCommand._holdToken);
+        sendCommand._holdToken = null;
+      }
+    } else if (api && typeof api.beginCommand === "function") {
+      api.beginCommand("fscore", 220);
+    }
     const emitEcho = () => {
       try { window.dispatchEvent(new CustomEvent('collar:echo', { detail: { line: txt, source: 'fscore' } })); } catch(_){ }
     };

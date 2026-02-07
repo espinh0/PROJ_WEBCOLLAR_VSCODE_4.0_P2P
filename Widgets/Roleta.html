@@ -240,6 +240,18 @@
   const btnText = document.getElementById('r3BtnText');
   const statusEl = document.getElementById('r3Status');
   const countdownEl = document.getElementById('r3Countdown');
+  const CONTROL_TIMER_SOURCE = "roleta-hold";
+  const CONTROL_LED_SOURCE = "roleta-cmd";
+  const CONTROL_LED_GAP_SOURCE = "roleta-hold";
+  let holdSeq = 0;
+  let activeHoldId = 0;
+  let activeHoldToken = null;
+  let pendingCountdownEndAt = 0;
+  let pendingCountdownTimer = null;
+  let pendingLedGap = null;
+  let pendingLedHoldId = 0;
+  let pendingLedTimer = null;
+  let pendingLedPulseMs = 0;
 
   const lockModeBtn = document.getElementById('lockModeBtn');
   const lockIntBtn  = document.getElementById('lockIntBtn');
@@ -328,6 +340,133 @@
       if (Number.isFinite(preSec) && preSec >= 0) return preSec * 1000;
     } catch(_){}
     return 0;
+  }
+
+  function notifyControlCountdown(endAtMs){
+    const endAt = Number(endAtMs) || 0;
+    if (!endAt) return;
+    const api = window.__CONTROL_TIMER_API__;
+    if (api && typeof api.setCountdown === "function") {
+      api.setCountdown(CONTROL_TIMER_SOURCE, endAt, "roleta");
+      pendingCountdownEndAt = 0;
+      if (pendingCountdownTimer) {
+        clearInterval(pendingCountdownTimer);
+        pendingCountdownTimer = null;
+      }
+      return;
+    }
+    pendingCountdownEndAt = endAt;
+    if (!pendingCountdownTimer) {
+      pendingCountdownTimer = setInterval(() => {
+        if (!pendingCountdownEndAt) {
+          clearInterval(pendingCountdownTimer);
+          pendingCountdownTimer = null;
+          return;
+        }
+        const apiNow = window.__CONTROL_TIMER_API__;
+        if (apiNow && typeof apiNow.setCountdown === "function") {
+          apiNow.setCountdown(CONTROL_TIMER_SOURCE, pendingCountdownEndAt, "roleta");
+          pendingCountdownEndAt = 0;
+          clearInterval(pendingCountdownTimer);
+          pendingCountdownTimer = null;
+        }
+      }, 200);
+    }
+  }
+
+  function clearControlCountdown(){
+    const api = window.__CONTROL_TIMER_API__;
+    if (api && typeof api.clearCountdown === "function") {
+      api.clearCountdown(CONTROL_TIMER_SOURCE);
+    }
+    pendingCountdownEndAt = 0;
+    if (pendingCountdownTimer) {
+      clearInterval(pendingCountdownTimer);
+      pendingCountdownTimer = null;
+    }
+  }
+
+  function scheduleLedRetry(){
+    if (pendingLedTimer) return;
+    pendingLedTimer = setInterval(() => {
+      const api = window.__CONTROL_LED_API__;
+      if (!api) return;
+      if (pendingLedGap !== null) {
+        if (pendingLedGap && typeof api.setGap === "function") api.setGap(CONTROL_LED_GAP_SOURCE);
+        if (!pendingLedGap && typeof api.clearGap === "function") api.clearGap(CONTROL_LED_GAP_SOURCE);
+        pendingLedGap = null;
+      }
+      if (pendingLedHoldId) {
+        if (activeHoldToken && typeof api.endCommand === "function") {
+          api.endCommand(activeHoldToken);
+        }
+        activeHoldId = pendingLedHoldId;
+        activeHoldToken = (typeof api.beginCommand === "function")
+          ? api.beginCommand(CONTROL_LED_SOURCE, 0)
+          : null;
+        pendingLedHoldId = 0;
+      }
+      if (pendingLedGap === null && !pendingLedHoldId) {
+        clearInterval(pendingLedTimer);
+        pendingLedTimer = null;
+      }
+    }, 200);
+  }
+
+  function pulseControlLed(ms=220){
+    const api = window.__CONTROL_LED_API__;
+    if (!api) return;
+    if (typeof api.beginCommand === "function") {
+      api.beginCommand(CONTROL_LED_SOURCE, ms);
+      return;
+    }
+    if (typeof api.pulse === "function") {
+      api.pulse(CONTROL_LED_SOURCE, ms);
+    }
+  }
+
+  function setControlLedGap(on){
+    const api = window.__CONTROL_LED_API__;
+    if (api && typeof api.setGap === "function" && typeof api.clearGap === "function") {
+      if (on) api.setGap(CONTROL_LED_GAP_SOURCE);
+      else api.clearGap(CONTROL_LED_GAP_SOURCE);
+      return;
+    }
+    pendingLedGap = !!on;
+    scheduleLedRetry();
+  }
+
+  function beginHoldCommandFor(id){
+    const api = window.__CONTROL_LED_API__;
+    if (!api || typeof api.beginCommand !== "function") {
+      pendingLedHoldId = id;
+      activeHoldId = id;
+      activeHoldToken = null;
+      scheduleLedRetry();
+      return null;
+    }
+    if (activeHoldToken && typeof api.endCommand === "function") {
+      api.endCommand(activeHoldToken);
+    }
+    activeHoldId = id;
+    activeHoldToken = api.beginCommand(CONTROL_LED_SOURCE, 0);
+    return activeHoldToken;
+  }
+
+  function endHoldCommandFor(id){
+    const api = window.__CONTROL_LED_API__;
+    if (id !== activeHoldId) return;
+    if (!api || typeof api.endCommand !== "function") {
+      if (pendingLedHoldId === id) pendingLedHoldId = 0;
+      activeHoldId = 0;
+      activeHoldToken = null;
+      return;
+    }
+    if (activeHoldToken) {
+      api.endCommand(activeHoldToken);
+      activeHoldToken = null;
+    }
+    activeHoldId = 0;
   }
   // atualiza delay via bus (fs-control)
   function handleControlPatch(payload){
@@ -939,8 +1078,18 @@
     return `${modeKey},${lvl},${chan}`;
   }
   async function sendOnce(modeKey, intensity, channelValue){
+    const api = window.__CONTROL_LED_API__;
+    let cmdToken = null;
+    if (api && typeof api.beginCommand === "function") {
+      cmdToken = api.beginCommand(CONTROL_LED_SOURCE, 0);
+    } else {
+      pulseControlLed();
+    }
     await pushToChat(buildCmd(modeKey, intensity, channelValue));
-    setStatus(`Enviado: ${modeKey} • ${intensity}`);
+    if (api && typeof api.endCommand === "function" && cmdToken) {
+      api.endCommand(cmdToken);
+    }
+    setStatus(`Enviado: ${modeKey} - ${intensity}`);
   }
 
   // HOLD com deadline (HOLDOFF correto)
@@ -948,21 +1097,39 @@
   let holdTickTimer = null;
   let holdOffSent = false;
 
-  function stopHoldTimers(){
+  function stopHoldTimers(opts = {}){
     if (holdTickTimer) { clearInterval(holdTickTimer); holdTickTimer = null; }
+    const forceHoldOff = !!opts.forceHoldOff;
+    if (forceHoldOff && holdEndAtMs && !holdOffSent) {
+      holdOffSent = true;
+      try { pushToChat("HOLDOFF"); } catch(_){}
+      endHoldCommandFor(activeHoldId);
+    }
     holdEndAtMs = null;
     holdOffSent = false;
     countdownEl.style.display = 'none';
+    clearControlCountdown();
+    setControlLedGap(false);
   }
 
   async function sendHold(modeKey, intensity, channelValue, durSec){
     return new Promise(async (resolve) => { // Return a promise
-      stopHoldTimers();
-      await pushToChat(`HOLDON ${buildCmd(modeKey, intensity, channelValue)}`);
+      stopHoldTimers({ forceHoldOff: true });
+      const holdId = ++holdSeq;
+      setControlLedGap(true);
+      beginHoldCommandFor(holdId);
+      try {
+        await pushToChat(`HOLDON ${buildCmd(modeKey, intensity, channelValue)}`);
+      } catch (_){
+        endHoldCommandFor(holdId);
+        setControlLedGap(false);
+        throw _;
+      }
 
       const durMs = Math.max(1, Math.round(Number(durSec) * 1000));
       holdEndAtMs = Date.now() + durMs;
       holdOffSent = false;
+      notifyControlCountdown(holdEndAtMs);
 
       countdownEl.style.display = 'inline-block';
 
@@ -976,10 +1143,14 @@
         if (msLeft <= 0 && !holdOffSent) {
           holdOffSent = true;
           countdownEl.style.display = 'none';
-          await pushToChat("HOLDOFF");
-          setStatus('Fim');
-          stopHoldTimers();
-          resolve(); // Resolve the promise here
+          try {
+            await pushToChat("HOLDOFF");
+          } finally {
+            endHoldCommandFor(holdId);
+            setStatus('Fim');
+            stopHoldTimers();
+            resolve(); // Resolve the promise here
+          }
         }
       };
 

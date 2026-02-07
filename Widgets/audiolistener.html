@@ -1,4 +1,4 @@
-<!-- AUDIO→COLLAR (blog widget) — v1.4 (HOLD via holdSync Flowgate)
+<!-- AUDIO→COLLAR (blog widget) — v1.9 (HOLD via holdSync Flowgate)
      - Controle por ESTADO (hold.state) em canal dedicado: makeAction('holdSync')
      - Heartbeat enquanto ON + watchdog timeout no receiver
      - Loopback local (funciona com 1 peer)
@@ -34,6 +34,12 @@
       <small>Limite: <span id="audio-collar-th">20%</span></small>
     </div>
   </div>
+
+  <div class="audio-spectrum mt-3">
+    <div class="audio-spectrum-shell">
+      <canvas id="audio-collar-spectrum" height="120" aria-label="Audio spectrum"></canvas>
+    </div>
+  </div>
   <div class="row g-2 mt-2">
     <div class="col-12 col-md-4 d-flex align-items-center gap-2">
       <label class="small mb-0">Gamma</label>
@@ -54,6 +60,73 @@
              class="form-control form-control-sm" style="max-width:80px;" />
       <button id="audio-collar-sens-inc" type="button" class="btn btn-sm btn-outline-light px-2">+</button>
       <small class="text-secondary small">dB</small>
+    </div>
+  </div>
+
+  <div class="row g-2 mt-2">
+    <div class="col-12 d-flex align-items-center gap-2 flex-wrap">
+      <label class="small mb-0">Hz Range</label>
+      <div id="audio-collar-freq-range" class="audio-range-slider" aria-label="Hz range"></div>
+      <input id="audio-collar-freq-minval" type="number" min="20" max="20000" step="10"
+             class="form-control form-control-sm" style="max-width:90px;" />
+      <span class="text-secondary">-</span>
+      <input id="audio-collar-freq-maxval" type="number" min="20" max="20000" step="10"
+             class="form-control form-control-sm" style="max-width:90px;" />
+    </div>
+  </div>
+
+  <div class="row g-2 mt-2">
+    <div class="col-12 col-md-6">
+      <label class="small mb-0">Preset Hz</label>
+      <div class="dropdown">
+        <button id="audio-collar-freq-preset-btn" class="btn btn-sm btn-outline-light dropdown-toggle w-100 text-start"
+                type="button" data-bs-toggle="dropdown" aria-expanded="false">
+          Buscar preset...
+        </button>
+        <div class="dropdown-menu p-2 w-100 audio-preset-menu">
+          <input id="audio-collar-freq-preset-search" type="text" class="form-control form-control-sm mb-2"
+                 placeholder="Buscar preset..." autocomplete="off" />
+          <div id="audio-collar-freq-preset-list" class="audio-preset-list">
+            <button class="dropdown-item" type="button" data-min="30" data-max="70">Ideal (30-70)</button>
+            <button class="dropdown-item" type="button" data-min="20" data-max="60">Sub-bass (20-60)</button>
+            <button class="dropdown-item" type="button" data-min="50" data-max="120">Kick (50-120)</button>
+            <button class="dropdown-item" type="button" data-min="60" data-max="80">Transicao (60-80)</button>
+            <button class="dropdown-item" type="button" data-min="40" data-max="100">Bumbo (40-100)</button>
+            <button class="dropdown-item" type="button" data-min="60" data-max="200">Baixo (60-200)</button>
+            <button class="dropdown-item" type="button" data-min="20" data-max="20000">Full (20-20000)</button>
+            <button class="dropdown-item" type="button" data-min="20" data-max="80">Sub graves (20-80)</button>
+            <button class="dropdown-item" type="button" data-min="60" data-max="250">Graves (60-250)</button>
+            <button class="dropdown-item" type="button" data-min="250" data-max="2000">Medios (250-2000)</button>
+            <button class="dropdown-item" type="button" data-min="300" data-max="3400">Voz (300-3400)</button>
+            <button class="dropdown-item" type="button" data-min="4000" data-max="12000">Agudos (4000-12000)</button>
+            <button class="dropdown-item" type="button" data-min="2000" data-max="5000">Apito basquete (2000-5000)</button>
+            <button class="dropdown-item" type="button" data-min="150" data-max="250">Caixa (150-250)</button>
+            <button class="dropdown-item" type="button" data-min="1000" data-max="3000">Beeps (1000-3000)</button>
+            <button class="dropdown-item" type="button" data-min="5000" data-max="12000">Pratos (5000-12000)</button>
+            <button class="dropdown-item" type="button" data-min="27" data-max="4186">Piano (27-4186)</button>
+            <button class="dropdown-item" type="button" data-min="80" data-max="1200">Guitarra (80-1200)</button>
+            <button class="dropdown-item" type="button" data-min="82" data-max="1200">Violao (82-1200)</button>
+            <button class="dropdown-item" type="button" data-min="196" data-max="3136">Violino (196-3136)</button>
+            <button class="dropdown-item" type="button" data-min="130" data-max="2637">Viola (130-2637)</button>
+            <button class="dropdown-item" type="button" data-min="65" data-max="1000">Cello (65-1000)</button>
+            <button class="dropdown-item" type="button" data-min="41" data-max="400">Contrabaixo (41-400)</button>
+            <button class="dropdown-item" type="button" data-min="262" data-max="2093">Flauta (262-2093)</button>
+            <button class="dropdown-item" type="button" data-min="147" data-max="1568">Clarinete (147-1568)</button>
+            <button class="dropdown-item" type="button" data-min="165" data-max="988">Trompete (165-988)</button>
+            <button class="dropdown-item" type="button" data-min="82" data-max="698">Trombone (82-698)</button>
+            <button class="dropdown-item" type="button" data-min="138" data-max="830">Sax Alto (138-830)</button>
+            <button class="dropdown-item" type="button" data-min="110" data-max="700">Sax Tenor (110-700)</button>
+            <button class="dropdown-item" type="button" data-min="220" data-max="1760">Oboe (220-1760)</button>
+            <button class="dropdown-item" type="button" data-min="58" data-max="700">Fagote (58-700)</button>
+            <button class="dropdown-item" type="button" data-min="33" data-max="2000">Harpa (33-2000)</button>
+            <button class="dropdown-item" type="button" data-min="60" data-max="200">Timpano (60-200)</button>
+            <button class="dropdown-item" type="button" data-min="150" data-max="400">Conga (150-400)</button>
+            <button class="dropdown-item" type="button" data-min="2000" data-max="6000">Tamborim (2000-6000)</button>
+            <button class="dropdown-item" type="button" data-min="3000" data-max="12000">Triangulo (3000-12000)</button>
+            <button class="dropdown-item" type="button" data-min="20" data-max="18000">Geral (20-18000)</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -209,6 +282,53 @@
       height: 16px;
       box-shadow: 0 4px 12px rgba(56,189,248,0.55);
     }
+    #audio-collar-widget .audio-range-slider {
+      width: 100%;
+      max-width: 260px;
+      flex: 1 1 220px;
+    }
+    #audio-collar-widget .audio-range-slider.noUi-target,
+    #audio-collar-widget .audio-range-slider .noUi-target {
+      background: linear-gradient(90deg, rgba(148,163,184,0.35), rgba(6,40,70,0.75));
+      border: 1px solid var(--audio-border);
+      border-radius: 999px;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
+      height: 8px;
+    }
+    #audio-collar-widget .audio-range-slider .noUi-connect {
+      background: linear-gradient(90deg, rgba(34,197,94,0.85), rgba(34,197,94,0.65));
+    }
+    #audio-collar-widget .audio-range-slider .noUi-handle {
+      width: 16px;
+      height: 16px;
+      right: -8px;
+      top: -5px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.45);
+      background: var(--audio-accent-strong);
+      box-shadow: 0 4px 12px rgba(56,189,248,0.55);
+    }
+    #audio-collar-widget .audio-range-slider .noUi-handle::before,
+    #audio-collar-widget .audio-range-slider .noUi-handle::after {
+      display: none;
+    }
+    #audio-collar-widget .audio-preset-menu {
+      background: var(--audio-panel);
+      border: 1px solid var(--audio-border);
+      box-shadow: 0 16px 30px rgba(0,0,0,0.45);
+    }
+    #audio-collar-widget .audio-preset-list {
+      max-height: 180px;
+      overflow: auto;
+    }
+    #audio-collar-widget .audio-preset-menu .dropdown-item {
+      color: var(--audio-text);
+    }
+    #audio-collar-widget .audio-preset-menu .dropdown-item:hover,
+    #audio-collar-widget .audio-preset-menu .dropdown-item:focus {
+      background: rgba(56,189,248,0.18);
+      color: #fff;
+    }
     #audio-collar-bar {
       background: linear-gradient(90deg, rgba(56,189,248,0.95), rgba(14,165,233,0.95), rgba(59,130,246,0.85));
       border: 1px solid var(--audio-border);
@@ -251,6 +371,18 @@
       border: 1px solid rgba(255,255,255,0.05);
       box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
     }
+    #audio-collar-widget .audio-spectrum-shell {
+      background: linear-gradient(135deg, rgba(15,23,42,0.9), rgba(2,6,23,0.85));
+      border: 1px solid var(--audio-border);
+      border-radius: 14px;
+      padding: 8px 10px;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03), 0 16px 30px rgba(0,0,0,0.45);
+    }
+    #audio-collar-spectrum {
+      display: block;
+      width: 100%;
+      height: 120px;
+    }
     #audio-collar-widget .form-switch .form-check-input {
       border-color: var(--audio-border);
       background-color: rgba(2,8,23,0.8);
@@ -263,8 +395,8 @@
 <script>
 (function(){
   'use strict';
-  if (window.__AUDIO_COLLAR_WIDGET_V14__) return;
-  window.__AUDIO_COLLAR_WIDGET_V14__ = true;
+  if (window.__AUDIO_COLLAR_WIDGET_V19__) return;
+  window.__AUDIO_COLLAR_WIDGET_V19__ = true;
 
   // ---------- CONFIG ----------
   const POLL_MS   = 35;     // leitura do audio (mais rapida)
@@ -282,6 +414,16 @@
   const SENS_DB_MIN  = -24;
   const SENS_DB_MAX  =  36;
   const SENS_DB_STEP =   3;
+
+  const FREQ_MIN_LIMIT = 20;
+  const FREQ_MAX_LIMIT = 20000;
+  const FREQ_GAP_HZ = 10;
+
+  const SPECTRUM_BARS = 36;
+  const SPECTRUM_MIN_HZ = 20;
+  const SPECTRUM_MAX_HZ = 20000;
+  const SPECTRUM_FLOOR = 0.04;
+  const SPECTRUM_GAMMA = 0.8;
 
   // Estabilidade do limiar
   const THRESH_HYST = 2;        // histerese (%)
@@ -321,6 +463,27 @@
   };
   const normalizeChannel = (c) => (Number(c) === 2 ? 2 : 1);
 
+  function normalizeFreqRange(minHz, maxHz, sampleRate){
+    const nyquist = sampleRate ? (sampleRate / 2) : FREQ_MAX_LIMIT;
+    const maxLimit = Math.min(FREQ_MAX_LIMIT, Math.max(FREQ_MIN_LIMIT + FREQ_GAP_HZ, Math.floor(nyquist)));
+    let min = clamp(Math.round(minHz), FREQ_MIN_LIMIT, maxLimit - FREQ_GAP_HZ);
+    let max = clamp(Math.round(maxHz), min + FREQ_GAP_HZ, maxLimit);
+    if (max - min < FREQ_GAP_HZ) {
+      max = clamp(min + FREQ_GAP_HZ, FREQ_MIN_LIMIT + FREQ_GAP_HZ, maxLimit);
+      min = clamp(max - FREQ_GAP_HZ, FREQ_MIN_LIMIT, maxLimit - FREQ_GAP_HZ);
+    }
+    return { min, max };
+  }
+
+  function connectToAnalysers(node){
+    if (analyserVis) {
+      try { node.connect(analyserVis); } catch(_){ }
+    }
+    if (analyserDet) {
+      try { node.connect(analyserDet); } catch(_){ }
+    }
+  }
+
   function setStatus(txt, ok){
     const s = $('#audio-collar-status');
     if (!s) return;
@@ -350,16 +513,34 @@
     thresholdPct:  LS.get('thresholdPct', 20),
     gamma:         LS.get('gamma', 2.4),
     noiseFloorPct: LS.get('noiseFloorPct', 6),
-    sensDb:        LS.get('sensDb', 0)
+    sensDb:        LS.get('sensDb', 0),
+    freqMinHz:     LS.get('freqMinHz', FREQ_MIN_LIMIT),
+    freqMaxHz:     LS.get('freqMaxHz', FREQ_MAX_LIMIT)
   };
 
   // Áudio
-  let audioCtx = null, analyser = null;
+  let audioCtx = null;
+  let analyserVis = null;
+  let analyserDet = null;
   let elementSources = [];
   let streamSource   = null;
   let micStream = null;
   let tabStream = null;
   let envPeakAbs = 0;
+  let spectrumCanvas = null;
+  let spectrumCtx = null;
+  let spectrumW = 0;
+  let spectrumH = 0;
+  let spectrumDpr = 1;
+  let spectrumData = null;
+  let spectrumDragActive = false;
+  let spectrumDragStartHz = null;
+  let spectrumDragMode = null;
+  let setFreqRangeExternal = null;
+  let freqSlider = null;
+  let freqSliderLock = false;
+  let freqSliderBound = false;
+  let freqSliderInitTimer = null;
 
   // holdSync transport
   let holdTx = null;          // sendHold
@@ -608,9 +789,21 @@
       LS.set('sensDb', cfg.sensDb);
       changed = true;
     }
+    if (Number.isFinite(patch.freqMinHz) || Number.isFinite(patch.freqMaxHz)) {
+      const nextMin = Number.isFinite(patch.freqMinHz) ? patch.freqMinHz : cfg.freqMinHz;
+      const nextMax = Number.isFinite(patch.freqMaxHz) ? patch.freqMaxHz : cfg.freqMaxHz;
+      const range = normalizeFreqRange(nextMin, nextMax, audioCtx ? audioCtx.sampleRate : null);
+      cfg.freqMinHz = range.min;
+      cfg.freqMaxHz = range.max;
+      LS.set('freqMinHz', cfg.freqMinHz);
+      LS.set('freqMaxHz', cfg.freqMaxHz);
+      changed = true;
+    }
     if (changed) {
       updateThresholdUI();
       updateSensUI();
+      updateFreqUI();
+      
       const g = $('#audio-collar-gamma');
       const gl = $('#audio-collar-gammalbl');
       const nf = $('#audio-collar-nf');
@@ -630,6 +823,8 @@
         gamma: cfg.gamma,
         noiseFloorPct: cfg.noiseFloorPct,
         sensDb: cfg.sensDb,
+        freqMinHz: cfg.freqMinHz,
+        freqMaxHz: cfg.freqMaxHz,
         ts: Date.now(),
         reason: reason || 'update'
       });
@@ -766,10 +961,15 @@
     if (!audioCtx){
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     }
-    if (!analyser){
-      analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 1024;
-      analyser.smoothingTimeConstant = 0.0;
+    if (!analyserVis){
+      analyserVis = audioCtx.createAnalyser();
+      analyserVis.fftSize = 1024;
+      analyserVis.smoothingTimeConstant = 0.0;
+    }
+    if (!analyserDet){
+      analyserDet = audioCtx.createAnalyser();
+      analyserDet.fftSize = 1024;
+      analyserDet.smoothingTimeConstant = 0.0;
     }
 
     if (rescanElements || !elementSources.length){
@@ -778,7 +978,7 @@
         try {
           if (el.__audioCollarAttached) return;
           const src = audioCtx.createMediaElementSource(el);
-          src.connect(analyser);
+          connectToAnalysers(src);
           src.connect(audioCtx.destination);
           elementSources.push(src);
           el.__audioCollarAttached = true;
@@ -843,14 +1043,19 @@
     if (!audioCtx){
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     }
-    if (!analyser){
-      analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 1024;
-      analyser.smoothingTimeConstant = 0.0;
+    if (!analyserVis){
+      analyserVis = audioCtx.createAnalyser();
+      analyserVis.fftSize = 1024;
+      analyserVis.smoothingTimeConstant = 0.0;
+    }
+    if (!analyserDet){
+      analyserDet = audioCtx.createAnalyser();
+      analyserDet.fftSize = 1024;
+      analyserDet.smoothingTimeConstant = 0.0;
     }
     try { streamSource && streamSource.disconnect(); } catch(_){}
     streamSource = audioCtx.createMediaStreamSource(stream);
-    streamSource.connect(analyser);
+    connectToAnalysers(streamSource);
   }
 
   function stopAllSources(){
@@ -875,6 +1080,7 @@
       if (volEl)   volEl.textContent = '0%';
       if (peakEl)  peakEl.style.left = '0%';
       if (peakLbl) peakLbl.textContent = '0%';
+      clearSpectrum();
       appendLog('Fonte de áudio interrompida.');
     } catch(e){
       appendLog('Falha ao parar fonte: ' + (e?.message || String(e)));
@@ -885,36 +1091,132 @@
     window.__audioCollarStopAllSources = stopAllSources;
   }
 
+  function initSpectrumCanvas(){
+    spectrumCanvas = $('#audio-collar-spectrum');
+    if (!spectrumCanvas) return;
+    spectrumCtx = spectrumCanvas.getContext('2d');
+    resizeSpectrumCanvas();
+    window.addEventListener('resize', resizeSpectrumCanvas);
+    spectrumCanvas.addEventListener('pointerdown', (ev) => {
+      if (!setFreqRangeExternal) return;
+      const rect = spectrumCanvas.getBoundingClientRect();
+      const x = ev.clientX - rect.left;
+      const nyquist = audioCtx && audioCtx.sampleRate ? (audioCtx.sampleRate / 2) : 22050;
+      const maxHz = Math.min(SPECTRUM_MAX_HZ, nyquist);
+      const minHz = Math.min(SPECTRUM_MIN_HZ, maxHz);
+      const ratio = clamp(x / Math.max(1, rect.width), 0, 1);
+      const clickedHz = minHz * Math.pow(maxHz / minHz, ratio);
+      if (ev.shiftKey) {
+        spectrumDragMode = 'range';
+        spectrumDragStartHz = clickedHz;
+      } else {
+        const distMin = Math.abs(clickedHz - cfg.freqMinHz);
+        const distMax = Math.abs(clickedHz - cfg.freqMaxHz);
+        spectrumDragMode = (distMin <= distMax) ? 'min' : 'max';
+        spectrumDragStartHz = null;
+      }
+      spectrumDragActive = true;
+      spectrumCanvas.setPointerCapture(ev.pointerId);
+    });
+    spectrumCanvas.addEventListener('pointermove', (ev) => {
+      if (!spectrumDragActive || !setFreqRangeExternal) return;
+      const rect = spectrumCanvas.getBoundingClientRect();
+      const x = ev.clientX - rect.left;
+      const nyquist = audioCtx && audioCtx.sampleRate ? (audioCtx.sampleRate / 2) : 22050;
+      const maxHz = Math.min(SPECTRUM_MAX_HZ, nyquist);
+      const minHz = Math.min(SPECTRUM_MIN_HZ, maxHz);
+      const ratio = clamp(x / Math.max(1, rect.width), 0, 1);
+      const currentHz = minHz * Math.pow(maxHz / minHz, ratio);
+      if (spectrumDragMode === 'range' && spectrumDragStartHz != null) {
+        const a = Math.min(spectrumDragStartHz, currentHz);
+        const b = Math.max(spectrumDragStartHz, currentHz);
+        setFreqRangeExternal(a, b, { flush: false });
+      } else if (spectrumDragMode === 'max') {
+        setFreqRangeExternal(cfg.freqMinHz, currentHz, { flush: false });
+      } else {
+        setFreqRangeExternal(currentHz, cfg.freqMaxHz, { flush: false });
+      }
+    });
+    spectrumCanvas.addEventListener('pointerup', (ev) => {
+      if (!spectrumDragActive || !setFreqRangeExternal) return;
+      spectrumDragActive = false;
+      const rect = spectrumCanvas.getBoundingClientRect();
+      const x = ev.clientX - rect.left;
+      const nyquist = audioCtx && audioCtx.sampleRate ? (audioCtx.sampleRate / 2) : 22050;
+      const maxHz = Math.min(SPECTRUM_MAX_HZ, nyquist);
+      const minHz = Math.min(SPECTRUM_MIN_HZ, maxHz);
+      const ratio = clamp(x / Math.max(1, rect.width), 0, 1);
+      const currentHz = minHz * Math.pow(maxHz / minHz, ratio);
+      if (spectrumDragMode === 'range' && spectrumDragStartHz != null) {
+        const a = Math.min(spectrumDragStartHz, currentHz);
+        const b = Math.max(spectrumDragStartHz, currentHz);
+        setFreqRangeExternal(a, b, { flush: true });
+      } else if (spectrumDragMode === 'max') {
+        setFreqRangeExternal(cfg.freqMinHz, currentHz, { flush: true });
+      } else {
+        setFreqRangeExternal(currentHz, cfg.freqMaxHz, { flush: true });
+      }
+      spectrumDragStartHz = null;
+      spectrumDragMode = null;
+      try { spectrumCanvas.releasePointerCapture(ev.pointerId); } catch(_){ }
+    });
+    spectrumCanvas.addEventListener('pointercancel', () => {
+      spectrumDragActive = false;
+      spectrumDragStartHz = null;
+      spectrumDragMode = null;
+    });
+  }
+
+  function resizeSpectrumCanvas(){
+    if (!spectrumCanvas || !spectrumCtx) return;
+    const rect = spectrumCanvas.getBoundingClientRect();
+    const nextW = Math.max(1, Math.floor(rect.width));
+    const nextH = Math.max(1, Math.floor(rect.height));
+    const nextDpr = window.devicePixelRatio || 1;
+    if (nextW === spectrumW && nextH === spectrumH && nextDpr === spectrumDpr) return;
+    spectrumW = nextW;
+    spectrumH = nextH;
+    spectrumDpr = nextDpr;
+    spectrumCanvas.width = Math.floor(nextW * nextDpr);
+    spectrumCanvas.height = Math.floor(nextH * nextDpr);
+    spectrumCtx.setTransform(nextDpr, 0, 0, nextDpr, 0, 0);
+  }
+
+  function clearSpectrum(){
+    if (!spectrumCtx) return;
+    spectrumCtx.clearRect(0, 0, spectrumW, spectrumH);
+  }
+
   function readLevelsInstant(){
-    if (!analyser) return {pct:0, peakPct:0};
+    if (!analyserDet) return {pct:0, peakPct:0};
 
-    const n = analyser.fftSize;
-    const buf = new Float32Array(n);
+    const binCount = analyserDet.frequencyBinCount;
+    const data = new Uint8Array(binCount);
+    analyserDet.getByteFrequencyData(data);
 
-    if (analyser.getFloatTimeDomainData){
-      analyser.getFloatTimeDomainData(buf);
-    } else {
-      const b8 = new Uint8Array(n);
-      analyser.getByteTimeDomainData(b8);
-      for (let i=0;i<n;i++) buf[i] = (b8[i]-128)/128;
+    const nyquist = audioCtx && audioCtx.sampleRate ? (audioCtx.sampleRate / 2) : 22050;
+    const range = normalizeFreqRange(cfg.freqMinHz, cfg.freqMaxHz, audioCtx ? audioCtx.sampleRate : null);
+    const minHz = Math.min(range.min, nyquist);
+    const maxHz = Math.min(range.max, nyquist);
+    const idx0 = clamp(Math.floor((minHz / nyquist) * binCount), 0, binCount - 1);
+    const idx1 = clamp(Math.ceil((maxHz / nyquist) * binCount), idx0 + 1, binCount);
+
+    let sum = 0;
+    let peak = 0;
+    const count = Math.max(1, idx1 - idx0);
+    for (let i = idx0; i < idx1; i++) {
+      const v = data[i] / 255;
+      sum += v;
+      if (v > peak) peak = v;
     }
 
-    let sum = 0, peakAbs = 0;
-    for (let i=0;i<n;i++){
-      const v = buf[i];
-      sum += v*v;
-      const a = Math.abs(v);
-      if (a > peakAbs) peakAbs = a;
-    }
-
-    envPeakAbs = Math.max(peakAbs, envPeakAbs * PEAK_ENV_DECAY);
+    envPeakAbs = Math.max(peak, envPeakAbs * PEAK_ENV_DECAY);
 
     const sensDb = clamp(cfg.sensDb || 0, SENS_DB_MIN, SENS_DB_MAX);
     const gain = Math.pow(10, sensDb / 20);
 
-    let rms = Math.sqrt(sum/n);
-    rms = Math.min(1, rms * gain);
-    const pct = clamp(Math.round(rms * 100 * 1.4), 0, 100);
+    let avg = Math.min(1, (sum / count) * gain);
+    const pct = clamp(Math.round(avg * 100 * 1.4), 0, 100);
 
     let env = Math.min(1, envPeakAbs * gain);
 
@@ -928,6 +1230,108 @@
     const peakPct = clamp(Math.round(p*100), 0, 100);
 
     return { pct, peakPct };
+  }
+
+  function updateSpectrum(){
+    if (!spectrumCtx || !analyserVis || !audioCtx) return;
+    if (!spectrumW || !spectrumH) resizeSpectrumCanvas();
+    if (!spectrumW || !spectrumH) return;
+
+    const binCount = analyserVis.frequencyBinCount;
+    if (!spectrumData || spectrumData.length !== binCount) {
+      spectrumData = new Uint8Array(binCount);
+    }
+    analyserVis.getByteFrequencyData(spectrumData);
+
+    const nyquist = audioCtx.sampleRate ? (audioCtx.sampleRate / 2) : 22050;
+    const range = normalizeFreqRange(cfg.freqMinHz, cfg.freqMaxHz, audioCtx.sampleRate);
+    const maxHz = Math.min(SPECTRUM_MAX_HZ, nyquist);
+    const minHz = Math.min(SPECTRUM_MIN_HZ, maxHz);
+    const labelHeight = 16;
+    const height = Math.max(12, spectrumH - labelHeight - 4);
+    const top = 2;
+    const bottom = top + height;
+
+    spectrumCtx.clearRect(0, 0, spectrumW, spectrumH);
+
+    const barsCount = clamp(Math.floor(spectrumW / 18), 12, 48);
+    const gap = 2;
+    const totalGap = gap * (barsCount - 1);
+    const barW = Math.max(2, (spectrumW - totalGap) / barsCount);
+
+    for (let i = 0; i < barsCount; i++) {
+      const ratio0 = i / barsCount;
+      const ratio1 = (i + 1) / barsCount;
+      const f0 = minHz * Math.pow(maxHz / minHz, ratio0);
+      const f1 = minHz * Math.pow(maxHz / minHz, ratio1);
+      const fMid = Math.sqrt(f0 * f1);
+      const inRange = fMid >= range.min && fMid <= range.max;
+
+      let idx0 = Math.floor((f0 / nyquist) * binCount);
+      let idx1 = Math.floor((f1 / nyquist) * binCount);
+      idx0 = clamp(idx0, 0, binCount - 1);
+      idx1 = clamp(idx1, idx0 + 1, binCount);
+
+      let sum = 0;
+      for (let j = idx0; j < idx1; j++) sum += spectrumData[j];
+      const avg = sum / Math.max(1, idx1 - idx0);
+      let level = avg / 255;
+      if (level <= SPECTRUM_FLOOR) level = 0;
+      else level = (level - SPECTRUM_FLOOR) / (1 - SPECTRUM_FLOOR);
+      level = Math.pow(level, SPECTRUM_GAMMA);
+
+      const barH = Math.max(2, level * height);
+      const x = i * (barW + gap);
+
+      spectrumCtx.fillStyle = 'rgba(148,163,184,0.16)';
+      spectrumCtx.fillRect(x, top, barW, height);
+      if (inRange) {
+        spectrumCtx.fillStyle = level > 0.01 ? 'rgba(34,197,94,0.95)' : 'rgba(34,197,94,0.65)';
+      } else {
+        spectrumCtx.fillStyle = level > 0.01 ? 'rgba(148,163,184,0.6)' : 'rgba(148,163,184,0.35)';
+      }
+      spectrumCtx.fillRect(x, bottom - barH, barW, barH);
+
+      const hz = Math.round(fMid);
+      const label = hz >= 1000 ? (hz / 1000).toFixed(1).replace(/\.0$/, '') + 'k' : String(hz);
+      spectrumCtx.fillStyle = 'rgba(148,163,184,0.85)';
+      spectrumCtx.font = '11px sans-serif';
+      spectrumCtx.textAlign = 'center';
+      spectrumCtx.textBaseline = 'alphabetic';
+      spectrumCtx.fillText(label, x + barW / 2, spectrumH - 2);
+    }
+
+    {
+      const rangeMin = Math.max(range.min, minHz);
+      const rangeMax = Math.min(range.max, maxHz);
+      const logSpan = Math.log(maxHz / minHz);
+      if (rangeMax > rangeMin && logSpan > 0) {
+        const toX = (f) => (Math.log(f / minHz) / logSpan) * spectrumW;
+        const xStart = toX(rangeMin);
+        const xEnd = toX(rangeMax);
+        const points = 64;
+        const nf = clamp(cfg.noiseFloorPct / 100, 0, 0.99);
+        const gamma = Math.max(1.0, cfg.gamma || 1.0);
+        spectrumCtx.save();
+        spectrumCtx.strokeStyle = 'rgba(56,189,248,0.95)';
+        spectrumCtx.lineWidth = 1.5;
+        spectrumCtx.beginPath();
+        for (let i = 0; i < points; i++) {
+          const xNorm = i / (points - 1);
+          let yNorm = 0;
+          if (xNorm > nf) {
+            yNorm = Math.pow((xNorm - nf) / (1 - nf), gamma);
+          }
+          const x = xStart + xNorm * (xEnd - xStart);
+          const y = bottom - (yNorm * height);
+          if (i === 0) spectrumCtx.moveTo(x, y);
+          else spectrumCtx.lineTo(x, y);
+        }
+        spectrumCtx.stroke();
+        spectrumCtx.restore();
+      }
+    }
+
   }
 
   // ---------- Desired-state update (dwell + hysterese) ----------
@@ -1114,6 +1518,19 @@
     if (input) input.value = cfg.sensDb.toFixed(0);
   }
 
+  function updateFreqUI(opts){
+    const minInput = $('#audio-collar-freq-minval');
+    const maxInput = $('#audio-collar-freq-maxval');
+    if (minInput) minInput.value = String(cfg.freqMinHz);
+    if (maxInput) maxInput.value = String(cfg.freqMaxHz);
+    const skipSlider = opts && opts.skipSlider;
+    if (!skipSlider && freqSlider && !freqSliderLock) {
+      freqSliderLock = true;
+      try { freqSlider.set([cfg.freqMinHz, cfg.freqMaxHz]); } catch(_) {}
+      freqSliderLock = false;
+    }
+  }
+
   async function populateMicSelect(){
     const sel = $('#audio-collar-mic-select');
     if (!sel || !navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
@@ -1149,6 +1566,12 @@
     const gl  = $('#audio-collar-gammalbl');
     const nf  = $('#audio-collar-nf');
     const nfl = $('#audio-collar-nflbl');
+    const rangeEl = $('#audio-collar-freq-range');
+    const freqMinInput = $('#audio-collar-freq-minval');
+    const freqMaxInput = $('#audio-collar-freq-maxval');
+    const presetBtn = $('#audio-collar-freq-preset-btn');
+    const presetSearch = $('#audio-collar-freq-preset-search');
+    const presetList = $('#audio-collar-freq-preset-list');
 
     if (g && gl){
       g.value = String(cfg.gamma);
@@ -1171,6 +1594,116 @@
         requestCfgBroadcast('noise');
       });
       nf.addEventListener('change', ()=> flushCfgBroadcast('noise'));
+    }
+
+    function setFreqRange(nextMin, nextMax, opts){
+      const range = normalizeFreqRange(parseFloat(nextMin), parseFloat(nextMax), audioCtx ? audioCtx.sampleRate : null);
+      cfg.freqMinHz = range.min;
+      cfg.freqMaxHz = range.max;
+      LS.set('freqMinHz', cfg.freqMinHz);
+      LS.set('freqMaxHz', cfg.freqMaxHz);
+      const fromSlider = opts && opts.fromSlider;
+      if (fromSlider) freqSliderLock = true;
+      updateFreqUI({ skipSlider: !!fromSlider });
+      if (fromSlider) freqSliderLock = false;
+      if (opts && opts.flush) {
+        flushCfgBroadcast('freq');
+      } else {
+        requestCfgBroadcast('freq');
+      }
+    }
+
+    setFreqRangeExternal = setFreqRange;
+
+    function bindFreqInputs(){
+      if (!freqMinInput || !freqMaxInput) return;
+      const commit = (flush) => {
+        setFreqRange(freqMinInput.value, freqMaxInput.value, { flush: !!flush });
+      };
+      freqMinInput.addEventListener('change', () => commit(true));
+      freqMaxInput.addEventListener('change', () => commit(true));
+      freqMinInput.addEventListener('blur', () => commit(true));
+      freqMaxInput.addEventListener('blur', () => commit(true));
+      freqMinInput.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') commit(true);
+      });
+      freqMaxInput.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') commit(true);
+      });
+    }
+
+    function applyFreqPreset(label, minHz, maxHz){
+      if (!Number.isFinite(minHz) || !Number.isFinite(maxHz)) return;
+      setFreqRange(minHz, maxHz, { flush: true });
+      if (presetBtn) presetBtn.textContent = label;
+      appendLog(`Preset Hz aplicado: ${label}`);
+    }
+
+    function initFreqSlider(){
+      if (!rangeEl) return;
+      if (!(window.noUiSlider && typeof window.noUiSlider.create === 'function')) return;
+      if (!rangeEl.noUiSlider) {
+        window.noUiSlider.create(rangeEl, {
+          start: [cfg.freqMinHz, cfg.freqMaxHz],
+          connect: true,
+          step: 10,
+          range: { min: FREQ_MIN_LIMIT, max: FREQ_MAX_LIMIT }
+        });
+      }
+      freqSlider = rangeEl.noUiSlider;
+      if (!freqSliderBound) {
+        freqSliderBound = true;
+        freqSlider.on('update', (values) => {
+          if (freqSliderLock) return;
+          setFreqRange(values[0], values[1], { fromSlider: true });
+        });
+        freqSlider.on('change', (values) => {
+          setFreqRange(values[0], values[1], { fromSlider: true, flush: true });
+        });
+      }
+      updateFreqUI();
+      if (freqSliderInitTimer) {
+        clearInterval(freqSliderInitTimer);
+        freqSliderInitTimer = null;
+      }
+    }
+
+    if (rangeEl) {
+      initFreqSlider();
+      if (!freqSlider && !freqSliderInitTimer) {
+        let warned = false;
+        freqSliderInitTimer = setInterval(() => {
+          if (!warned) {
+            warned = true;
+            appendLog('Aguardando noUiSlider carregar...');
+          }
+          initFreqSlider();
+        }, 300);
+      }
+    }
+
+    bindFreqInputs();
+
+    if (presetSearch && presetList) {
+      presetSearch.addEventListener('input', () => {
+        const q = presetSearch.value.trim().toLowerCase();
+        const items = Array.from(presetList.querySelectorAll('.dropdown-item'));
+        items.forEach((item) => {
+          const txt = item.textContent.trim().toLowerCase();
+          item.classList.toggle('d-none', q && !txt.includes(q));
+        });
+      });
+    }
+
+    if (presetList) {
+      presetList.addEventListener('click', (ev) => {
+        const btn = ev.target && ev.target.closest('.dropdown-item');
+        if (!btn) return;
+        const label = btn.textContent.trim();
+        const minHz = parseFloat(btn.getAttribute('data-min'));
+        const maxHz = parseFloat(btn.getAttribute('data-max'));
+        applyFreqPreset(label, minHz, maxHz);
+      });
     }
 
     const sensInput = $('#audio-collar-sens');
@@ -1278,6 +1811,7 @@
 
     updateThresholdUI();
     updateSensUI();
+    updateFreqUI();
   }
 
   // ---------- main loops ----------
@@ -1324,17 +1858,19 @@
     }
 
     updateDesiredFromPeak(peakPct);
+    updateSpectrum();
   }
 
   function boot(){
     appendLog('Booting Audio→Collar widget...');
     makeUIBindings();
+    initSpectrumCanvas();
     setControlState({ mode: window.currentMode, channel: window.channel });
     bindControlBus();
     startControlPolling();
     exposeStopper();
     setStatus('pronto', false);
-    appendLog('Audio→Collar v1.4 inicializado.');
+    appendLog('Audio→Collar v1.9 inicializado.');
     appendLog('Modo robusto: holdSync (estado + heartbeat + timeout).');
 
     populateMicSelect();

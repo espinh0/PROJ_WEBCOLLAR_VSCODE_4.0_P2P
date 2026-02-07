@@ -91,9 +91,9 @@
     });
   }
 
-  slots.forEach((slot) => {
+  function loadSlot(slot) {
     const url = slot.getAttribute('data-module-src');
-    fetch(url)
+    return fetch(url)
       .then((res) => {
         if (!res.ok) throw new Error(`Falha ao carregar ${url}: ${res.status}`);
         return res.text();
@@ -106,7 +106,14 @@
         console.error(err);
         slot.innerHTML = `<div class="alert alert-danger">Nao foi possivel carregar ${url}</div>`;
       });
-  });
+  }
+
+  const libSlot = slots.find((slot) => slot.getAttribute('data-module-src') === 'libraries.html');
+  const otherSlots = slots.filter((slot) => slot !== libSlot);
+
+  Promise.resolve()
+    .then(() => libSlot ? loadSlot(libSlot) : null)
+    .then(() => Promise.all(otherSlots.map(loadSlot)));
 })();
 </script>
 </body>

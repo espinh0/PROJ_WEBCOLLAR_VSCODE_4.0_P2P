@@ -340,6 +340,23 @@
   async function sendCommand(text){
     const payload = String(text || '').trim();
     if (!payload) return;
+    const api = window.__CONTROL_LED_API__;
+    const upper = payload.toUpperCase();
+    if (upper.startsWith("HOLDON ")) {
+      if (api && typeof api.beginCommand === "function") {
+        if (sendCommand._holdToken && typeof api.endCommand === "function") {
+          api.endCommand(sendCommand._holdToken);
+        }
+        sendCommand._holdToken = api.beginCommand("custom-buttons", 0);
+      }
+    } else if (upper.startsWith("HOLDOFF")) {
+      if (api && typeof api.endCommand === "function" && sendCommand._holdToken) {
+        api.endCommand(sendCommand._holdToken);
+        sendCommand._holdToken = null;
+      }
+    } else if (api && typeof api.beginCommand === "function") {
+      api.beginCommand("custom-buttons", 220);
+    }
 
     const serialReady = !!(window.SerialBridge && typeof window.SerialBridge.send === 'function' &&
       (window.SerialBridge.isConnected || window.serialConnected || (window.port && window.port.writable)));

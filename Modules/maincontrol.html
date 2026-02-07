@@ -1029,6 +1029,9 @@
     min-width: 0;
     text-align: left;
   }
+  .control-readout-led {
+    align-self: center;
+  }
   .control-readout-label {
     font-size: 0.78rem;
     letter-spacing: 0.08em;
@@ -1040,6 +1043,15 @@
     font-weight: 700;
     color: #f9fafb;
     line-height: 1.1;
+  }
+  .control-readout-value.control-led-value {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .control-readout-value.control-led-value .adv-led {
+    width: 20px;
+    height: 20px;
   }
   @media (max-width: 640px) {
     .glass-background {
@@ -1149,16 +1161,16 @@
     font-size: 0.85rem;
   }
   .adv-led {
-    width: 12px;
-    height: 12px;
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
     border: 1px solid rgba(255,255,255,0.35);
     box-shadow: 0 0 12px rgba(0,0,0,0.35);
     flex-shrink: 0;
   }
   .led-off { background: #6b7280; }
-  .led-on  { background: #22c55e; box-shadow: 0 0 10px rgba(34,197,94,0.8); }
-  .led-gap { background: #ef4444; box-shadow: 0 0 10px rgba(239,68,68,0.8); }
+  .led-on  { background: #33ff77; box-shadow: 0 0 150px 60px rgba(51, 255, 119, 1); }
+  .led-gap { background: #ff6666; box-shadow: 0 0 150px 60px rgba(255, 102, 102, 1); }
   .pill-idle { background: #1f2937; color: #e5e7eb; }
   .pill-run { background: #2563eb; color: #ffffff; }
   .pill-done { background: #16a34a; color: #ffffff; }
@@ -1268,7 +1280,6 @@
           </div>
           <div id="serial-devices-pill" class="status-pill" data-status="off" aria-label="Peers com serial aberta" title="Peers com serial aberta">
             <span class="status-icon"><i class="fa-solid fa-microchip"></i></span>
-            <span>Dispositivos:</span>
             <div id="serial-device-list" class="serial-device-list"></div>
             <span id="serial-device-empty" class="serial-device-empty">nenhum</span>
           </div>
@@ -1288,6 +1299,11 @@
           <div class="control-readout-label">Modo</div>
         <div id="modeReadout" class="control-readout-value">Modo Atual</div>
         </div>
+        <div class="control-readout control-readout-led">
+          <div class="control-readout-value control-led-value">
+            <div id="controlExecLed" class="adv-led led-off" title="Execucao de comandos"></div>
+          </div>
+        </div>
         <div class="control-readout">
           <div class="control-readout-label">Intensidade</div>
           <div id="intensityReadout" class="control-readout-value">0%</div>
@@ -1302,7 +1318,7 @@
         </div>
         <div class="control-readout">
           <div class="control-readout-label">Pulsos</div>
-          <div id="pulsesReadout" class="control-readout-value">—</div>
+          <div id="pulsesReadout" class="control-readout-value">-</div>
         </div>
       </div>
       <div id="controlContent" class="control-row mb-3">
@@ -1610,6 +1626,8 @@
   const channelReadoutEl = $("#channelReadout");
   const durationReadoutEl = $("#durationReadout");
   const pulsesReadoutEl = $("#pulsesReadout");
+  const timeReadoutEl = $("#timeReadout");
+  const controlExecLedEl = $("#controlExecLed");
   const sliderRowEl = $("#sliderRow");
   const rouletteRowEl = $("#rouletteRow");
   const scoreboardBlockEl = $(".control-scoreboard-block");
@@ -1625,8 +1643,21 @@
   let advCountdownTimer = null;
   let advCountdownEndAt = 0;
   let advStopSignal = { stop: false, holdActive: false };
+  let currentBurstAbort = null;
   const chartBlockEl = document.getElementById("chartBlock");
   const chartToggleBtn = document.getElementById("btnChartToggle");
+  const CONTROL_TIMER_TICK_MS = 120;
+  const controlCountdowns = new Map();
+  const controlCountups = new Map();
+  let controlTimerTick = null;
+  const HOLD_COUNTUP_SOURCE = "maincontrol-hold";
+  const ADV_COUNTDOWN_SOURCE = "maincontrol-advanced";
+  const CONTROL_LED_SOURCE_ADV = "maincontrol-advanced";
+  const CONTROL_LED_SOURCE_CMD = "maincontrol-cmd";
+  const CONTROL_LED_SOURCE_HOLD = "maincontrol-hold";
+  const controlLedCommands = new Map();
+  const controlLedGapSources = new Set();
+  let holdCommandToken = null;
 
   function log(msg, lvl="info"){
     try { window.appLog ? window.appLog(msg, lvl) : console.log(msg); } catch {}
@@ -1650,6 +1681,7 @@
     return Math.round(clampNum(Number(s)||0, lim.min/1000, upper) * 1000);
   };
   const fmtRemain = (ms)=> `${(Math.max(0, ms)/1000).toFixed(ms > 10000 ? 1 : 2)}s`;
+  const fmtRemainShort = (ms)=> `${(Math.max(0, ms)/1000).toFixed(1)}s`;
   function calcBurstTotalMs(plan){
     const pulses = Math.max(1, Math.round(plan?.pulses || 1));
     const dur = Math.max(0, Math.round(plan?.durationMs || ADV_DEFAULTS.durationMs));
@@ -1983,7 +2015,6 @@
         mount.innerHTML = '<div class="roulette-embed-state roulette-error-state">Nao foi possivel carregar as Roletas.</div>';
       });
   }
-  loadRouletteWidget();
 
   let sendControlToRoom = null;
   let sendChartToRoom = null;
@@ -2041,6 +2072,7 @@
   function sendCommand(text){
     const payload = String(text || '').trim();
     if (!payload) return;
+    pulseControlLed(CONTROL_LED_SOURCE_CMD, 220);
 
     const serialReady = !!(window.SerialBridge && typeof window.SerialBridge.send === 'function' &&
       (window.SerialBridge.isConnected || window.serialConnected || (window.port && window.port.writable)));
@@ -2165,11 +2197,220 @@
     if (channelReadoutEl) channelReadoutEl.textContent = `${channel}`;
   }
   function syncAdvancedReadouts(){
-    const durationText = advancedOpen ? `${msToSecStr(advanced.durationMs, "durationMs")}s` : "—";
-    const pulsesText = advancedOpen ? `${advanced.pulses}` : "—";
+    const durationText = advancedOpen ? `${msToSecStr(advanced.durationMs, "durationMs")}s` : "-";
+    const pulsesText = advancedOpen ? `${advanced.pulses}` : "-";
     if (durationReadoutEl) durationReadoutEl.textContent = durationText;
     if (pulsesReadoutEl) pulsesReadoutEl.textContent = pulsesText;
   }
+
+  function setControlTimerTick(active){
+    if (active) {
+      if (!controlTimerTick) {
+        controlTimerTick = setInterval(updateControlTimerReadout, CONTROL_TIMER_TICK_MS);
+      }
+      return;
+    }
+    if (controlTimerTick) {
+      clearInterval(controlTimerTick);
+      controlTimerTick = null;
+    }
+  }
+
+  function selectActiveCountdown(now){
+    let selected = null;
+    controlCountdowns.forEach((entry, key) => {
+      const endAt = Number(entry?.endAt) || 0;
+      if (!endAt) {
+        controlCountdowns.delete(key);
+        return;
+      }
+      if (endAt <= now) {
+        controlCountdowns.delete(key);
+        return;
+      }
+      if (!selected || endAt < selected.endAt) {
+        selected = { endAt, label: entry?.label || "", source: key };
+      }
+    });
+    return selected;
+  }
+
+  function selectActiveCountup(){
+    let selected = null;
+    controlCountups.forEach((entry, key) => {
+      const startAt = Number(entry?.startAt) || 0;
+      if (!startAt) {
+        controlCountups.delete(key);
+        return;
+      }
+      if (!selected || startAt < selected.startAt) {
+        selected = { startAt, label: entry?.label || "", source: key };
+      }
+    });
+    return selected;
+  }
+
+  function updateControlTimerReadout(){
+    if (!timeReadoutEl) return;
+    const now = Date.now();
+    const countdown = selectActiveCountdown(now);
+    if (countdown) {
+      const remain = Math.max(0, countdown.endAt - now);
+      timeReadoutEl.innerHTML = `<i class="fa-solid fa-arrow-down"></i> ${fmtRemainShort(remain)}`;
+      setControlTimerTick(true);
+      return;
+    }
+    const countup = selectActiveCountup();
+    if (countup) {
+      const elapsed = Math.max(0, now - countup.startAt);
+      timeReadoutEl.innerHTML = `<i class="fa-solid fa-arrow-up"></i> ${fmtRemainShort(elapsed)}`;
+      setControlTimerTick(true);
+      return;
+    }
+    timeReadoutEl.textContent = "-";
+    setControlTimerTick(false);
+  }
+
+  function setCountdown(source, endAtMs, label){
+    const key = String(source || "countdown");
+    const endAt = Number(endAtMs) || 0;
+    if (!endAt) return;
+    controlCountdowns.set(key, { endAt, label: label || "" });
+    updateControlTimerReadout();
+  }
+
+  function clearCountdown(source){
+    const key = String(source || "countdown");
+    controlCountdowns.delete(key);
+    updateControlTimerReadout();
+  }
+
+  function setCountup(source, startAtMs, label){
+    const key = String(source || "countup");
+    const startAt = Number(startAtMs) || Date.now();
+    controlCountups.set(key, { startAt, label: label || "" });
+    updateControlTimerReadout();
+  }
+
+  function clearCountup(source){
+    const key = String(source || "countup");
+    controlCountups.delete(key);
+    updateControlTimerReadout();
+  }
+
+  window.__CONTROL_TIMER_API__ = {
+    setCountdown,
+    clearCountdown,
+    setCountup,
+    clearCountup
+  };
+
+  function applyControlLedPhase(phase){
+    if (!controlExecLedEl) return;
+    controlExecLedEl.classList.remove("led-on", "led-off", "led-gap");
+    const cls = phase === "on" ? "led-on" : (phase === "gap" ? "led-gap" : "led-off");
+    controlExecLedEl.classList.add(cls);
+  }
+
+  function resolveControlLedPhase(){
+    if (controlLedCommands.size > 0) return "on";
+    if (controlLedGapSources.size > 0) return "gap";
+    return "off";
+  }
+
+  function updateControlLed(){
+    applyControlLedPhase(resolveControlLedPhase());
+  }
+
+  function beginControlCommand(source, ttlMs=200){
+    const token = Symbol(String(source || "cmd"));
+    const ms = Number(ttlMs) || 0;
+    let timer = null;
+    if (ms > 0) {
+      timer = setTimeout(() => endControlCommand(token), Math.max(40, ms));
+    }
+    controlLedCommands.set(token, timer);
+    updateControlLed();
+    return token;
+  }
+
+  function endControlCommand(token){
+    if (!controlLedCommands.has(token)) return;
+    const timer = controlLedCommands.get(token);
+    if (timer) clearTimeout(timer);
+    controlLedCommands.delete(token);
+    updateControlLed();
+  }
+
+  function setControlLedGap(source){
+    const key = String(source || "gap");
+    controlLedGapSources.add(key);
+    updateControlLed();
+  }
+
+  function clearControlLedGap(source){
+    const key = String(source || "gap");
+    controlLedGapSources.delete(key);
+    updateControlLed();
+  }
+
+  function pulseControlLed(source, ms=200){
+    beginControlCommand(source, ms);
+  }
+
+  window.__CONTROL_LED_API__ = {
+    beginCommand: beginControlCommand,
+    endCommand: endControlCommand,
+    setGap: setControlLedGap,
+    clearGap: clearControlLedGap,
+    pulse: pulseControlLed
+  };
+
+  // Led control via __CONTROL_LED_API__ only (avoid double sources).
+
+  function beginHoldLed(){
+    const api = window.__CONTROL_LED_API__;
+    if (!api || typeof api.beginCommand !== "function") return;
+    if (holdCommandToken && typeof api.endCommand === "function") {
+      api.endCommand(holdCommandToken);
+    }
+    holdCommandToken = api.beginCommand(CONTROL_LED_SOURCE_HOLD, 0);
+  }
+
+  function endHoldLed(){
+    const api = window.__CONTROL_LED_API__;
+    if (!api || typeof api.endCommand !== "function") return;
+    if (holdCommandToken) {
+      api.endCommand(holdCommandToken);
+      holdCommandToken = null;
+    }
+  }
+
+  loadRouletteWidget();
+
+  window.addEventListener("control:countdown", (ev) => {
+    const detail = ev?.detail || {};
+    const source = detail.source || detail.id || "countdown";
+    if (detail.clear) {
+      clearCountdown(source);
+      return;
+    }
+    const endAt = Number(detail.endAt) || 0;
+    const durationMs = Number(detail.durationMs) || 0;
+    const resolved = endAt || (durationMs ? Date.now() + durationMs : 0);
+    if (resolved) setCountdown(source, resolved, detail.label);
+  });
+
+  window.addEventListener("control:countup", (ev) => {
+    const detail = ev?.detail || {};
+    const source = detail.source || detail.id || "countup";
+    if (detail.clear) {
+      clearCountup(source);
+      return;
+    }
+    const startAt = Number(detail.startAt) || Date.now();
+    setCountup(source, startAt, detail.label);
+  });
 
   function applyModeTheme(mode){
     if (!remoteControlCard) return;
@@ -2601,6 +2842,8 @@
     advLed.classList.remove("led-on", "led-off", "led-gap");
     const cls = phase === "on" ? "led-on" : (phase === "gap" ? "led-gap" : "led-off");
     advLed.classList.add(cls);
+    if (cls === "led-off") clearControlLedGap(CONTROL_LED_SOURCE_ADV);
+    else setControlLedGap(CONTROL_LED_SOURCE_ADV);
   }
 
   let advButtonLatchDepth = 0;
@@ -2623,9 +2866,9 @@
     advCountdownEndAt = 0;
     if (advCountdownText) advCountdownText.textContent = "-";
     setAdvStatus(done ? "Concluido" : "Pronto", done ? "done" : "idle");
+    clearCountdown(ADV_COUNTDOWN_SOURCE);
     if (resetSignal && advStopSignal) {
       advStopSignal.stop = false;
-      advStopSignal.holdActive = false;
     }
   }
 
@@ -2636,6 +2879,7 @@
   }
 
   function requestAdvStop(){
+    abortCurrentBurst();
     if (!advStopSignal) return;
     if (!advStopSignal.stop) {
       advStopSignal.stop = true;
@@ -2648,6 +2892,13 @@
     setAdvLedPhase("off");
   }
 
+  function abortCurrentBurst(){
+    if (currentBurstAbort) {
+      currentBurstAbort.abort();
+      currentBurstAbort = null;
+    }
+  }
+
   function startAdvCountdown(plan){
     if (!advCountdownText || !advStatusPill) return;
     stopAdvCountdown(false);
@@ -2655,6 +2906,7 @@
     const endAt = Date.now() + total;
     advCountdownEndAt = endAt;
     setAdvStatus("Executando", "run");
+    setCountdown(ADV_COUNTDOWN_SOURCE, endAt, "advanced");
     const tick = ()=>{
       const remain = Math.max(0, advCountdownEndAt - Date.now());
       if (advCountdownText) advCountdownText.textContent = remain <= 0 ? "0.00s" : fmtRemain(remain);
@@ -2786,9 +3038,11 @@
       advStopSignal = { stop: false, holdActive: false };
     }
     advStopSignal.holdActive = true;
+    beginHoldLed();
     sendCommand(`HOLDON ${buildCmdLine()}`);
     await waitWithStop(dur);
     ensureAdvHoldOff();
+    endHoldLed();
   }
 
   // ===== Envio =====
@@ -2808,6 +3062,7 @@
     return advStopSignal.stop;
   }
   function runBurst(cfg){
+    abortCurrentBurst();
     advStopSignal = { stop: false, holdActive: false };
     const normalized = normalizeAdvancedState(cfg || { ...ADV_DEFAULTS });
     const pulses = clampNum(Math.round(normalized.pulses || 1), ADV_LIMITS.pulses.min, ADV_LIMITS.pulses.max);
@@ -2820,6 +3075,8 @@
     (async ()=>{
       try {
         let aborted = false;
+        let localAbort = { abort: () => { aborted = true; advStopSignal.stop = true; } };
+        currentBurstAbort = localAbort;
         if (preDelay > 0) {
           setAdvLedPhase("gap");
           aborted = await waitWithStop(preDelay);
@@ -2843,6 +3100,7 @@
       } catch(_){
         stopAdvCountdown(false);
       } finally {
+        if (currentBurstAbort === localAbort) currentBurstAbort = null;
         ensureAdvHoldOff();
         setAdvLedPhase("off");
         releaseAdvancedButton();
@@ -2863,6 +3121,8 @@
         clearRouletteAutoTimer();
         releaseRoulettePointer();
         let aborted = false;
+        let localAbort = { abort: () => { aborted = true; advStopSignal.stop = true; } };
+        currentBurstAbort = localAbort;
         if (preDelay > 0) {
           setAdvLedPhase("gap");
           aborted = await waitWithStop(preDelay);
@@ -2896,6 +3156,7 @@
       } catch(_){
         stopAdvCountdown(false);
       } finally {
+        if (currentBurstAbort === localAbort) currentBurstAbort = null;
         releaseRoulettePointer();
         clearRouletteAutoTimer();
         setAdvLedPhase("off");
@@ -2935,23 +3196,28 @@
   }
   function holdOn(){
     if (btnSend) btnSend.classList.add("holding");
+    setCountup(HOLD_COUNTUP_SOURCE, Date.now(), "hold");
     if (currentMode === "ROULETTE") {
       clearRouletteAutoTimer();
       if (!startRoulettePointer()) {
         if (btnSend) btnSend.classList.remove("holding");
+        clearCountup(HOLD_COUNTUP_SOURCE);
       }
       return;
     }
+    beginHoldLed();
     sendCommand(`HOLDON ${buildCmdLine()}`);
   }
   function holdOff(){
     if (btnSend) btnSend.classList.remove("holding");
+    clearCountup(HOLD_COUNTUP_SOURCE);
     if (currentMode === "ROULETTE") {
       clearRouletteAutoTimer();
       releaseRoulettePointer();
       return;
     }
     sendCommand("HOLDOFF");
+    endHoldLed();
   }
 
   // ===== Botao: clique unico vs segurar =====
@@ -3506,7 +3772,8 @@
       const text = (label || "desconectado").trim();
       flowgateStateEl.textContent = text;
       const lower = text.toLowerCase();
-      if (lower.includes("conectado")) setPillState(flowgatePill, "ok");
+      if (lower.includes("desconectado")) setPillState(flowgatePill, "off");
+      else if (lower.includes("conectado")) setPillState(flowgatePill, "ok");
       else if (lower.includes("erro")) setPillState(flowgatePill, "warn");
       else setPillState(flowgatePill, "off");
     };

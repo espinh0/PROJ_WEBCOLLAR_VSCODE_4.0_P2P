@@ -148,6 +148,9 @@
 
   let lastActivityByCh = { 1: 0, 2: 0 };
   let lastKeepAwakeSendByCh = { 1: 0, 2: 0 };
+  let holdActive = false;
+  let holdActiveChannel = 0;
+  let holdActiveSince = 0;
 
   function isHost() {
     try {
@@ -356,9 +359,40 @@
     if (!line) return;
     const trimmed = line.trim();
     const upper = trimmed.toUpperCase();
+    const isOk = upper.startsWith('OK');
+    const isErr = upper.startsWith('ERR');
+    const hasHoldOn = /\bHOLDON\b/i.test(upper);
+    const hasHoldOff = /\bHOLDOFF\b/i.test(upper);
+
+    if (hasHoldOn && isOk) {
+      const chMatch = trimmed.match(/\b(SHOCK|VIBRATION|BEEP|LIGHT)\b\s*,\s*\d+\s*,\s*(\d+)\b/i);
+      const ch = chMatch ? Number(chMatch[2]) : 0;
+      holdActive = true;
+      holdActiveChannel = Number.isFinite(ch) ? ch : 0;
+      holdActiveSince = Date.now();
+      console.log('[HB+KA] HOLDON detectado' + (holdActiveChannel ? ` (canal ${holdActiveChannel})` : '') + ':', trimmed);
+    }
+
+    if (hasHoldOff && !isErr) {
+      if (holdActive) {
+        const now = Date.now();
+        const prevChannel = holdActiveChannel;
+        holdActive = false;
+        holdActiveChannel = 0;
+        holdActiveSince = 0;
+        if (prevChannel && KA_CHANNELS.includes(prevChannel)) {
+          lastActivityByCh[prevChannel] = now;
+          console.log('[HB+KA] HOLDOFF detectado (canal ' + prevChannel + '), atividade registrada:', trimmed);
+        } else {
+          KA_CHANNELS.forEach((ch) => { lastActivityByCh[ch] = now; });
+          console.log('[HB+KA] HOLDOFF detectado (canal desconhecido), atividade registrada:', trimmed);
+        }
+      }
+      if (isOk) return;
+    }
 
     // Ex.: "OK BEEP,0,1" -> comando aceito
-    if (upper.startsWith('OK')) {
+    if (isOk) {
       const now = Date.now();
       const lastInternalTs = Math.max(...KA_CHANNELS.map((ch) => lastKeepAwakeSendByCh[ch] || 0));
       const dt = now - lastInternalTs;
@@ -409,6 +443,12 @@
 
   function sendKeepAwakeIfIdle() {
     if (!keepAwakeEnabled || !isHost()) return;
+    if (holdActive) {
+      const ageSec = holdActiveSince ? Math.round((Date.now() - holdActiveSince) / 1000) : 0;
+      const ageInfo = ageSec ? ` (${ageSec}s)` : '';
+      console.log('[HB+KA] Hold ativo' + ageInfo + ', keep-awake adiado.');
+      return;
+    }
     const now = Date.now();
     KA_CHANNELS.forEach((ch) => {
       if (!lastActivityByCh[ch]) {

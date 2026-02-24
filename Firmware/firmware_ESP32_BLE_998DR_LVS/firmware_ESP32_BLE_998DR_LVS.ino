@@ -13,16 +13,16 @@
 
   - Safety: se BLE desconectar -> solicita HOLDOFF imediato no Core1.
 
-  - OLED: U8g2 + ícone BT via XBM.
+  - OLED: U8g2 + icone BT via XBM.
 
   Requisitos:
-  - ESP32 "clássico" dual-core (WROOM/WROVER).
+  - ESP32 "classico" dual-core (WROOM/WROVER).
   - Arduino-ESP32 2.x (recomendado).
   - NimBLE-Arduino instalado.
 
-  Versao: 1.1.4 (2026-02-24)
+  Version: 4.0.6 LVS (2026-02-24)
   - Adiciona modo DUALON/DUALOFF para espelhar canais 1/2.
-  - Desativa DUAL ao desconectar BLE.
+  - LVS,X mapped to MuSe/Love Spouse via BLE advertising (manufacturer data).
 */
 
 #include <Arduino.h>
@@ -51,6 +51,106 @@ static const uint16_t SINGLE_SHOT_GAP_MS         = 6;
 static const uint8_t  ENGINE_ON_FRAMES_DEFAULT   = 3;
 
 static const char* FIXED_ID_BITS = "00110101001000100";
+
+// ---------------------
+// BLE UART (NUS) UUIDs
+// ---------------------
+#define NUS_SERVICE_UUID  "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
+#define NUS_CHAR_RX_UUID  "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
+#define NUS_CHAR_TX_UUID  "6e400003-b5a3-f393-e0a9-e50e24dcca9e"
+
+// ---------------------
+// MuSe/Love Spouse - BLE advertising control
+// ---------------------
+static const uint8_t  LVS_LEVEL_MAX = 9;
+
+static const uint16_t MUSE_ADV_PERIOD_MS = 100;
+static const uint8_t  MUSE_INDEX_MAX = 3;
+
+static const uint8_t MUSE_MFG_LIST[4][11] = {
+  { 0x6D, 0xB6, 0x43, 0xCE, 0x97, 0xFE, 0x42, 0x7C, 0xE5, 0x15, 0x7D }, // Stop
+  { 0x6D, 0xB6, 0x43, 0xCE, 0x97, 0xFE, 0x42, 0x7C, 0xE4, 0x9C, 0x6C }, // Speed 1
+  { 0x6D, 0xB6, 0x43, 0xCE, 0x97, 0xFE, 0x42, 0x7C, 0xE7, 0x07, 0x5E }, // Speed 2
+  { 0x6D, 0xB6, 0x43, 0xCE, 0x97, 0xFE, 0x42, 0x7C, 0xE6, 0x8E, 0x4F }  // Speed 3
+};
+
+static uint8_t museIndexTarget = 0;
+static uint8_t museIndexCurrent = 0;
+static bool museDirty = true;
+static uint32_t museNextAdvMs = 0;
+
+static inline uint8_t clampLvsLevel(int level) {
+  if (level < 0) return 0;
+  if (level > LVS_LEVEL_MAX) return LVS_LEVEL_MAX;
+  return (uint8_t)level;
+}
+
+static uint8_t museLevelToIndex(uint8_t level) {
+  if (level == 0) return 0;
+  float percent = (float)level / (float)LVS_LEVEL_MAX;
+  int idx = (int)(percent * 4.0f);
+  if (idx < 0) idx = 0;
+  if (idx > MUSE_INDEX_MAX) idx = MUSE_INDEX_MAX;
+  return (uint8_t)idx;
+}
+
+static std::string museBuildMfgData(uint8_t index) {
+  uint8_t idx = (index > MUSE_INDEX_MAX) ? MUSE_INDEX_MAX : index;
+  std::string data;
+  data.resize(13);
+  data[0] = (char)0xF0; // manufacturer id LSB (0xFFF0)
+  data[1] = (char)0xFF; // manufacturer id MSB
+  memcpy(&data[2], MUSE_MFG_LIST[idx], sizeof(MUSE_MFG_LIST[idx]));
+  return data;
+}
+
+static void museSetLevel(uint8_t level, bool hold) {
+  (void)hold;
+  level = clampLvsLevel(level);
+  museIndexTarget = museLevelToIndex(level);
+  museDirty = true;
+}
+
+static void museStop() {
+  museIndexTarget = 0;
+  museDirty = true;
+}
+
+static void museApplyAdvertisingData(uint8_t index) {
+  std::string mfg = museBuildMfgData(index);
+  NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
+  adv->stop();
+  NimBLEAdvertisementData advData;
+  NimBLEAdvertisementData scanData;
+
+  adv->setMinInterval(80);
+  adv->setMaxInterval(160);
+
+  advData.setFlags(0x06);
+  advData.setName("SCOLLAR-CONTROL-BLE");
+  advData.addServiceUUID(NUS_SERVICE_UUID);
+  advData.setManufacturerData(mfg);
+
+  scanData.setName("SCOLLAR-CONTROL-BLE");
+
+  adv->setAdvertisementData(advData);
+  adv->setScanResponseData(scanData);
+  adv->start();
+}
+
+static void museServiceCore0() {
+  uint32_t now = millis();
+  if ((long)(now - museNextAdvMs) < 0) return;
+  museNextAdvMs = now + MUSE_ADV_PERIOD_MS;
+
+  if (museDirty || museIndexCurrent != museIndexTarget) {
+    museIndexCurrent = museIndexTarget;
+    museDirty = false;
+    museApplyAdvertisingData(museIndexCurrent);
+  } else {
+    NimBLEDevice::getAdvertising()->start();
+  }
+}
 
 // ---------------------
 // RF / Frame
@@ -207,6 +307,27 @@ static void engineService(){
 // ---------------------
 // Parsers
 // ---------------------
+static bool parseLvsCmd(const String& lineIn, uint8_t &outLvl){
+  String line = lineIn;
+  line.replace("\r", "");
+  line.trim();
+  if (!line.length()) return false;
+
+  String up = line; up.toUpperCase();
+  if (!up.startsWith("LVS")) return false;
+
+  int p1 = line.indexOf(',');
+  if (p1 < 0) return false;
+
+  String lvlStr = line.substring(p1 + 1);
+  lvlStr.trim();
+  if (!lvlStr.length()) return false;
+
+  int lvlInt = lvlStr.toInt();
+  outLvl = clampLvsLevel(lvlInt);
+  return true;
+}
+
 static bool parseSimpleCmd(const String& lineIn, char* outMode, uint8_t &outLvl, uint8_t &outCh, uint16_t &outMsOpt){
   outMode[0]=0; outLvl=0; outCh=1; outMsOpt=PULSE_MS_DEFAULT;
 
@@ -335,10 +456,6 @@ static bool compile_SEQUENCE_finalize(){
 // ---------------------
 // BLE UART (NUS)
 // ---------------------
-#define NUS_SERVICE_UUID  "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
-#define NUS_CHAR_RX_UUID  "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
-#define NUS_CHAR_TX_UUID  "6e400003-b5a3-f393-e0a9-e50e24dcca9e"
-
 static NimBLECharacteristic* pTxCharacteristic = nullptr;
 static volatile bool deviceConnected = false;
 static volatile bool bleBonded = false;
@@ -495,6 +612,8 @@ static void safetyHoldOff_core1(){
   engineStop();
   engineClear();
 
+  museStop();
+
   digitalWrite(TX_PIN, LOW);
   rfLed(false);
   allLedsOff();
@@ -580,6 +699,20 @@ static void processCommandLine_core1(const char* lineC) {
     cmd.trim();
     String cmdUp = cmd; cmdUp.toUpperCase();
 
+    if (cmdUp.startsWith("LVS")) {
+      uint8_t lvl = 0;
+      if (parseLvsCmd(cmd, lvl)) {
+        museSetLevel(lvl, true);
+        uiSetMLC("LVS", lvl, 0);
+        char out[64];
+        snprintf(out, sizeof(out), "OK HOLDON LVS,%u", (unsigned)lvl);
+        enqueueTx(out);
+      } else {
+        enqueueTx("ERR HOLDON LVS");
+      }
+      return;
+    }
+
     engineClear();
 
     if (cmdUp.startsWith("CADENCE ")) {
@@ -651,6 +784,16 @@ static void processCommandLine_core1(const char* lineC) {
   }
 
   // simples MODE,LVL,CH[,DUR]
+  uint8_t lvsLvl = 0;
+  if (parseLvsCmd(line, lvsLvl)) {
+    museSetLevel(lvsLvl, false);
+    uiSetMLC("LVS", lvsLvl, 0);
+    char out[64];
+    snprintf(out, sizeof(out), "OK LVS,%u", (unsigned)lvsLvl);
+    enqueueTx(out);
+    return;
+  }
+
   char mode[16] = {0}; uint8_t lvl=0, ch=1; uint16_t ms=PULSE_MS_DEFAULT;
   if (parseSimpleCmd(line, mode, lvl, ch, ms)) {
     if (!strcmp(mode, "BEEP") || !strcmp(mode, "LIGHT")) lvl = 0;
@@ -693,7 +836,9 @@ static void rfTask(void* pv) {
     // Engine roda no Core1
     engineService();
 
-    // Pequeno yield (1 tick) para não matar o sistema
+
+
+    // Pequeno yield (1 tick) para nao matar o sistema
     vTaskDelay(1);
   }
 }
@@ -707,7 +852,7 @@ public:
     (void)s;
     deviceConnected = true;
     uiLogLine("BLE conectado");
-    // não faz RF aqui
+    // nao faz RF aqui
   }
 
   void onConnect(NimBLEServer* s, NimBLEConnInfo& ci) {
@@ -727,8 +872,6 @@ public:
     deviceConnected = false;
     bleEncrypted = false;
     bleBonded = false;
-    dualModeEnabled = false;
-    uiSetDual(false);
 
     // solicita safety holdoff no Core1
     safetyStopRequested = true;
@@ -743,8 +886,6 @@ public:
     deviceConnected = false;
     bleEncrypted = false;
     bleBonded = false;
-    dualModeEnabled = false;
-    uiSetDual(false);
 
     safetyStopRequested = true;
     uiLogLine("BLE desconectou");
@@ -813,23 +954,29 @@ private:
 // ---------------------
 // BLE advertising helper
 // ---------------------
-static void bleStartAdvertising() {
-  NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
+static void applyBaseAdvertisingData(NimBLEAdvertising* adv) {
   NimBLEAdvertisementData advData;
   NimBLEAdvertisementData scanData;
+  std::string mfg = museBuildMfgData(museIndexCurrent);
 
-  adv->stop();
   adv->setMinInterval(80);
   adv->setMaxInterval(160);
 
   advData.setFlags(0x06);
   advData.setName("SCOLLAR-CONTROL-BLE");
   advData.addServiceUUID(NUS_SERVICE_UUID);
+  advData.setManufacturerData(mfg);
 
   scanData.setName("SCOLLAR-CONTROL-BLE");
 
   adv->setAdvertisementData(advData);
   adv->setScanResponseData(scanData);
+}
+
+static void bleStartAdvertising() {
+  NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
+  adv->stop();
+  applyBaseAdvertisingData(adv);
   adv->start();
 }
 
@@ -879,7 +1026,7 @@ void setup() {
   NimBLEDevice::setMTU(185); // menor overhead por comando
   NimBLEDevice::setPower(ESP_PWR_LVL_P9);
 
-  // Just Works + bonding (reconexão silenciosa após parear, quando SO permitir)
+  // Just Works + bonding (reconexao silenciosa apos parear, quando SO permitir)
   NimBLEDevice::setSecurityAuth(true, false, true);
   NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
 
@@ -900,6 +1047,7 @@ void setup() {
   rxChar->setCallbacks(new RxCallbacks());
 
   svc->start();
+
   bleStartAdvertising();
 
   Serial.println("[BOOT] ready");
@@ -934,15 +1082,16 @@ void loop() {
     oledSamples++;
   }
 
-  // 3) Watchdog de advertising
+  // 3) Watchdog de advertising (mantem anuncio ativo)
   static unsigned long lastKick = 0;
-  if (!deviceConnected && (millis() - lastKick) > 15000) {
+  if ((millis() - lastKick) > 15000) {
     NimBLEDevice::getAdvertising()->start();
     lastKick = millis();
   }
 
-  // log simples do custo do OLED
-  if (oledSamples >= 20 || (millis() - oledLogAt) > 2000) {
+  // log simples do custo do OLED (desativado por padrao)
+  static const bool OLED_LOG_ENABLED = false;
+  if (OLED_LOG_ENABLED && (oledSamples >= 20 || (millis() - oledLogAt) > 2000)) {
     if (oledSamples > 0) {
       uint32_t avgUs = oledAccumUs / oledSamples;
       Serial.printf("[OLED] avg=%lu us (%u samples)\n", (unsigned long)avgUs, (unsigned)oledSamples);
@@ -951,6 +1100,8 @@ void loop() {
     oledSamples = 0;
     oledLogAt = millis();
   }
+
+  museServiceCore0();
 
   delay(1);
 }

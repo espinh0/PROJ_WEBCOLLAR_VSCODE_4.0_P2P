@@ -1,0 +1,367 @@
+<style>
+  .ramp-control-card {
+    border-radius: 16px;
+    border: 1px solid rgba(34, 211, 238, 0.35);
+    background: linear-gradient(160deg, rgba(9, 25, 33, 0.9), rgba(10, 12, 20, 0.92));
+    box-shadow: 0 16px 28px rgba(0, 0, 0, 0.34);
+    padding: 16px;
+    color: #e2e8f0;
+  }
+  .ramp-control-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .ramp-control-head h6 {
+    margin: 0;
+    font-size: 1rem;
+    letter-spacing: 0.02em;
+    color: #ecfeff;
+  }
+  .ramp-control-sub {
+    margin-top: 2px;
+    color: #93c5fd;
+    font-size: 0.82rem;
+  }
+  .ramp-control-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+  }
+  .ramp-control-grid label {
+    display: block;
+    font-size: 0.78rem;
+    color: #93c5fd;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .ramp-control-grid .form-control,
+  .ramp-control-grid .form-select {
+    background: rgba(7, 14, 24, 0.65);
+    border: 1px solid rgba(147, 197, 253, 0.22);
+    color: #e2e8f0;
+  }
+  .ramp-control-grid .form-control:focus,
+  .ramp-control-grid .form-select:focus {
+    border-color: rgba(34, 211, 238, 0.58);
+    box-shadow: 0 0 0 0.15rem rgba(34, 211, 238, 0.18);
+  }
+  .ramp-runtime {
+    border: 1px solid rgba(34, 211, 238, 0.22);
+    background: rgba(2, 18, 28, 0.55);
+    border-radius: 12px;
+    padding: 10px;
+    margin-bottom: 12px;
+  }
+  .ramp-runtime-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .ramp-phase-pill {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 2px 9px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: rgba(100, 116, 139, 0.2);
+    color: #cbd5e1;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+  }
+  .ramp-phase-pill.up {
+    background: rgba(16, 185, 129, 0.16);
+    color: #6ee7b7;
+    border-color: rgba(16, 185, 129, 0.5);
+  }
+  .ramp-phase-pill.down {
+    background: rgba(245, 158, 11, 0.15);
+    color: #fcd34d;
+    border-color: rgba(245, 158, 11, 0.45);
+  }
+  .ramp-runtime-metrics {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    color: #cbd5e1;
+    font-size: 0.78rem;
+  }
+  .ramp-meter-track,
+  .ramp-progress-track {
+    width: 100%;
+    height: 8px;
+    border-radius: 999px;
+    background: rgba(30, 41, 59, 0.85);
+    overflow: hidden;
+  }
+  .ramp-progress-track {
+    height: 5px;
+    margin-top: 8px;
+  }
+  .ramp-meter-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #0ea5e9, #22d3ee);
+    box-shadow: 0 0 10px rgba(34, 211, 238, 0.42);
+    transition: width 120ms linear;
+  }
+  .ramp-progress-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #34d399, #22c55e);
+    transition: width 120ms linear;
+  }
+  .ramp-control-note {
+    margin-top: 10px;
+    font-size: 0.78rem;
+    color: #cbd5e1;
+  }
+  .ramp-control-note.warn {
+    color: #fbbf24;
+  }
+</style>
+
+<section id="rampControlWidget" class="ramp-control-card" aria-label="Press-and-Hold with Ramp">
+  <div class="ramp-control-head">
+    <div>
+      <h6><i class="fa-solid fa-gauge-high me-2"></i>Press-and-Hold with Ramp</h6>
+      <div class="ramp-control-sub">Ramp up enquanto segura e ramp down ao soltar.</div>
+    </div>
+    <div class="form-check form-switch m-0">
+      <input class="form-check-input" type="checkbox" id="rampEnabled">
+      <label class="form-check-label text-light small" for="rampEnabled">Ativo</label>
+    </div>
+  </div>
+
+  <div id="rampRuntime" class="ramp-runtime" aria-live="polite">
+    <div class="ramp-runtime-head">
+      <span id="rampPhasePill" class="ramp-phase-pill">PARADO</span>
+      <div class="ramp-runtime-metrics">
+        <span id="rampCurrentLevel">0%</span>
+        <span id="rampTargetLevel">alvo 0%</span>
+      </div>
+    </div>
+    <div class="ramp-meter-track">
+      <div id="rampMeterFill" class="ramp-meter-fill"></div>
+    </div>
+    <div class="ramp-progress-track">
+      <div id="rampProgressFill" class="ramp-progress-fill"></div>
+    </div>
+  </div>
+
+  <div id="rampControlBody" class="ramp-control-grid">
+    <div>
+      <label for="rampStep">Step</label>
+      <input id="rampStep" class="form-control form-control-sm" type="number" min="1" max="100" step="1" value="4">
+    </div>
+    <div>
+      <label for="rampTickMs">Tick (ms)</label>
+      <input id="rampTickMs" class="form-control form-control-sm" type="number" min="10" max="2000" step="10" value="120">
+    </div>
+    <div>
+      <label for="rampStartLevel">Nivel inicial</label>
+      <input id="rampStartLevel" class="form-control form-control-sm" type="number" min="0" max="100" step="1" value="0">
+    </div>
+    <div>
+      <label for="rampUpCurve">Curva subida</label>
+      <select id="rampUpCurve" class="form-select form-select-sm">
+        <option value="linear">Linear</option>
+        <option value="ease-in">Ease in</option>
+        <option value="ease-out">Ease out</option>
+        <option value="ease-in-out">Ease in-out</option>
+      </select>
+    </div>
+    <div>
+      <label for="rampDownCurve">Curva descida</label>
+      <select id="rampDownCurve" class="form-select form-select-sm">
+        <option value="linear">Linear</option>
+        <option value="ease-in">Ease in</option>
+        <option value="ease-out">Ease out</option>
+        <option value="ease-in-out">Ease in-out</option>
+      </select>
+    </div>
+    <div>
+      <label for="rampUpExponent">Expoente subida</label>
+      <input id="rampUpExponent" class="form-control form-control-sm" type="number" min="0.4" max="5" step="0.1" value="1.6">
+    </div>
+    <div>
+      <label for="rampDownExponent">Expoente descida</label>
+      <input id="rampDownExponent" class="form-control form-control-sm" type="number" min="0.4" max="5" step="0.1" value="1.3">
+    </div>
+  </div>
+
+  <div id="rampModeHint" class="ramp-control-note">Disponivel para modos com nivel (Shock e Vibracao).</div>
+</section>
+
+<script>
+(() => {
+  const KEY = "__RAMP_CONTROL_WIDGET_BINDING__";
+  if (window[KEY] && typeof window[KEY].dispose === "function") {
+    try { window[KEY].dispose(); } catch(_) {}
+  }
+
+  const root = document.getElementById("rampControlWidget");
+  if (!root) return;
+
+  const el = {
+    enabled: document.getElementById("rampEnabled"),
+    step: document.getElementById("rampStep"),
+    tickMs: document.getElementById("rampTickMs"),
+    startLevel: document.getElementById("rampStartLevel"),
+    upCurve: document.getElementById("rampUpCurve"),
+    downCurve: document.getElementById("rampDownCurve"),
+    upExponent: document.getElementById("rampUpExponent"),
+    downExponent: document.getElementById("rampDownExponent"),
+    body: document.getElementById("rampControlBody"),
+    hint: document.getElementById("rampModeHint"),
+    phasePill: document.getElementById("rampPhasePill"),
+    currentLevel: document.getElementById("rampCurrentLevel"),
+    targetLevel: document.getElementById("rampTargetLevel"),
+    meterFill: document.getElementById("rampMeterFill"),
+    progressFill: document.getElementById("rampProgressFill")
+  };
+
+  let syncing = false;
+  const execState = {
+    seq: 0,
+    level: 0
+  };
+
+  const curves = new Set(["linear", "ease-in", "ease-out", "ease-in-out"]);
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, Number(value) || 0));
+
+  function normalizeFromUi(){
+    return {
+      rampEnabled: !!el.enabled?.checked,
+      rampStep: Math.round(clamp(el.step?.value, 1, 100)),
+      rampTickMs: Math.round(clamp(el.tickMs?.value, 10, 2000)),
+      rampStartLevel: Math.round(clamp(el.startLevel?.value, 0, 100)),
+      rampUpCurve: curves.has(el.upCurve?.value) ? el.upCurve.value : "linear",
+      rampDownCurve: curves.has(el.downCurve?.value) ? el.downCurve.value : "ease-out",
+      rampUpExponent: clamp(el.upExponent?.value, 0.4, 5),
+      rampDownExponent: clamp(el.downExponent?.value, 0.4, 5)
+    };
+  }
+
+  function setBodyDisabled(disabled){
+    const off = !!disabled;
+    if (el.body) {
+      el.body.style.opacity = off ? "0.55" : "1";
+      el.body.querySelectorAll("input,select,button,textarea").forEach((field) => {
+        field.disabled = off;
+      });
+    }
+  }
+
+  function applyState(detail){
+    if (!detail || typeof detail !== "object") return;
+    syncing = true;
+    if (el.enabled) el.enabled.checked = !!detail.enabled;
+    if (el.step) el.step.value = String(Math.round(clamp(detail.step, 1, 100)));
+    if (el.tickMs) el.tickMs.value = String(Math.round(clamp(detail.tickMs, 10, 2000)));
+    if (el.startLevel) el.startLevel.value = String(Math.round(clamp(detail.startLevel, 0, 100)));
+    if (el.upCurve) el.upCurve.value = curves.has(detail.upCurve) ? detail.upCurve : "linear";
+    if (el.downCurve) el.downCurve.value = curves.has(detail.downCurve) ? detail.downCurve : "ease-out";
+    if (el.upExponent) el.upExponent.value = String(clamp(detail.upExponent, 0.4, 5));
+    if (el.downExponent) el.downExponent.value = String(clamp(detail.downExponent, 0.4, 5));
+    const supportsLevel = detail.supportsLevel !== false;
+    setBodyDisabled(!detail.enabled || !supportsLevel);
+    if (el.hint) {
+      if (!supportsLevel) {
+        el.hint.textContent = "Modo atual sem nivel. Ramping so atua em Shock e Vibracao.";
+        el.hint.classList.add("warn");
+      } else {
+        el.hint.textContent = "Disponivel para modos com nivel (Shock e Vibracao).";
+        el.hint.classList.remove("warn");
+      }
+    }
+    syncing = false;
+  }
+  function applyRuntime(detail){
+    const runtime = detail && typeof detail === "object" ? detail : {};
+    const phase = String(runtime.phase || "idle");
+    const isActive = !!runtime.active;
+    const current = Math.max(0, Math.min(100, Math.round(Number(runtime.currentLevel) || 0)));
+    const target = Math.max(0, Math.min(100, Math.round(Number(runtime.targetLevel) || 0)));
+    if (el.phasePill) {
+      el.phasePill.classList.remove("up", "down");
+      if (phase === "up") {
+        el.phasePill.textContent = "SUBIDA";
+        el.phasePill.classList.add("up");
+      } else if (phase === "down") {
+        el.phasePill.textContent = "DESCIDA";
+        el.phasePill.classList.add("down");
+      } else {
+        el.phasePill.textContent = isActive ? "ATIVO" : "PARADO";
+      }
+    }
+    if (el.currentLevel) el.currentLevel.textContent = `${current}%`;
+    if (el.targetLevel) {
+      if (phase === "down") el.targetLevel.textContent = "alvo 0%";
+      else el.targetLevel.textContent = `alvo ${target}%`;
+    }
+    if (el.meterFill) el.meterFill.style.width = `${current}%`;
+    if (!isActive && phase !== "down") {
+      execState.level = 0;
+      if (el.progressFill) el.progressFill.style.width = "0%";
+    }
+  }
+
+  function applyCommandFeedback(detail){
+    if (!detail || typeof detail !== "object") return;
+    const seq = Number(detail.seq) || 0;
+    if (seq && seq < execState.seq) return;
+    execState.seq = seq;
+    if (detail.type === "holdoff") {
+      execState.level = 0;
+    } else if (detail.type === "holdon") {
+      const lvl = Number(detail.level);
+      if (Number.isFinite(lvl)) execState.level = Math.max(0, Math.min(100, Math.round(lvl)));
+    } else {
+      return;
+    }
+    if (el.progressFill) el.progressFill.style.width = `${execState.level}%`;
+  }
+
+  function emitUpdate(reason){
+    if (syncing) return;
+    const payload = normalizeFromUi();
+    payload.reason = reason || "widget-change";
+    try { window.dispatchEvent(new CustomEvent("rampcontrol:update", { detail: payload })); } catch(_) {}
+  }
+
+  const onState = (ev) => applyState(ev?.detail || {});
+  const onRuntime = (ev) => applyRuntime(ev?.detail || {});
+  const onCommandFeedback = (ev) => applyCommandFeedback(ev?.detail || {});
+  const onChange = () => emitUpdate("widget-change");
+
+  window.addEventListener("rampcontrol:state", onState);
+  window.addEventListener("rampcontrol:runtime", onRuntime);
+  window.addEventListener("rampcontrol:command_feedback", onCommandFeedback);
+  [el.enabled, el.step, el.tickMs, el.startLevel, el.upCurve, el.downCurve, el.upExponent, el.downExponent]
+    .filter(Boolean)
+    .forEach((node) => {
+      node.addEventListener("change", onChange);
+      node.addEventListener("input", onChange);
+    });
+
+  window[KEY] = {
+    dispose(){
+      window.removeEventListener("rampcontrol:state", onState);
+      window.removeEventListener("rampcontrol:runtime", onRuntime);
+      window.removeEventListener("rampcontrol:command_feedback", onCommandFeedback);
+    }
+  };
+
+  try { window.dispatchEvent(new CustomEvent("rampcontrol:request_state")); } catch(_) {}
+})();
+</script>

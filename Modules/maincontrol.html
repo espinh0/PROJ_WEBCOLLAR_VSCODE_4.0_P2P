@@ -1,4 +1,4 @@
-﻿<!-- CONTROLE MANUAL v3.3 (Flowgate/Chat Bus; clique = comando unico; segurar = HOLD; sem Firebase) -->
+﻿<!-- CONTROLE MANUAL v3.5 (Flowgate/Chat Bus; clique = comando unico; segurar = HOLD; sem Firebase; toggle DUALON/OFF + sync serial) -->
 <style>
   #remoteControlWrapper {
     position: fixed;
@@ -132,12 +132,14 @@
   .naval-module-slot,
   .pulse-sequencer-slot,
   .video-player-slot,
+  .ramp-module-slot,
   .custom-buttons-slot {
     width: 100%;
   }
   #remoteControlCard #navalModuleMount,
   #remoteControlCard #pulseSequencerMount,
-  #remoteControlCard #videoPlayerMount {
+  #remoteControlCard #videoPlayerMount,
+  #remoteControlCard #rampControlMount {
     width: 100%;
   }
   .control-scoreboard-block,
@@ -145,6 +147,7 @@
   .naval-module-slot,
   .pulse-sequencer-slot,
   .video-player-slot,
+  .ramp-module-slot,
   .chart-block {
     width: 100%;
     transition: max-height .24s ease, opacity .18s ease, margin .18s ease, padding .18s ease;
@@ -156,6 +159,7 @@
   .naval-module-slot:not(.collapsed),
   .pulse-sequencer-slot:not(.collapsed),
   .video-player-slot:not(.collapsed),
+  .ramp-module-slot:not(.collapsed),
   .chart-block:not(.collapsed) {
     margin-bottom: 18px;
   }
@@ -164,6 +168,7 @@
   .naval-module-slot.collapsed,
   .pulse-sequencer-slot.collapsed,
   .video-player-slot.collapsed,
+  .ramp-module-slot.collapsed,
   .chart-block.collapsed {
     max-height: 0;
     opacity: 0;
@@ -181,7 +186,8 @@
   .control-audio-mount,
   #navalModuleMount,
   #pulseSequencerMount,
-  #videoPlayerMount {
+  #videoPlayerMount,
+  #rampControlMount {
     width: 100%;
   }
   .scoreboard-embed-state,
@@ -189,6 +195,7 @@
   .naval-embed-state,
   .pulse-embed-state,
   .video-embed-state,
+  .ramp-embed-state,
   .roulette-embed-state {
     border-radius: 16px;
     padding: 20px 16px;
@@ -200,6 +207,7 @@
   .naval-loading-state,
   .pulse-loading-state,
   .video-loading-state,
+  .ramp-loading-state,
   .roulette-loading-state {
     border: 1px dashed rgba(255,255,255,0.18);
     color: #94a3b8;
@@ -210,6 +218,7 @@
   .naval-error-state,
   .pulse-error-state,
   .video-error-state,
+  .ramp-error-state,
   .roulette-error-state {
     border: 1px solid rgba(239,68,68,0.4);
     color: #fecaca;
@@ -498,55 +507,149 @@
     outline: none;
     box-shadow: none;
   }
-  .btn-send {
-    --send-color: #ef4444;
-    --send-tint: rgba(239,68,68,0.16);
-    --send-tint-strong: rgba(239,68,68,0.32);
-    width: 64px;
-    height: 64px;
-    padding: 0;
-    border-radius: 50%;
-    font-weight: 700;
+  .control-action-btn {
+    border: 0;
+    background: rgba(17,17,21,0.85);
+    color: var(--control-action-text, #fde68a);
+    padding: 8px 14px;
+    border-radius: 999px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    letter-spacing: 0.02em;
-    border: 3px solid rgba(239,68,68,0.65);
-    background: linear-gradient(125deg, var(--send-tint), rgba(9,10,15,0.92));
-    color: #ffecec;
-    box-shadow: 0 8px 20px rgba(239,68,68,0.25), 0 4px 12px rgba(0,0,0,0.35);
-    transition: transform .12s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease, color .1s ease;
+    gap: 8px;
+    font-weight: 600;
+    line-height: 1;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 6px 16px rgba(0,0,0,0.35);
+    transition: background .2s ease, transform .15s ease, box-shadow .2s ease, color .12s ease;
     touch-action: manipulation;
     -webkit-touch-callout: none;
     -webkit-user-select: none;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
   }
-  .btn-send i {
-    color: var(--send-color);
+  .control-action-btn i {
+    color: var(--control-action-accent, #fde68a);
     transition: color .12s ease;
   }
-  .btn-send:hover {
-    border-color: var(--send-color);
-    background: linear-gradient(125deg, var(--send-tint-strong), rgba(23,6,8,0.92));
-    color: #fff1f1;
-    box-shadow: 0 10px 26px rgba(239,68,68,0.35), 0 6px 12px rgba(0,0,0,0.35);
+  .control-action-btn:hover {
+    background: rgba(24,24,34,0.95);
     transform: translateY(-1px);
+  }
+  .control-action-btn:focus-visible {
+    outline: none;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.08),
+      0 6px 16px rgba(0,0,0,0.35),
+      0 0 0 2px rgba(255,255,255,0.12),
+      0 0 0 6px var(--control-action-focus, rgba(250,204,21,0.3));
+  }
+  .control-action-btn:active,
+  .control-action-btn.pressed {
+    transform: translateY(1px);
+  }
+  .btn-dual-toggle {
+    --control-action-accent: #22c55e;
+    --control-action-text: #dcfce7;
+    --control-action-focus: rgba(34,197,94,0.28);
+    min-width: 104px;
+  }
+  .btn-dual-toggle.active {
+    background: rgba(16,185,129,0.2);
+  }
+  .btn-adv-values-toggle {
+    --control-action-accent: #38bdf8;
+    --control-action-text: #e0f2fe;
+    --control-action-focus: rgba(56,189,248,0.28);
+    min-width: 128px;
+  }
+  .btn-adv-values-toggle.active {
+    background: rgba(56,189,248,0.2);
+  }
+  .btn-send-shell {
+    position: relative;
+    display: inline-flex;
+    width: 64px;
+    height: 64px;
+    flex: 0 0 64px;
+    border-radius: 50%;
+    z-index: 0;
+  }
+  .btn-send-shell::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: linear-gradient(180deg, #c52234, #8e1522);
+    opacity: .85;
+    box-shadow: 0 8px 18px rgba(0,0,0,0.45);
+    pointer-events: none;
+    transition: opacity .18s ease, box-shadow .18s ease;
+    transform: translateY(8px);
+    z-index: -1;
+  }
+  .btn-send-shell:hover::after {
+    opacity: 1;
+    box-shadow: 0 10px 22px rgba(0,0,0,0.55);
+  }
+  .btn-send-shell.is-pressed::after,
+  .btn-send-shell.is-holding::after,
+  .btn-send-shell.is-adv-running::after {
+    transform: translateY(8px);
+    opacity: .6;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.4);
+  }
+  .btn-send {
+    --control-action-accent: #ef4444;
+    --control-action-text: #ffecec;
+    --control-action-focus: rgba(239,68,68,0.25);
+    width: 64px;
+    height: 64px;
+    padding: 0;
+    border-radius: 50%;
+    flex: 0 0 64px;
+    position: relative;
+    z-index: 1;
+    overflow: hidden;
+    border: 3px solid rgba(239,68,68,0.65);
+    background-color: #2a0d12 !important;
+    background-image: linear-gradient(120deg, #4a141c, #220b11) !important;
+    opacity: 1 !important;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.08),
+      0 8px 18px rgba(239,68,68,0.22),
+      0 6px 16px rgba(0,0,0,0.4);
+  }
+  .btn-send:hover {
+    background-color: #341018 !important;
+    background-image: linear-gradient(120deg, #5a1a24, #2a0f15) !important;
+    opacity: 1 !important;
+  }
+  .btn-send:focus,
+  .btn-send:focus-visible {
+    outline: none;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.08),
+      0 8px 18px rgba(239,68,68,0.22),
+      0 6px 16px rgba(0,0,0,0.4),
+      0 0 0 2px rgba(239,68,68,0.55),
+      0 0 0 6px rgba(239,68,68,0.2);
   }
   .btn-send i {
     font-size: 1.2rem;
   }
-  .btn-send:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 2px rgba(255,255,255,0.12), 0 0 0 6px rgba(239,68,68,0.25);
+  .btn-send:active,
+  .btn-send.pressed {
+    transform: translateY(6px);
   }
-  .btn-send.pressed { transform: translateY(1px); }
   .btn-send.holding,
   .btn-send.adv-running {
-    background: linear-gradient(120deg, rgba(239,68,68,0.95), rgba(190,18,60,0.9));
-    border-color: rgba(239,68,68,0.95) !important;
+    background-color: #be123c !important;
+    background-image: linear-gradient(120deg, #ef4444, #be123c) !important;
     color: #fff !important;
-    box-shadow: 0 10px 26px rgba(239,68,68,0.45), 0 0 0 0.15rem rgba(239,68,68,0.35);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.08),
+      0 10px 26px rgba(239,68,68,0.45),
+      0 0 0 0.15rem rgba(239,68,68,0.35);
   }
   .btn-send.holding i,
   .btn-send.adv-running i {
@@ -594,44 +697,12 @@
     color: #f9fafb;
   }
   .btn-save-shortcut {
-    --save-color: #facc15;
-    --save-tint: rgba(250,204,21,0.18);
-    --save-tint-strong: rgba(250,204,21,0.32);
+    --control-action-accent: #fff7ed;
+    --control-action-text: #fff7ed;
+    --control-action-focus: rgba(250,204,21,0.3);
     min-width: 48px;
     min-height: 48px;
     height: 48px;
-    padding: 10px 14px;
-    border-radius: 100%;
-    border: 1px solid rgba(250,204,21,0.38);
-    background: linear-gradient(120deg, var(--save-tint), rgba(12,12,14,0.92));
-    color: #fff7ed;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    box-shadow: 0 8px 18px rgba(0,0,0,0.28);
-    transition: transform .15s ease, box-shadow .2s ease, border-color .15s ease, background .15s ease, color .12s ease;
-    line-height: 1;
-    touch-action: manipulation;
-    -webkit-touch-callout: none;
-    -webkit-user-select: none;
-    user-select: none;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .btn-save-shortcut i {
-    color: var(--save-color);
-    transition: color .12s ease;
-  }
-  .btn-save-shortcut:hover {
-    border-color: rgba(250,204,21,0.65);
-    background: linear-gradient(120deg, var(--save-tint-strong), rgba(18,19,24,0.95));
-    color: #fff7ed;
-    box-shadow: 0 10px 22px rgba(0,0,0,0.32);
-    transform: translateY(-1px);
-  }
-  .btn-save-shortcut:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 2px rgba(255,255,255,0.12), 0 0 0 6px rgba(250,204,21,0.3);
   }
   .btn-scoreboard-toggle {
     --sb-color: var(--cp-color, #a855f7);
@@ -883,6 +954,48 @@
     box-shadow: 0 0 0 2px rgba(77,113,255,0.28), 0 8px 20px rgba(0,0,0,0.35);
   }
   .btn-chart-toggle.active i {
+    color: #ecfeff;
+  }
+  .btn-ramp-toggle {
+    --ramp-color: #22d3ee;
+    --ramp-tint: rgba(34,211,238,0.18);
+    --ramp-tint-strong: rgba(34,211,238,0.32);
+    min-width: 48px;
+    min-height: 48px;
+    padding: 10px;
+    border-radius: 14px;
+    border: 1px solid rgba(34,211,238,0.35);
+    background: linear-gradient(120deg, var(--ramp-tint), rgba(12,12,14,0.92));
+    color: #ecfeff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 8px 18px rgba(0,0,0,0.28);
+    transition: transform .15s ease, box-shadow .2s ease, border-color .15s ease, background .15s ease, color .12s ease;
+  }
+  .btn-ramp-toggle i {
+    color: var(--ramp-color);
+    transition: color .12s ease;
+  }
+  .btn-ramp-toggle:hover {
+    border-color: rgba(34,211,238,0.6);
+    background: linear-gradient(120deg, var(--ramp-tint-strong), rgba(18,19,24,0.95));
+    color: #ecfeff;
+    box-shadow: 0 10px 22px rgba(0,0,0,0.32);
+    transform: translateY(-1px);
+  }
+  .btn-ramp-toggle:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.12), 0 0 0 6px rgba(34,211,238,0.3);
+  }
+  .btn-ramp-toggle.active {
+    border-color: rgba(34,211,238,0.75);
+    border-width: 3px;
+    background: linear-gradient(120deg, rgba(34,211,238,0.28), rgba(50,54,65,0.95));
+    color: #ecfeff;
+    box-shadow: 0 0 0 2px rgba(34,211,238,0.28), 0 8px 20px rgba(0,0,0,0.35);
+  }
+  .btn-ramp-toggle.active i {
     color: #ecfeff;
   }
   .control-collapse-btn {
@@ -1363,6 +1476,9 @@
       <button id="btnChartToggle" class="btn btn-chart-toggle" title="Exibir/ocultar gráfico" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
         <i class="fa-solid fa-chart-line"></i>
       </button>
+      <button id="btnRampToggle" class="btn btn-ramp-toggle" title="Mostrar ramping control" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
+        <i class="fa-solid fa-gauge-high"></i>
+      </button>
     </div>
 
     <div class="control-action-group">
@@ -1372,13 +1488,14 @@
         <input class="form-check-input" type="checkbox" id="chanSwitch" aria-label="Canal 1 ou 2" title="Canal 1 ou 2" data-bs-toggle="tooltip"/>
       </div>
 
-      <button id="btnSend" class="btn btn-send" title="Enviar comando" data-bs-toggle="tooltip">
-        <i class="fa-solid fa-power-off"></i>
-      </button>
+      <div id="btnSendShell" class="btn-send-shell">
+        <button id="btnSend" class="btn control-action-btn btn-send" title="Enviar comando" data-bs-toggle="tooltip">
+          <i class="fa-solid fa-power-off"></i>
+        </button>
+      </div>
 
-      <button id="cpAdd" class="btn btn-save-shortcut" type="button" title="Salvar atalho personalizado" data-bs-toggle="tooltip">
+      <button id="cpAdd" class="btn control-action-btn btn-save-shortcut" type="button" title="Salvar atalho personalizado" data-bs-toggle="tooltip">
         <i class="fa-solid fa-floppy-disk"></i>
-        <span class="d-none d-md-inline">Salvar</span>
       </button>
 
       <button id="btnAdvancedToggle" class="control-collapse-btn" title="Opcoes avancadas" data-bs-toggle="tooltip" aria-expanded="false">
@@ -1399,6 +1516,14 @@
       <div class="fw-semibold text-light">Opcoes avancadas</div>
       <div class="d-flex align-items-center gap-2 flex-wrap">
         <div class="advanced-note">Opcoes extras de controle</div>
+        <button id="btnDualToggle" class="btn control-action-btn btn-dual-toggle" type="button" title="Alternar modo duplo" data-bs-toggle="tooltip" aria-pressed="false" aria-label="Modo duplo: desligado">
+          <i class="fa-solid fa-skull" aria-hidden="true"></i>
+          <span class="dual-toggle-label">OFF</span>
+        </button>
+        <button id="btnAdvancedValuesToggle" class="btn control-action-btn btn-adv-values-toggle" type="button" title="Ativar valores avancados" data-bs-toggle="tooltip" aria-pressed="false" aria-label="Valores avancados: desligados">
+          <i class="fa-solid fa-sliders" aria-hidden="true"></i>
+          <span class="adv-toggle-label">ADV OFF</span>
+        </button>
         <button id="advResetBtn" class="btn btn-sm btn-outline-light py-1 px-2" type="button" title="Restaurar valores padrao" data-bs-toggle="tooltip">
           Reset
         </button>
@@ -1468,6 +1593,11 @@
         <div class="video-embed-state video-loading-state">Carregando Video...</div>
       </div>
     </div>
+    <div class="ramp-module-slot collapsed mb-3" aria-hidden="true">
+      <div id="rampControlMount">
+        <div class="ramp-embed-state ramp-loading-state">Carregando Ramping Control...</div>
+      </div>
+    </div>
 
     <div id="chartBlock" class="chart-block collapsed mb-3" aria-hidden="true">
       <div class="event-canvas-slot">
@@ -1534,6 +1664,7 @@
   let currentMode = "SHOCK";
   let level = 0;
   let channel = 1;
+  let dualOn = false;
   const STORAGE_KEY = "remote_control_state_v1";
   const MODES = ["SHOCK", "VIBRATION", "LIGHT", "BEEP", "ROULETTE"];
   const MODE_LABELS = {
@@ -1583,13 +1714,34 @@
     delayMs: { min: 0, max: Infinity },
     preDelayMs: { min: 0, max: Infinity }
   };
+  const RAMP_DEFAULTS = {
+    enabled: false,
+    step: 4,
+    tickMs: 120,
+    startLevel: 0,
+    upCurve: "linear",
+    downCurve: "ease-out",
+    upExponent: 1.6,
+    downExponent: 1.3
+  };
+  const RAMP_LIMITS = {
+    step: { min: 1, max: 100 },
+    tickMs: { min: 10, max: 2000 },
+    startLevel: { min: 0, max: 100 },
+    exponent: { min: 0.4, max: 5 }
+  };
+  const RAMP_CURVES = new Set(["linear", "ease-in", "ease-out", "ease-in-out"]);
   let advanced = { ...ADV_DEFAULTS };
+  let ramp = { ...RAMP_DEFAULTS };
   let advancedOpen = false;
+  let advancedEnabled = true;
+  let rampOpen = false;
   let scoreboardOpen = false;
   let audioOpen = false;
   let navalOpen = false;
   let pulseOpen = false;
   let videoOpen = false;
+  let chartOpen = false;
   let lastScoreboardArmedState = null;
   const ROULETTE_DEFAULT_HOLD_MS = 220;
   const ROULETTE_HOLD_LIMITS = { min: 200, max: 20000 };
@@ -1598,11 +1750,13 @@
   const ROULETTE_RESULT_TIMEOUT_MS = 20000;
 
   const HOLD_THRESHOLD_MS = 220; // abaixo disso: clique unico; acima: HOLD
+  const HOLD_QUICK_GUARD_MS = 60; // tolerancia para cliques proximos ao limiar
   const GLOBAL_HARD_LIMIT = 15;  // failsafe geral (mantido)
 
   window.currentMode = currentMode;
   window.level = level;
   window.channel = channel;
+  window.dualOn = dualOn;
   window.__ADVANCED_PANEL_OPEN__ = advancedOpen;
 
   const $  = s => document.querySelector(s);
@@ -1620,6 +1774,7 @@
   const advCountdownText = $("#advCountdownText");
   const advStopBtn = $("#advStopBtn");
   const btnSend = $("#btnSend");
+  const btnSendShell = $("#btnSendShell");
   const remoteControlCard = $("#remoteControlCard");
   const modeReadoutEl = $("#modeReadout");
   const intensityReadoutEl = $("#intensityReadout");
@@ -1640,12 +1795,17 @@
   const pulseToggleBtn = $("#btnPulseToggle");
   const videoBlockEl = $(".video-player-slot");
   const videoToggleBtn = $("#btnVideoToggle");
+  const rampBlockEl = $(".ramp-module-slot");
+  const rampToggleBtn = $("#btnRampToggle");
   let advCountdownTimer = null;
   let advCountdownEndAt = 0;
   let advStopSignal = { stop: false, holdActive: false };
   let currentBurstAbort = null;
   const chartBlockEl = document.getElementById("chartBlock");
   const chartToggleBtn = document.getElementById("btnChartToggle");
+  let rampLoaded = false;
+  let rampSession = null;
+  let rampSessionSeq = 0;
   const CONTROL_TIMER_TICK_MS = 120;
   const controlCountdowns = new Map();
   const controlCountups = new Map();
@@ -1658,6 +1818,9 @@
   const controlLedCommands = new Map();
   const controlLedGapSources = new Set();
   let holdCommandToken = null;
+  let commandSendQueue = Promise.resolve();
+  let commandQueueGeneration = 0;
+  let commandFeedbackSeq = 0;
 
   function log(msg, lvl="info"){
     try { window.appLog ? window.appLog(msg, lvl) : console.log(msg); } catch {}
@@ -1717,13 +1880,17 @@
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== "object") return null;
       parsed.advanced = { ...ADV_DEFAULTS, ...(parsed.advanced || {}) };
+      parsed.ramp = { ...RAMP_DEFAULTS, ...(parsed.ramp || {}) };
       parsed.advancedOpen = !!parsed.advancedOpen;
+      parsed.rampOpen = !!parsed.rampOpen;
       parsed.scoreboardOpen = !!parsed.scoreboardOpen;
       parsed.audioOpen = !!parsed.audioOpen;
       parsed.navalOpen = !!parsed.navalOpen;
       parsed.pulseOpen = !!parsed.pulseOpen;
       parsed.videoOpen = !!parsed.videoOpen;
       parsed.chartOpen = !!parsed.chartOpen;
+      parsed.advancedEnabled = parsed.advancedEnabled == null ? !!parsed.advancedOpen : !!parsed.advancedEnabled;
+      parsed.dualOn = !!parsed.dualOn;
       return parsed;
     } catch(e){
       log(`Falha ao carregar estado: ${e && e.message || e}`, "warn");
@@ -1738,6 +1905,32 @@
     target.preDelayMs = clampNum(Math.round(target.preDelayMs || ADV_DEFAULTS.preDelayMs), ADV_LIMITS.preDelayMs.min, ADV_LIMITS.preDelayMs.max);
     return target;
   }
+  function normalizeRampState(next){
+    const target = { ...RAMP_DEFAULTS, ...(next || ramp || {}) };
+    target.enabled = !!target.enabled;
+    target.step = clampNum(Math.round(Number(target.step) || RAMP_DEFAULTS.step), RAMP_LIMITS.step.min, RAMP_LIMITS.step.max);
+    target.tickMs = clampNum(Math.round(Number(target.tickMs) || RAMP_DEFAULTS.tickMs), RAMP_LIMITS.tickMs.min, RAMP_LIMITS.tickMs.max);
+    target.startLevel = clampNum(Math.round(Number(target.startLevel) || 0), RAMP_LIMITS.startLevel.min, RAMP_LIMITS.startLevel.max);
+    target.upCurve = RAMP_CURVES.has(target.upCurve) ? target.upCurve : RAMP_DEFAULTS.upCurve;
+    target.downCurve = RAMP_CURVES.has(target.downCurve) ? target.downCurve : RAMP_DEFAULTS.downCurve;
+    target.upExponent = clampNum(Number(target.upExponent) || RAMP_DEFAULTS.upExponent, RAMP_LIMITS.exponent.min, RAMP_LIMITS.exponent.max);
+    target.downExponent = clampNum(Number(target.downExponent) || RAMP_DEFAULTS.downExponent, RAMP_LIMITS.exponent.min, RAMP_LIMITS.exponent.max);
+    return target;
+  }
+  function buildRampPatch(reason){
+    ramp = normalizeRampState(ramp);
+    return {
+      rampEnabled: !!ramp.enabled,
+      rampStep: ramp.step,
+      rampTickMs: ramp.tickMs,
+      rampStartLevel: ramp.startLevel,
+      rampUpCurve: ramp.upCurve,
+      rampDownCurve: ramp.downCurve,
+      rampUpExponent: ramp.upExponent,
+      rampDownExponent: ramp.downExponent,
+      reason: reason || "ramp-config"
+    };
+  }
   function persistState(){
     try {
       advanced = normalizeAdvancedState(advanced);
@@ -1745,8 +1938,12 @@
         mode: currentMode,
         level,
         channel,
+        dualOn,
         advanced,
+        ramp,
         advancedOpen,
+        advancedEnabled,
+        rampOpen,
         scoreboardOpen,
         audioOpen,
         navalOpen,
@@ -1802,6 +1999,7 @@
   const NAVAL_WIDGET_SRC = "Widgets/Games/naval.html";
   const PULSE_SEQUENCER_SRC = "Widgets/sequence.html";
   const VIDEO_PLAYER_SRC = "Widgets/Video_player.html";
+  const RAMP_CONTROL_SRC = "Widgets/ramping_control.html?v=20260223c";
   const ROULETTE_WIDGET_SRC = "Widgets/Roleta.html";
   function runInlineScriptsIn(container){
     if (!container) return;
@@ -1818,7 +2016,7 @@
   let navalLoaded = false;
   let pulseLoaded = false;
   let videoLoaded = false;
-
+  
   function resetScoreboardMount(){
     const mount = document.getElementById('controlScoreboardMount');
     if (!mount) return;
@@ -1847,6 +2045,11 @@
     const mount = document.getElementById('videoPlayerMount');
     if (!mount) return;
     mount.innerHTML = '<div class="video-embed-state video-loading-state">Carregando Video...</div>';
+  }
+  function resetRampMount(){
+    const mount = document.getElementById('rampControlMount');
+    if (!mount) return;
+    mount.innerHTML = '<div class="ramp-embed-state ramp-loading-state">Carregando Ramping Control...</div>';
   }
 
   function loadControlScoreboard(){
@@ -1996,6 +2199,101 @@
     resetVideoMount();
     videoLoaded = false;
   }
+  function buildRampRuntimeSnapshot(reason){
+    const session = rampSession;
+    if (!session) {
+      return {
+        active: false,
+        phase: "idle",
+        currentLevel: 0,
+        targetLevel: 0,
+        progress: 0,
+        mode: currentMode,
+        channel,
+        reason: reason || "idle"
+      };
+    }
+    const now = Date.now();
+    const upTotal = Math.max(0, Number(session.upDurationMs) || 0);
+    const upElapsed = Math.max(0, now - (session.upStartAt || now));
+    const upProgress = upTotal <= 0 ? 1 : clampNum(upElapsed / upTotal, 0, 1);
+    if (session.phase === "down") {
+      const total = Math.max(0, Number(session.downDurationMs) || 0);
+      const elapsed = Math.max(0, now - (session.downStartAt || now));
+      const downProgress = total <= 0 ? 1 : clampNum(elapsed / total, 0, 1);
+      const base = clampNum(Number(session.releaseBaseProgress) || 0, 0, 1);
+      const progress = base + ((1 - base) * downProgress);
+      return {
+        active: true,
+        phase: "down",
+        currentLevel: clampNum(Math.round(Number(session.currentLevel) || 0), 0, 100),
+        targetLevel: 0,
+        progress,
+        mode: session.mode,
+        channel: session.channel,
+        releaseRequested: !!session.releaseRequested,
+        reason: reason || "runtime-down"
+      };
+    }
+    return {
+      active: true,
+      phase: "up",
+      currentLevel: clampNum(Math.round(Number(session.currentLevel) || 0), 0, 100),
+      targetLevel: clampNum(Math.round(Number(session.upTarget) || 0), 0, 100),
+      progress: upProgress,
+      mode: session.mode,
+      channel: session.channel,
+      releaseRequested: !!session.releaseRequested,
+      reason: reason || "runtime-up"
+    };
+  }
+  function emitRampRuntime(reason){
+    try {
+      window.dispatchEvent(new CustomEvent("rampcontrol:runtime", {
+        detail: buildRampRuntimeSnapshot(reason)
+      }));
+    } catch(_){}
+  }
+  function syncRampWidgetState(reason){
+    try {
+      window.dispatchEvent(new CustomEvent("rampcontrol:state", {
+        detail: {
+          ...ramp,
+          open: rampOpen,
+          mode: currentMode,
+          supportsLevel: modeSupportsLevel(currentMode),
+          reason: reason || "sync"
+        }
+      }));
+    } catch(_){}
+    emitRampRuntime(reason || "sync");
+  }
+  function loadRampControl(){
+    const mount = document.getElementById('rampControlMount');
+    if (!mount) return;
+    resetRampMount();
+    fetch(RAMP_CONTROL_SRC)
+      .then((res) => {
+        if (!res.ok) throw new Error('Falha ao carregar Widgets/ramping_control.html: ' + res.status);
+        return res.text();
+      })
+      .then((html) => {
+        mount.innerHTML = html;
+        runInlineScriptsIn(mount);
+        rampLoaded = true;
+        syncRampWidgetState("module-loaded");
+      })
+      .catch((err) => {
+        try { console.error(err); } catch(_){ }
+        mount.innerHTML = '<div class="ramp-embed-state ramp-error-state">Nao foi possivel carregar o Ramping Control.</div>';
+        rampLoaded = false;
+      });
+  }
+  resetRampMount();
+  function unloadRampControl(){
+    resetRampMount();
+    rampLoaded = false;
+  }
 
   function loadRouletteWidget(){
     const mount = document.getElementById('rouletteMount');
@@ -2025,7 +2323,10 @@
       mode: currentMode,
       level,
       channel,
+      dualOn,
+      advancedEnabled,
       advancedOpen,
+      rampOpen,
       scoreboardOpen,
       audioOpen,
       navalOpen,
@@ -2036,6 +2337,7 @@
       gapMs: advanced.delayMs,
       baseMs: advanced.durationMs,
       preDelayMs: advanced.preDelayMs,
+      ...buildRampPatch(reason || "snapshot"),
       reason: reason || "snapshot"
     };
   }
@@ -2068,16 +2370,49 @@
     const payload = { ...patch, origin: CONTROL_ORIGIN, ts };
     sendControlPayload(payload, opts);
   }
+  function flushPendingCommandQueue(){
+    commandQueueGeneration += 1;
+  }
+  function parseCommandFeedback(payload){
+    const raw = String(payload || "").trim();
+    const upper = raw.toUpperCase();
+    if (upper.startsWith("HOLDON ")) {
+      const parts = raw.slice(7).split(",");
+      const levelRaw = parts.length > 1 ? Number(parts[1]) : NaN;
+      const level = Number.isFinite(levelRaw) ? clampNum(Math.round(levelRaw), 0, 100) : null;
+      return { type: "holdon", level };
+    }
+    if (upper.startsWith("HOLDOFF")) {
+      return { type: "holdoff", level: 0 };
+    }
+    return { type: "other", level: null };
+  }
+  function emitCommandFeedback(payload, transport){
+    const parsed = parseCommandFeedback(payload);
+    const detail = {
+      seq: ++commandFeedbackSeq,
+      command: String(payload || "").trim(),
+      type: parsed.type,
+      level: parsed.level,
+      transport: transport || "unknown",
+      ts: Date.now()
+    };
+    try {
+      window.dispatchEvent(new CustomEvent("rampcontrol:command_feedback", { detail }));
+    } catch(_){}
+  }
 
-  function sendCommand(text){
-    const payload = String(text || '').trim();
-    if (!payload) return;
-    pulseControlLed(CONTROL_LED_SOURCE_CMD, 220);
-
+  async function sendCommandNow(payload){
     const serialReady = !!(window.SerialBridge && typeof window.SerialBridge.send === 'function' &&
       (window.SerialBridge.isConnected || window.serialConnected || (window.port && window.port.writable)));
     if (serialReady) {
-      try { window.SerialBridge.send(payload); return; } catch(e){ log(`Falha SerialBridge: ${e && e.message || e}`, "warn"); }
+      try {
+        await window.SerialBridge.send(payload);
+        emitCommandFeedback(payload, "serial");
+        return true;
+      } catch(e){
+        log(`Falha SerialBridge: ${e && e.message || e}`, "warn");
+      }
     }
 
     const room = (window.Flowgate && window.Flowgate.room) ? window.Flowgate.room : window.__TRYSTERO_ROOM__;
@@ -2093,7 +2428,8 @@
             id: `cmd:${Date.now()}:${Math.random().toString(36).slice(2)}`
           };
           sendCmd(msg);
-          return;
+          emitCommandFeedback(payload, "room-cmd");
+          return true;
         } catch(e) {
           log(`Falha Flowgate (room cmd): ${e && e.message || e}`, "warn");
         }
@@ -2104,24 +2440,40 @@
     if (cmdBus && (!cmdBus.isReady || cmdBus.isReady())) {
       const ok = cmdBus.send(payload.slice(0, 400), { via: 'maincontrol' });
       if (!ok) log('Falha Flowgate (cmd): comando nao enviado.', "warn");
-      return;
+      if (ok) emitCommandFeedback(payload, "cmd-bus");
+      return !!ok;
     }
 
     const chatBus = (window.__TRYSTERO_CHAT__ && typeof window.__TRYSTERO_CHAT__.send === 'function') ? window.__TRYSTERO_CHAT__ : null;
     if (chatBus && (!chatBus.isReady || chatBus.isReady())) {
       try {
         const maybe = chatBus.send(payload.slice(0, 400), { via: 'maincontrol' });
-        if (maybe && typeof maybe.catch === 'function') {
-          maybe.catch((err) => log(`Falha Flowgate (chat): ${err && err.message || err}`, "warn"));
-        }
-        return;
+        if (maybe && typeof maybe.then === 'function') await maybe;
+        emitCommandFeedback(payload, "chat-bus");
+        return true;
       } catch(e) {
         log(`Falha Flowgate (chat): ${e && e.message || e}`, "warn");
-        return;
+        return false;
       }
     }
 
     log('Flowgate/SerialBridge indisponivel: comando nao enviado.', "warn");
+    return false;
+  }
+  function sendCommand(text, opts = {}){
+    const payload = String(text || '').trim();
+    if (!payload) return;
+    const guard = (opts && typeof opts.guard === "function") ? opts.guard : null;
+    const force = !!opts.force;
+    const generation = Number.isFinite(opts.generation) ? Number(opts.generation) : commandQueueGeneration;
+    pulseControlLed(CONTROL_LED_SOURCE_CMD, 220);
+    commandSendQueue = commandSendQueue
+      .catch(() => {})
+      .then(() => {
+        if (!force && generation !== commandQueueGeneration) return false;
+        if (guard && !guard()) return false;
+        return sendCommandNow(payload);
+      });
   }
 
   // ===== Helpers UI =====
@@ -2177,10 +2529,13 @@
       mode: currentMode,
       level,
       channel,
+      dualOn,
+      advancedEnabled,
       pulses: advanced.pulses,
       gapMs: advanced.delayMs,
       baseMs: advanced.durationMs,
       preDelayMs: advanced.preDelayMs,
+      ...buildRampPatch(reason || "remote-basic"),
       reason: reason || "remote-basic"
     });
   }
@@ -2196,9 +2551,63 @@
   function syncChannelReadout(){
     if (channelReadoutEl) channelReadoutEl.textContent = `${channel}`;
   }
+
+  function isSerialReady(){
+    return !!(window.SerialBridge && typeof window.SerialBridge.send === 'function' &&
+      (window.SerialBridge.isConnected || window.serialConnected || (window.port && window.port.writable)));
+  }
+
+  function syncAdvancedValuesUi(){
+    const btn = $("#btnAdvancedValuesToggle");
+    if (!btn) return;
+    btn.classList.toggle("active", advancedEnabled);
+    btn.setAttribute("aria-pressed", advancedEnabled ? "true" : "false");
+    const label = btn.querySelector(".adv-toggle-label");
+    if (label) label.textContent = advancedEnabled ? "ADV ON" : "ADV OFF";
+    btn.setAttribute("aria-label", `Valores avancados: ${advancedEnabled ? "ligados" : "desligados"}`);
+  }
+
+  function setDualMode(on, opts = {}){
+    dualOn = !!on;
+    window.dualOn = dualOn;
+    const btn = $("#btnDualToggle");
+    if (btn) {
+      btn.classList.toggle("active", dualOn);
+      btn.setAttribute("aria-pressed", dualOn ? "true" : "false");
+      const label = btn.querySelector(".dual-toggle-label");
+      if (label) label.textContent = dualOn ? "ON" : "OFF";
+      btn.setAttribute("aria-label", `Modo duplo: ${dualOn ? "ligado" : "desligado"}`);
+    }
+    const sw = $("#chanSwitch");
+    if (sw) {
+      sw.disabled = dualOn;
+      sw.setAttribute("aria-disabled", dualOn ? "true" : "false");
+    }
+    log(`Dual: ${dualOn ? "ON" : "OFF"}`);
+    const shouldSend = opts.sendCommand !== false;
+    if (shouldSend && (!opts.serialOnly || isSerialReady())) {
+      sendCommand(dualOn ? "DUALON" : "DUALOFF", { force: true });
+    }
+    if (opts.persist !== false) persistState();
+    if (opts.broadcast !== false) emitControlPatch({ dualOn, reason: opts.reason || "dual-toggle" });
+  }
+  function isAdvancedValuesActive(){
+    return advancedOpen && advancedEnabled;
+  }
+  function setAdvancedValuesEnabled(on, opts = {}){
+    advancedEnabled = !!on;
+    syncAdvancedValuesUi();
+    syncAdvancedReadouts();
+    if (!isAdvancedValuesActive()) {
+      requestAdvStop();
+    }
+    if (opts.persist !== false) persistState();
+    if (opts.broadcast !== false) emitControlPatch({ advancedEnabled, reason: opts.reason || "advanced-values-toggle" });
+  }
   function syncAdvancedReadouts(){
-    const durationText = advancedOpen ? `${msToSecStr(advanced.durationMs, "durationMs")}s` : "-";
-    const pulsesText = advancedOpen ? `${advanced.pulses}` : "-";
+    const active = isAdvancedValuesActive();
+    const durationText = active ? `${msToSecStr(advanced.durationMs, "durationMs")}s` : "-";
+    const pulsesText = active ? `${advanced.pulses}` : "-";
     if (durationReadoutEl) durationReadoutEl.textContent = durationText;
     if (pulsesReadoutEl) pulsesReadoutEl.textContent = pulsesText;
   }
@@ -2689,6 +3098,109 @@
     if (opts?.persist !== false) persistState();
     if (opts?.broadcast !== false) emitControlPatch({ chartOpen, reason: opts?.reason || "chart-toggle" });
   }
+  function updateRampToggleTooltip(label){
+    if (!rampToggleBtn) return;
+    rampToggleBtn.setAttribute("title", label);
+    rampToggleBtn.setAttribute("aria-label", label);
+    rampToggleBtn.setAttribute("data-bs-original-title", label);
+    const tipInstance = (window.bootstrap && window.bootstrap.Tooltip)
+      ? window.bootstrap.Tooltip.getInstance(rampToggleBtn)
+      : null;
+    if (tipInstance) {
+      if (typeof tipInstance.setContent === "function") {
+        tipInstance.setContent({ ".tooltip-inner": label });
+      } else if (tipInstance.tip) {
+        const inner = tipInstance.tip.querySelector(".tooltip-inner");
+        if (inner) inner.textContent = label;
+      }
+    }
+  }
+  function setRampOpen(next, opts){
+    const desired = !!next;
+    if (!opts?.force && rampOpen === desired) {
+      if (opts?.persist === false) return;
+    }
+    rampOpen = desired;
+    if (rampBlockEl) {
+      rampBlockEl.classList.toggle("collapsed", !rampOpen);
+      rampBlockEl.setAttribute("aria-hidden", rampOpen ? "false" : "true");
+    }
+    if (rampToggleBtn) {
+      rampToggleBtn.classList.toggle("active", rampOpen);
+      rampToggleBtn.setAttribute("aria-pressed", rampOpen ? "true" : "false");
+      rampToggleBtn.setAttribute("aria-expanded", rampOpen ? "true" : "false");
+      updateRampToggleTooltip(rampOpen ? "Ocultar ramping control" : "Mostrar ramping control");
+    }
+    if (rampOpen) {
+      if (!rampLoaded) loadRampControl();
+      else syncRampWidgetState("module-open");
+    } else if (rampLoaded) {
+      unloadRampControl();
+    }
+    if (opts?.persist !== false) persistState();
+    if (opts?.broadcast !== false) {
+      emitControlPatch({ rampOpen, ...buildRampPatch(opts?.reason || "ramp-toggle"), reason: opts?.reason || "ramp-toggle" });
+    }
+  }
+  function applyRampPatch(payload, opts = {}){
+    if (!payload || typeof payload !== "object") return;
+    const hasRampPayload = (
+      payload.rampEnabled != null ||
+      payload.rampStep != null ||
+      payload.rampTickMs != null ||
+      payload.rampStartLevel != null ||
+      payload.rampUpCurve != null ||
+      payload.rampDownCurve != null ||
+      payload.rampUpExponent != null ||
+      payload.rampDownExponent != null
+    );
+    if (!hasRampPayload) return;
+    const next = { ...ramp };
+    let changed = false;
+    if (payload.rampEnabled != null) {
+      next.enabled = !!payload.rampEnabled;
+      changed = true;
+    }
+    if (payload.rampStep != null && Number.isFinite(Number(payload.rampStep))) {
+      next.step = Number(payload.rampStep);
+      changed = true;
+    }
+    if (payload.rampTickMs != null && Number.isFinite(Number(payload.rampTickMs))) {
+      next.tickMs = Number(payload.rampTickMs);
+      changed = true;
+    }
+    if (payload.rampStartLevel != null && Number.isFinite(Number(payload.rampStartLevel))) {
+      next.startLevel = Number(payload.rampStartLevel);
+      changed = true;
+    }
+    if (payload.rampUpCurve && typeof payload.rampUpCurve === "string") {
+      next.upCurve = payload.rampUpCurve;
+      changed = true;
+    }
+    if (payload.rampDownCurve && typeof payload.rampDownCurve === "string") {
+      next.downCurve = payload.rampDownCurve;
+      changed = true;
+    }
+    if (payload.rampUpExponent != null && Number.isFinite(Number(payload.rampUpExponent))) {
+      next.upExponent = Number(payload.rampUpExponent);
+      changed = true;
+    }
+    if (payload.rampDownExponent != null && Number.isFinite(Number(payload.rampDownExponent))) {
+      next.downExponent = Number(payload.rampDownExponent);
+      changed = true;
+    }
+    if (!changed) {
+      if (opts.syncWidget !== false) syncRampWidgetState(opts.reason || "ramp-sync");
+      return;
+    }
+    ramp = normalizeRampState(next);
+    if (!ramp.enabled && rampSession) {
+      abortRampSession({ sendHoldOff: true });
+    }
+    if (opts.persist !== false) persistState();
+    if (opts.syncWidget !== false) syncRampWidgetState(opts.reason || "ramp-sync");
+    if (opts.broadcast !== false) emitControlPatch(buildRampPatch(opts.reason || "ramp-change"));
+  }
 
   function getLiveAdvanced(){
     const next = { ...advanced };
@@ -2849,7 +3361,9 @@
   let advButtonLatchDepth = 0;
   function updateAdvButtonLatch(){
     if (!btnSend) return;
-    btnSend.classList.toggle("adv-running", advButtonLatchDepth > 0);
+    const isRunning = advButtonLatchDepth > 0;
+    btnSend.classList.toggle("adv-running", isRunning);
+    if (btnSendShell) btnSendShell.classList.toggle("is-adv-running", isRunning);
   }
   function latchAdvancedButton(){
     advButtonLatchDepth += 1;
@@ -2875,7 +3389,7 @@
   function ensureAdvHoldOff(){
     if (!advStopSignal || !advStopSignal.holdActive) return;
     advStopSignal.holdActive = false;
-    sendCommand("HOLDOFF");
+    sendCommand("HOLDOFF", { force: true });
   }
 
   function requestAdvStop(){
@@ -2929,6 +3443,7 @@
       if (icon) icon.className = open ? "fa-solid fa-chevron-up" : "fa-solid fa-chevron-down";
     }
     if (opts.persist !== false) persistState();
+    syncAdvancedValuesUi();
     syncAdvancedReadouts();
     if (!advancedOpen) {
       requestAdvStop();
@@ -2939,7 +3454,7 @@
   }
 
   function shouldUseAdvancedBurst(cfg){
-    if (!advancedOpen) return false;
+    if (!isAdvancedValuesActive()) return false;
     const normalized = normalizeAdvancedState(cfg || { ...advanced });
     return normalized.pulses > 1
       || normalized.durationMs !== ADV_DEFAULTS.durationMs
@@ -2948,7 +3463,7 @@
   }
 
   function shouldUseRouletteSequence(cfg){
-    if (!advancedOpen) return false;
+    if (!isAdvancedValuesActive()) return false;
     const normalized = normalizeAdvancedState(cfg || { ...advanced });
     return normalized.pulses > 1
       || normalized.delayMs !== ADV_DEFAULTS.delayMs
@@ -2964,6 +3479,9 @@
 
   function setMode(m, opts = {}){
     currentMode = m; window.currentMode = m;
+    if (rampSession && (rampSession.mode !== m || !modeSupportsLevel(m))) {
+      abortRampSession({ sendHoldOff: true });
+    }
     const showLevel = modeSupportsLevel(m);
     setSectionVisibility(sliderRowEl, showLevel);
     const sliderEl = $("#levelSlider");
@@ -2974,10 +3492,12 @@
       clearRouletteAutoTimer();
       releaseRoulettePointer();
       if (btnSend) btnSend.classList.remove("holding");
+      if (btnSendShell) btnSendShell.classList.remove("is-holding");
     }
     syncModeUi();
     syncModeReadout();
     updateLevelUi(level);
+    syncRampWidgetState("mode-change");
     log(`Modo: ${m}`);
     if (opts.persist !== false) persistState();
     if (opts.broadcast !== false) broadcastBasics(opts.reason || "mode-change");
@@ -3025,6 +3545,266 @@
       return `${base},${clamped}`;
     }
     return base;
+  }
+  function canUseRampControl(){
+    return !!ramp?.enabled && modeSupportsLevel(currentMode) && currentMode !== "ROULETTE";
+  }
+  function getRampDurationMs(fromLevel, toLevel, cfg){
+    const safeCfg = normalizeRampState(cfg || ramp);
+    const diff = Math.abs((Number(toLevel) || 0) - (Number(fromLevel) || 0));
+    if (diff <= 0) return 0;
+    const step = Math.max(1, safeCfg.step);
+    const steps = Math.max(1, Math.ceil(diff / step));
+    return steps * Math.max(RAMP_LIMITS.tickMs.min, safeCfg.tickMs);
+  }
+  function applyRampCurve(progress, curve, exponent){
+    const p = clampNum(Number(progress) || 0, 0, 1);
+    const e = clampNum(Number(exponent) || 1, RAMP_LIMITS.exponent.min, RAMP_LIMITS.exponent.max);
+    switch (curve) {
+      case "ease-in":
+        return Math.pow(p, e);
+      case "ease-out":
+        return 1 - Math.pow(1 - p, e);
+      case "ease-in-out":
+        if (p < 0.5) return 0.5 * Math.pow(p * 2, e);
+        return 1 - 0.5 * Math.pow((1 - p) * 2, e);
+      case "linear":
+      default:
+        return p;
+    }
+  }
+  function quantizeRampLevel(rawLevel, step, direction){
+    const raw = clampNum(Number(rawLevel) || 0, 0, 100);
+    const safeStep = Math.max(1, Number(step) || 1);
+    if (direction === "down") return clampNum(Math.floor(raw / safeStep) * safeStep, 0, 100);
+    if (direction === "up") return clampNum(Math.ceil(raw / safeStep) * safeStep, 0, 100);
+    return clampNum(Math.round(raw / safeStep) * safeStep, 0, 100);
+  }
+  function calcRampLevel(fromLevel, toLevel, elapsedMs, durationMs, curve, exponent, step, direction){
+    const from = clampNum(Math.round(Number(fromLevel) || 0), 0, 100);
+    const to = clampNum(Math.round(Number(toLevel) || 0), 0, 100);
+    if (from === to) return to;
+    const total = Math.max(0, Number(durationMs) || 0);
+    const elapsed = Math.max(0, Number(elapsedMs) || 0);
+    const progress = total <= 0 ? 1 : clampNum(elapsed / total, 0, 1);
+    const curved = applyRampCurve(progress, curve, exponent);
+    const raw = from + ((to - from) * curved);
+    const quantized = quantizeRampLevel(raw, step, direction);
+    if (direction === "down") return Math.max(to, Math.min(from, quantized));
+    return Math.min(to, Math.max(from, quantized));
+  }
+  function sendRampHoldLevel(session, nextLevel){
+    if (!session) return;
+    const safeLevel = clampNum(Math.round(Number(nextLevel) || 0), 0, 100);
+    if (safeLevel <= 0) {
+      session.currentLevel = 0;
+      emitRampRuntime("level-update");
+      return;
+    }
+    const version = Number(session.commandVersion) || 0;
+    sendCommand(`HOLDON ${session.mode},${safeLevel},${session.channel}`, {
+      guard: () => {
+        const active = rampSession;
+        return !!active && active.id === session.id && (Number(active.commandVersion) || 0) === version;
+      }
+    });
+    session.currentLevel = safeLevel;
+    emitRampRuntime("level-update");
+  }
+  function clearRampTimer(session){
+    if (session?.timer) {
+      clearInterval(session.timer);
+      session.timer = null;
+    }
+  }
+  function clearRampHardStopTimer(session){
+    if (session?.hardStopTimer) {
+      clearTimeout(session.hardStopTimer);
+      session.hardStopTimer = null;
+    }
+  }
+  function sendRampFinalStop(session){
+    const token = session?.id || 0;
+    const guard = () => {
+      const active = rampSession;
+      return !active || active.id === token;
+    };
+    sendCommand("HOLDOFF", { guard, force: true });
+    setTimeout(() => sendCommand("HOLDOFF", { guard, force: true }), 40);
+    setTimeout(() => sendCommand("HOLDOFF", { guard, force: true }), 140);
+  }
+  function finalizeRampSession(session, opts = {}){
+    const token = session?.id;
+    if (!token) return;
+    clearRampTimer(session);
+    clearRampHardStopTimer(session);
+    if (rampSession && rampSession.id === token) {
+      rampSession = null;
+    }
+    clearCountup(HOLD_COUNTUP_SOURCE);
+    if (opts.sendHoldOff !== false) {
+      if (opts.sendZeroBeforeOff) {
+        session.currentLevel = 0;
+      }
+      sendRampFinalStop(session);
+    }
+    endHoldLed();
+    emitRampRuntime("session-finalized");
+  }
+  function abortRampSession(opts = {}){
+    const session = rampSession;
+    if (!session) return false;
+    finalizeRampSession(session, { sendHoldOff: opts.sendHoldOff !== false });
+    return true;
+  }
+  function beginRampDecay(session){
+    if (!session || session.phase === "down") return;
+    session.phase = "down";
+    session.commandVersion = (Number(session.commandVersion) || 0) + 1;
+    const upTotal = Math.max(0, Number(session.upDurationMs) || 0);
+    const upElapsed = Math.max(0, Date.now() - (session.upStartAt || Date.now()));
+    session.releaseBaseProgress = upTotal <= 0 ? 1 : clampNum(upElapsed / upTotal, 0, 1);
+    session.downFrom = clampNum(Math.round(Number(session.currentLevel) || 0), 0, 100);
+    session.downTo = 0;
+    session.downStartAt = Date.now();
+    session.downDurationMs = getRampDurationMs(session.downFrom, session.downTo, session.config);
+    clearRampHardStopTimer(session);
+    const stopAfter = Math.max(60, session.downDurationMs + Math.max(RAMP_LIMITS.tickMs.min, session.config.tickMs) + 40);
+    const token = session.id;
+    session.hardStopTimer = setTimeout(() => {
+      const active = rampSession;
+      if (!active || active.id !== token) return;
+      if (active.phase !== "down") return;
+      finalizeRampSession(active, { sendHoldOff: true, sendZeroBeforeOff: true });
+    }, stopAfter);
+    emitRampRuntime("decay-start");
+  }
+  function tickRampSession(sessionId){
+    const session = rampSession;
+    if (!session || session.id !== sessionId) return;
+    if (session.mode !== currentMode || session.channel !== channel) {
+      abortRampSession({ sendHoldOff: true });
+      return;
+    }
+    if (session.phase === "up") {
+      if (session.releaseRequested) {
+        beginRampDecay(session);
+      } else {
+        const liveTarget = clampNum(Math.round(Number(level) || 0), 0, 100);
+        if (liveTarget !== session.upTarget) {
+          session.upFrom = session.currentLevel;
+          session.upTarget = liveTarget;
+          session.upStartAt = Date.now();
+          session.upDurationMs = getRampDurationMs(session.upFrom, session.upTarget, session.config);
+        }
+        const elapsed = Date.now() - session.upStartAt;
+        const dir = session.upTarget >= session.upFrom ? "up" : "down";
+        const curve = dir === "up" ? session.config.upCurve : session.config.downCurve;
+        const exponent = dir === "up" ? session.config.upExponent : session.config.downExponent;
+        const nextLevel = calcRampLevel(session.upFrom, session.upTarget, elapsed, session.upDurationMs, curve, exponent, session.config.step, dir);
+        if (nextLevel !== session.currentLevel) sendRampHoldLevel(session, nextLevel);
+        emitRampRuntime("tick-up");
+        return;
+      }
+    }
+    const elapsed = Date.now() - session.downStartAt;
+    const nextLevelRaw = calcRampLevel(
+      session.downFrom,
+      session.downTo,
+      elapsed,
+      session.downDurationMs,
+      session.config.downCurve,
+      session.config.downExponent,
+      session.config.step,
+      "down"
+    );
+    const nextLevel = Math.min(session.currentLevel, nextLevelRaw);
+    if (nextLevel !== session.currentLevel) sendRampHoldLevel(session, nextLevel);
+    if (nextLevel <= 0 || elapsed >= session.downDurationMs) {
+      finalizeRampSession(session, { sendHoldOff: true, sendZeroBeforeOff: true });
+      return;
+    }
+    emitRampRuntime("tick-down");
+  }
+  function startRampSession(){
+    if (!canUseRampControl()) return false;
+    ramp = normalizeRampState(ramp);
+    const targetLevel = clampNum(Math.round(Number(level) || 0), 0, 100);
+    const initialLevel = clampNum(Math.round(Math.min(ramp.startLevel, targetLevel)), 0, 100);
+    abortRampSession({ sendHoldOff: true });
+    const session = {
+      id: ++rampSessionSeq,
+      mode: currentMode,
+      channel,
+      config: { ...ramp },
+      phase: "up",
+      currentLevel: initialLevel,
+      upFrom: initialLevel,
+      upTarget: targetLevel,
+      upStartAt: Date.now(),
+      upDurationMs: getRampDurationMs(initialLevel, targetLevel, ramp),
+      downFrom: 0,
+      downTo: 0,
+      downStartAt: 0,
+      downDurationMs: 0,
+      releaseBaseProgress: 0,
+      commandVersion: 0,
+      releaseRequested: false,
+      timer: null,
+      hardStopTimer: null
+    };
+    rampSession = session;
+    beginHoldLed();
+    if (targetLevel > 0) {
+      const firstLevel = clampNum(Math.max(initialLevel, Math.min(targetLevel, session.config.step)), 0, targetLevel);
+      sendRampHoldLevel(session, firstLevel);
+    } else {
+      sendRampHoldLevel(session, 0);
+    }
+    const tickMs = Math.max(RAMP_LIMITS.tickMs.min, session.config.tickMs);
+    session.timer = setInterval(() => tickRampSession(session.id), tickMs);
+    emitRampRuntime("session-start");
+    return true;
+  }
+  function resumeRampSession(){
+    const session = rampSession;
+    if (!session) return false;
+    if (!canUseRampControl()) return false;
+    if (session.mode !== currentMode || session.channel !== channel) return false;
+    session.releaseRequested = false;
+    session.commandVersion = (Number(session.commandVersion) || 0) + 1;
+    session.phase = "up";
+    session.upFrom = clampNum(Math.round(Number(session.currentLevel) || 0), 0, 100);
+    session.upTarget = clampNum(Math.round(Number(level) || 0), 0, 100);
+    session.upStartAt = Date.now();
+    session.upDurationMs = getRampDurationMs(session.upFrom, session.upTarget, session.config);
+    session.downFrom = 0;
+    session.downTo = 0;
+    session.downStartAt = 0;
+    session.downDurationMs = 0;
+    if (!session.timer) {
+      const tickMs = Math.max(RAMP_LIMITS.tickMs.min, session.config.tickMs);
+      session.timer = setInterval(() => tickRampSession(session.id), tickMs);
+    }
+    beginHoldLed();
+    emitRampRuntime("session-resume");
+    return true;
+  }
+  function releaseRampSession(){
+    const session = rampSession;
+    if (!session) return false;
+    session.releaseRequested = true;
+    beginRampDecay(session);
+    tickRampSession(session.id);
+    emitRampRuntime("release-request");
+    return true;
+  }
+  function canResumeRampImmediately(){
+    const session = rampSession;
+    if (!session) return false;
+    if (!canUseRampControl()) return false;
+    if (session.mode !== currentMode || session.channel !== channel) return false;
+    return session.phase === "down";
   }
 
   async function pulseForDuration(durationMs, useHold){
@@ -3196,13 +3976,21 @@
   }
   function holdOn(){
     if (btnSend) btnSend.classList.add("holding");
+    if (btnSendShell) btnSendShell.classList.add("is-holding");
     setCountup(HOLD_COUNTUP_SOURCE, Date.now(), "hold");
     if (currentMode === "ROULETTE") {
       clearRouletteAutoTimer();
       if (!startRoulettePointer()) {
         if (btnSend) btnSend.classList.remove("holding");
+        if (btnSendShell) btnSendShell.classList.remove("is-holding");
         clearCountup(HOLD_COUNTUP_SOURCE);
       }
+      return;
+    }
+    if (resumeRampSession()) {
+      return;
+    }
+    if (startRampSession()) {
       return;
     }
     beginHoldLed();
@@ -3210,13 +3998,18 @@
   }
   function holdOff(){
     if (btnSend) btnSend.classList.remove("holding");
+    if (btnSendShell) btnSendShell.classList.remove("is-holding");
     clearCountup(HOLD_COUNTUP_SOURCE);
+    flushPendingCommandQueue();
     if (currentMode === "ROULETTE") {
       clearRouletteAutoTimer();
       releaseRoulettePointer();
       return;
     }
-    sendCommand("HOLDOFF");
+    if (releaseRampSession()) {
+      return;
+    }
+    sendCommand("HOLDOFF", { force: true });
     endHoldLed();
   }
 
@@ -3226,6 +4019,7 @@
   let holdIntentTimer = null;
   let globalFailSafeTimer = null;
   let lastPointerId = null;
+  let pressStartedAt = 0;
 
   function armGlobalFailsafe(){
     clearTimeout(globalFailSafeTimer);
@@ -3242,6 +4036,7 @@
     if (pressActive) return;
     pressActive = true;
     holdStarted = false;
+    pressStartedAt = Date.now();
 
     try {
       if (e && e.pointerId != null && btnSend.setPointerCapture) {
@@ -3251,6 +4046,13 @@
     } catch(_) {}
 
     btnSend.classList.add("pressed");
+    if (btnSendShell) btnSendShell.classList.add("is-pressed");
+    if (canResumeRampImmediately()) {
+      holdStarted = true;
+      holdOn();
+      armGlobalFailsafe();
+      return;
+    }
 
     clearTimeout(holdIntentTimer);
     holdIntentTimer = setTimeout(() => {
@@ -3264,11 +4066,17 @@
   function stopPress(fromFailsafe=false){
     if (!pressActive) return;
     pressActive = false;
+    const pressElapsedMs = Math.max(0, Date.now() - (pressStartedAt || Date.now()));
+    pressStartedAt = 0;
 
     clearTimeout(holdIntentTimer);
     disarmGlobalFailsafe();
     btnSend.classList.remove("pressed");
     btnSend.classList.remove("holding");
+    if (btnSendShell) {
+      btnSendShell.classList.remove("is-pressed");
+      btnSendShell.classList.remove("is-holding");
+    }
 
     try {
       if (lastPointerId != null && btnSend.releasePointerCapture) {
@@ -3277,6 +4085,22 @@
     } catch(_) {}
     lastPointerId = null;
 
+    const accidentalHold = holdStarted && !fromFailsafe && pressElapsedMs <= (HOLD_THRESHOLD_MS + HOLD_QUICK_GUARD_MS);
+    if (accidentalHold) {
+      flushPendingCommandQueue();
+      if (rampSession) {
+        abortRampSession({ sendHoldOff: true });
+      } else if (currentMode === "ROULETTE") {
+        clearRouletteAutoTimer();
+        releaseRoulettePointer();
+      } else {
+        sendCommand("HOLDOFF", { force: true });
+        endHoldLed();
+      }
+      holdStarted = false;
+      sendOnce();
+      return;
+    }
     if (holdStarted) holdOff();
     else sendOnce();
   }
@@ -3676,6 +4500,10 @@
   // Controles
   $$(".mode-btn").forEach(b => b.addEventListener("click", () => setMode(b.dataset.mode)));
   $("#chanSwitch").addEventListener("change", e => setChannel(e.target.checked ? 2 : 1));
+  const dualToggleBtn = $("#btnDualToggle");
+  if (dualToggleBtn) dualToggleBtn.addEventListener("click", () => setDualMode(!dualOn));
+  const advancedValuesToggleBtn = $("#btnAdvancedValuesToggle");
+  if (advancedValuesToggleBtn) advancedValuesToggleBtn.addEventListener("click", () => setAdvancedValuesEnabled(!advancedEnabled));
   $("#levelSlider").addEventListener("input", e => setLevel(e.target.value, { broadcast: false }));
   $("#levelSlider").addEventListener("change", e => commitSliderLevel(e.target.value));
   $("#levelSlider").addEventListener("pointerup", e => commitSliderLevel(e.target.value));
@@ -3690,6 +4518,7 @@
   if (pulseToggleBtn) pulseToggleBtn.addEventListener("click", () => setPulseOpen(!pulseOpen));
   if (videoToggleBtn) videoToggleBtn.addEventListener("click", () => setVideoOpen(!videoOpen));
   if (chartToggleBtn) chartToggleBtn.addEventListener("click", () => setChartOpen(!chartOpen));
+  if (rampToggleBtn) rampToggleBtn.addEventListener("click", () => setRampOpen(!rampOpen));
   if (advancedInputs.pulses) advancedInputs.pulses.addEventListener("change", e => updateAdvancedValue("pulses", parseInt(e.target.value,10)));
   if (advancedInputs.duration) advancedInputs.duration.addEventListener("change", e => updateAdvancedValue("durationMs", parseFloat(e.target.value)));
   if (advancedInputs.delay) advancedInputs.delay.addEventListener("change", e => updateAdvancedValue("delayMs", parseFloat(e.target.value)));
@@ -3698,6 +4527,15 @@
   const advResetBtn = $("#advResetBtn");
   if (advResetBtn) advResetBtn.addEventListener("click", resetAdvanced);
   if (advStopBtn) advStopBtn.addEventListener("click", requestAdvStop);
+  window.addEventListener("rampcontrol:update", (ev) => {
+    const detail = ev?.detail;
+    if (!detail || typeof detail !== "object") return;
+    applyRampPatch(detail, { persist:true, broadcast:true, syncWidget:false, reason: detail.reason || "ramp-widget" });
+    syncRampWidgetState("ramp-widget");
+  });
+  window.addEventListener("rampcontrol:request_state", () => {
+    syncRampWidgetState("ramp-widget-request");
+  });
   initTooltips();
   const levelInputEl = $("#levelValue");
   if (levelInputEl) {
@@ -3985,7 +4823,7 @@
     });
   }
   function getRouletteSpinDurationMs(cfg){
-    if (!advancedOpen) return ROULETTE_DEFAULT_HOLD_MS;
+    if (!isAdvancedValuesActive()) return ROULETTE_DEFAULT_HOLD_MS;
     const normalized = normalizeAdvancedState({ ...ADV_DEFAULTS, ...(cfg || advanced) });
     const raw = Math.round(normalized.durationMs || ROULETTE_DEFAULT_HOLD_MS);
     return clampNum(raw, ROULETTE_HOLD_LIMITS.min, ROULETTE_HOLD_LIMITS.max);
@@ -4057,11 +4895,20 @@
         setChannel(nextChannel, { broadcast:false, reason:"bus-sync" });
       }
     }
+    if (payload.dualOn != null) {
+      setDualMode(!!payload.dualOn, { broadcast:false, reason:"bus-sync", sendCommand:isSerialReady(), serialOnly:true });
+    }
     if (payload.level != null) {
       setLevel(payload.level, { broadcast:false, reason:"bus-sync" });
     }
     if (payload.advancedOpen != null) {
       setAdvancedOpen(!!payload.advancedOpen, { broadcast:false });
+    }
+    if (payload.advancedEnabled != null) {
+      setAdvancedValuesEnabled(!!payload.advancedEnabled, { broadcast:false });
+    }
+    if (payload.rampOpen != null) {
+      setRampOpen(!!payload.rampOpen, { force:true, broadcast:false });
     }
     if (payload.audioOpen != null) {
       setAudioOpen(!!payload.audioOpen, { force:true, broadcast:false });
@@ -4079,6 +4926,7 @@
       setChartOpen(!!payload.chartOpen, { force:true, broadcast:false });
     }
     applyAdvancedPatch(payload, { broadcast:false, reason:"bus-sync" });
+    applyRampPatch(payload, { broadcast:false, reason:"bus-sync" });
     if (payload.scoreboardOpen != null) {
       setScoreboardOpen(!!payload.scoreboardOpen, { force:true, signalArmed:false });
     } else if (payload.armed != null) {
@@ -4161,27 +5009,38 @@
   if (savedState?.advanced) {
     advanced = normalizeAdvancedState({ ...ADV_DEFAULTS, ...savedState.advanced });
   }
+  if (savedState?.ramp) {
+    ramp = normalizeRampState({ ...RAMP_DEFAULTS, ...savedState.ramp });
+  }
   advancedOpen = !!savedState?.advancedOpen;
+  advancedEnabled = savedState?.advancedEnabled == null ? advancedOpen : !!savedState.advancedEnabled;
+  rampOpen = !!savedState?.rampOpen;
   const initialMode = savedState?.mode || "SHOCK";
   const initialLevel = savedState?.level ?? 0;
   const initialChannel = savedState?.channel || 1;
+  const initialDualOn = savedState?.dualOn ?? false;
   const initialScoreboardOpen = savedState?.scoreboardOpen ?? false;
   const initialAudioOpen = savedState?.audioOpen ?? false;
   const initialNavalOpen = savedState?.navalOpen ?? false;
   const initialPulseOpen = savedState?.pulseOpen ?? false;
   const initialVideoOpen = savedState?.videoOpen ?? false;
   const initialChartOpen = savedState?.chartOpen ?? false;
+  const initialRampOpen = savedState?.rampOpen ?? false;
   setMode(initialMode);
   setLevel(initialLevel, { broadcast:false });
   setChannel(initialChannel);
+  setDualMode(initialDualOn, { broadcast:false });
   setScoreboardOpen(initialScoreboardOpen, { persist:false, force:true, signalArmed:false });
   setAudioOpen(initialAudioOpen, { persist:false, force:true, broadcast:false });
   setNavalOpen(initialNavalOpen, { persist:false, force:true, broadcast:false });
   setPulseOpen(initialPulseOpen, { persist:false, force:true, broadcast:false });
   setVideoOpen(initialVideoOpen, { persist:false, force:true, broadcast:false });
   setChartOpen(initialChartOpen, { persist:false, force:true, broadcast:false });
+  setRampOpen(initialRampOpen, { persist:false, force:true, broadcast:false });
   syncAdvancedUi();
+  syncRampWidgetState("initial-sync");
   setAdvancedOpen(advancedOpen, { broadcast:false });
+  setAdvancedValuesEnabled(advancedEnabled, { broadcast:false, persist:false });
   stopAdvCountdown(false);
   syncLevelInputWidth();
   broadcastBasics("remote-init");

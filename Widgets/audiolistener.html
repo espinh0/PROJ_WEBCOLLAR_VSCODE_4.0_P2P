@@ -31,7 +31,7 @@
     <div class="d-flex justify-content-between mt-1">
       <small>Volume (RMS): <span id="audio-collar-vol">0%</span></small>
       <small>Pico: <span id="audio-collar-peaklbl">0%</span></small>
-      <small>Limite: <span id="audio-collar-th">20%</span></small>
+      <small>Limite: <span id="audio-collar-th">90%</span></small>
     </div>
   </div>
 
@@ -43,15 +43,15 @@
   <div class="row g-2 mt-2">
     <div class="col-12 col-md-4 d-flex align-items-center gap-2">
       <label class="small mb-0">Gamma</label>
-      <input id="audio-collar-gamma" type="range" min="1.0" max="4.0" step="0.1" 
+      <input id="audio-collar-gamma" type="range" min="1.0" max="30.0" step="0.1" 
  class="form-range" style="max-width:160px;" />
-      <small id="audio-collar-gammalbl" class="text-secondary">2.4</small>
+      <small id="audio-collar-gammalbl" class="text-secondary">4</small>
     </div>
     <div class="col-12 col-md-4 d-flex align-items-center gap-2">
       <label class="small mb-0">Ruído</label>
       <input id="audio-collar-nf" type="range" min="0" max="20" step="1" 
  class="form-range" style="max-width:160px;" />
-      <small id="audio-collar-nflbl" class="text-secondary">6%</small>
+      <small id="audio-collar-nflbl" class="text-secondary">20%</small>
     </div>
     <div class="col-12 col-md-4 d-flex align-items-center gap-2">
       <label class="small mb-0">Sensibilidade</label>
@@ -395,8 +395,16 @@
 <script>
 (function(){
   'use strict';
-  if (window.__AUDIO_COLLAR_WIDGET_V19__) return;
-  window.__AUDIO_COLLAR_WIDGET_V19__ = true;
+  const widgetRoot = document.getElementById('audio-collar-widget');
+  if (!widgetRoot) return;
+  const prevInstance = window.__AUDIO_COLLAR_WIDGET_V19__;
+  const prevRoot = prevInstance && prevInstance.root;
+  const prevReady = !!(prevRoot && prevRoot.dataset && prevRoot.dataset.audioCollarReady === '1');
+  if (prevRoot && document.body.contains(prevRoot) && prevReady) return;
+  if (prevInstance && typeof prevInstance.teardown === 'function') {
+    try { prevInstance.teardown('reinit'); } catch(_){ }
+  }
+  window.__AUDIO_COLLAR_WIDGET_V19__ = { root: widgetRoot, teardown: null };
 
   // ---------- CONFIG ----------
   const POLL_MS   = 35;     // leitura do audio (mais rapida)
@@ -410,7 +418,8 @@
   const STEP_PCT  = 10;
   const LS_PREFIX = 'audioCollarWidget.';
 
-  const PEAK_ENV_DECAY = 0.85;
+  const PEAK_ENV_DECAY = 0.98;
+  const PEAK_MIN_FLOOR = 0.0;
   const SENS_DB_MIN  = -24;
   const SENS_DB_MAX  =  36;
   const SENS_DB_STEP =   3;
@@ -510,12 +519,12 @@
     channel: normalizeChannel(window.channel || 1)
   };
   let cfg = {
-    thresholdPct:  LS.get('thresholdPct', 20),
-    gamma:         LS.get('gamma', 2.4),
-    noiseFloorPct: LS.get('noiseFloorPct', 6),
+    thresholdPct:  LS.get('thresholdPct', 90),
+    gamma:         LS.get('gamma', 4),
+    noiseFloorPct: LS.get('noiseFloorPct', 20),
     sensDb:        LS.get('sensDb', 0),
-    freqMinHz:     LS.get('freqMinHz', FREQ_MIN_LIMIT),
-    freqMaxHz:     LS.get('freqMaxHz', FREQ_MAX_LIMIT)
+    freqMinHz:     LS.get('freqMinHz', 20),
+    freqMaxHz:     LS.get('freqMaxHz', 70)
   };
 
   // Áudio
@@ -569,6 +578,28 @@
   let warnedNoHoldTx = false;
   let rouletteHoldActive = false;
   let warnedNoRoulette = false;
+  let destroyed = false;
+  let tickTimer = null;
+  let commitTimer = null;
+  let controlTimer = null;
+
+  function isMounted(){
+    return !!(widgetRoot && document.body.contains(widgetRoot));
+  }
+
+  function teardown(reason){
+    if (destroyed) return;
+    destroyed = true;
+    if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+    if (commitTimer) { clearInterval(commitTimer); commitTimer = null; }
+    if (controlTimer) { clearInterval(controlTimer); controlTimer = null; }
+    if (rxWatchdogTimer) { clearInterval(rxWatchdogTimer); rxWatchdogTimer = null; }
+    if (cfgBroadcastTimer) { clearTimeout(cfgBroadcastTimer); cfgBroadcastTimer = null; }
+    if (freqSliderInitTimer) { clearInterval(freqSliderInitTimer); freqSliderInitTimer = null; }
+    try { stopAllSources(); } catch(_){ }
+    window.__AUDIO_COLLAR_WIDGET_V19__ = null;
+    if (reason) appendLog('Widget finalizado: ' + reason);
+  }
 
   function setControlState(next){
     appendLog(`setControlState: next=${JSON.stringify(next)}`);
@@ -742,6 +773,10 @@
       // Watchdog: se parar heartbeat, solta
       if (rxWatchdogTimer) clearInterval(rxWatchdogTimer);
       rxWatchdogTimer = setInterval(() => {
+        if (!isMounted()) {
+          teardown('unmounted');
+          return;
+        }
         if (!rxLastSeenAt) return;
         const age = Date.now() - rxLastSeenAt;
         // só faz sentido se o último estado aplicado foi ON
@@ -775,7 +810,7 @@
       changed = true;
     }
     if (Number.isFinite(patch.gamma)) {
-      cfg.gamma = clamp(patch.gamma, 1.0, 4.0);
+      cfg.gamma = clamp(patch.gamma, 1.0, 30.0);
       LS.set('gamma', cfg.gamma);
       changed = true;
     }
@@ -1210,7 +1245,7 @@
       if (v > peak) peak = v;
     }
 
-    envPeakAbs = Math.max(peak, envPeakAbs * PEAK_ENV_DECAY);
+    envPeakAbs = Math.max(peak, envPeakAbs * PEAK_ENV_DECAY, PEAK_MIN_FLOOR);
 
     const sensDb = clamp(cfg.sensDb || 0, SENS_DB_MIN, SENS_DB_MAX);
     const gain = Math.pow(10, sensDb / 20);
@@ -1446,7 +1481,11 @@
   }
 
   function startCommitLoop(){
-    setInterval(() => {
+    commitTimer = setInterval(() => {
+      if (!isMounted()) {
+        teardown('unmounted');
+        return;
+      }
       // Heartbeat: se ON, reenviar mesmo sem mudança (robustez)
       if (desired.on) {
         // Se não mudou, ainda assim reenviamos com o mesmo seq para manter idempotência?
@@ -1494,7 +1533,11 @@
   }
 
   function startControlPolling(){
-    setInterval(() => {
+    controlTimer = setInterval(() => {
+      if (!isMounted()) {
+        teardown('unmounted');
+        return;
+      }
       if (!controlBusBound) bindControlBus();
       const nextMode = sanitizeMode(window.currentMode || control.mode);
       const nextChan = normalizeChannel(window.channel || control.channel);
@@ -1816,6 +1859,10 @@
 
   // ---------- main loops ----------
   async function tickAudio(){
+    if (!isMounted()) {
+      teardown('unmounted');
+      return;
+    }
     try { await ensureAudio(false); } catch(e){}
     const { pct, peakPct } = readLevelsInstant();
 
@@ -1863,6 +1910,8 @@
 
   function boot(){
     appendLog('Booting Audio→Collar widget...');
+    widgetRoot.dataset.audioCollarReady = '1';
+    window.__AUDIO_COLLAR_WIDGET_V19__.teardown = teardown;
     makeUIBindings();
     initSpectrumCanvas();
     setControlState({ mode: window.currentMode, channel: window.channel });
@@ -1875,7 +1924,7 @@
 
     populateMicSelect();
 
-    setInterval(tickAudio, POLL_MS);
+    tickTimer = setInterval(tickAudio, POLL_MS);
     startCommitLoop();
   }
 

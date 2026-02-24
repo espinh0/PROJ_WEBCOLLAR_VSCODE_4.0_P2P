@@ -1058,15 +1058,23 @@
     box-shadow: 0 10px 20px rgba(0,0,0,0.28);
     display: inline-flex;
     align-items: center;
+    gap: 6px;
   }
   .channel-switch-label {
     font-size: 0.75rem;
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: #9ca3af;
-    margin-right: 6px;
+  }
+  .channel-switch-toggle {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
   }
   .channel-switch-value {
+    position: absolute;
+    top: 50%;
+    left: 2px;
     min-width: 22px;
     height: 22px;
     border-radius: 999px;
@@ -1075,10 +1083,13 @@
     justify-content: center;
     font-size: 0.8rem;
     font-weight: 700;
-    color: #e0e7ff;
-    background: rgba(77,113,255,0.18);
-    border: 1px solid rgba(77,113,255,0.45);
-    margin-right: 8px;
+    color: #111827;
+    background: #ffffff;
+    border: 1px solid rgba(255,255,255,0.85);
+    transform: translateY(-50%);
+    transition: transform .18s ease, background .18s ease, color .18s ease, border-color .18s ease;
+    pointer-events: none;
+    z-index: 1;
   }
   .channel-switch .form-check-input {
     width: 52px;
@@ -1090,13 +1101,19 @@
     box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
     cursor: pointer;
   }
+  .channel-switch .form-check-input:checked + .channel-switch-value {
+    transform: translate(26px, -50%);
+    background: #ffffff;
+    color: #111827;
+    border-color: rgba(255,255,255,0.85);
+  }
   .channel-switch .form-check-input:hover {
     border-color: rgba(77,113,255,0.6);
   }
   .channel-switch .form-check-input:checked {
-    background-color: rgba(77,113,255,0.95);
-    border-color: rgba(77,113,255,0.75);
-    box-shadow: 0 0 0 2px rgba(255,255,255,0.1), 0 8px 18px rgba(77,113,255,0.25);
+    background-color: rgba(15,18,28,0.9);
+    border-color: rgba(77,113,255,0.35);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
   }
   .channel-switch .form-check-input:focus-visible {
     outline: none;
@@ -1221,6 +1238,13 @@
     transform: translateY(0);
     pointer-events: auto;
   }
+  .advanced-panel.adv-disabled .advanced-grid {
+    opacity: 0.45;
+    filter: grayscale(0.2);
+  }
+  .advanced-panel.adv-disabled .advanced-grid label {
+    color: #6b7280;
+  }
   .advanced-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -1326,6 +1350,10 @@
     color: #ffffff;
     transform: translateY(1px);
   }
+  .number-spinner .spin-btn:disabled {
+    color: #6b7280;
+    cursor: not-allowed;
+  }
   .number-spinner input[type="number"] {
     border: none;
     background: transparent;
@@ -1336,6 +1364,9 @@
     width: 100%;
     padding: 8px 6px;
     box-shadow: none;
+  }
+  .number-spinner input[type="number"]:disabled {
+    color: #9ca3af;
   }
   .number-spinner input[type="number"]::-webkit-outer-spin-button,
   .number-spinner input[type="number"]::-webkit-inner-spin-button {
@@ -1379,25 +1410,19 @@
             <span class="visually-hidden">Flowgate:</span>
             <span id="fg-conn-state">desconectado</span>
           </div>
-          <div class="status-pill" aria-label="Peers conectados" title="Peers conectados">
+          <div class="status-pill" aria-label="Peers e bots conectados" title="Peers e bots conectados">
             <span class="status-icon"><i class="fa-solid fa-user-group"></i></span>
             <span id="fg-peer-count">0</span>
-          </div>
-          <div class="status-pill host-only" aria-label="Bots conectados" title="Bots conectados">
-            <span class="status-icon"><i class="fa-solid fa-robot"></i></span>
-            <span id="fg-bot-count">0</span>
+            <span class="host-only">/ <i class="fa-solid fa-robot" aria-hidden="true"></i> <span id="fg-bot-count">0</span></span>
           </div>
           <div class="status-pill host-only" aria-label="Consumo Flowgate" title="Consumo Flowgate">
-            <span class="status-icon"><i class="fa-solid fa-chart-line"></i></span>
-            <span id="fg-bandwidth"><i class="fa-solid fa-arrow-up"></i> 0 B / <i class="fa-solid fa-arrow-down"></i> 0 B</span>
+                        <span id="fg-bandwidth"><i class="fa-solid fa-arrow-up"></i> 0 B / <i class="fa-solid fa-arrow-down"></i> 0 B</span>
           </div>
-          <div id="serial-devices-pill" class="status-pill" data-status="off" aria-label="Peers com serial aberta" title="Peers com serial aberta">
+          <div id="serial-devices-pill" class="status-pill" data-status="off" aria-label="Serial e peers" title="Serial e peers">
             <span class="status-icon"><i class="fa-solid fa-microchip"></i></span>
+            <span class="host-only">Serial: <span id="serial-conn-state">fechada</span></span>
             <div id="serial-device-list" class="serial-device-list"></div>
             <span id="serial-device-empty" class="serial-device-empty">nenhum</span>
-          </div>
-          <div id="serial-status-pill" class="status-pill host-only" data-status="off">
-            Serial: <span id="serial-conn-state">fechada</span>
           </div>
         </div>
           <div class="control-peer-list">
@@ -1484,8 +1509,10 @@
     <div class="control-action-group">
       <div class="channel-switch form-check form-switch m-0">
         <span class="channel-switch-label">Canal</span>
-        <span id="channelSwitchValue" class="channel-switch-value">1</span>
-        <input class="form-check-input" type="checkbox" id="chanSwitch" aria-label="Canal 1 ou 2" title="Canal 1 ou 2" data-bs-toggle="tooltip"/>
+        <span class="channel-switch-toggle">
+          <input class="form-check-input" type="checkbox" id="chanSwitch" aria-label="Canal 1 ou 2" title="Canal 1 ou 2" data-bs-toggle="tooltip"/>
+          <span id="channelSwitchValue" class="channel-switch-value">1</span>
+        </span>
       </div>
 
       <div id="btnSendShell" class="btn-send-shell">
@@ -1758,6 +1785,7 @@
   window.channel = channel;
   window.dualOn = dualOn;
   window.__ADVANCED_PANEL_OPEN__ = advancedOpen;
+  window.__ADVANCED_VALUES_ENABLED__ = advancedEnabled;
 
   const $  = s => document.querySelector(s);
   const $$ = s => document.querySelectorAll(s);
@@ -2549,7 +2577,7 @@
     intensityReadoutEl.textContent = modeSupportsLevel(currentMode) ? `${level}%` : "—";
   }
   function syncChannelReadout(){
-    if (channelReadoutEl) channelReadoutEl.textContent = `${channel}`;
+    if (channelReadoutEl) channelReadoutEl.textContent = dualOn ? "½" : `${channel}`;
   }
 
   function isSerialReady(){
@@ -2565,6 +2593,22 @@
     const label = btn.querySelector(".adv-toggle-label");
     if (label) label.textContent = advancedEnabled ? "ADV ON" : "ADV OFF";
     btn.setAttribute("aria-label", `Valores avancados: ${advancedEnabled ? "ligados" : "desligados"}`);
+  }
+
+  function syncAdvancedInputsEnabled(){
+    const disabled = !advancedEnabled;
+    if (advancedPanelEl) advancedPanelEl.classList.toggle("adv-disabled", disabled);
+    Object.values(advancedInputs).forEach((input) => {
+      if (!input) return;
+      input.disabled = disabled;
+      input.setAttribute("aria-disabled", disabled ? "true" : "false");
+    });
+    if (advancedPanelEl) {
+      advancedPanelEl.querySelectorAll(".advanced-grid .spin-btn").forEach((btn) => {
+        btn.disabled = disabled;
+        btn.setAttribute("aria-disabled", disabled ? "true" : "false");
+      });
+    }
   }
 
   function setDualMode(on, opts = {}){
@@ -2583,6 +2627,8 @@
       sw.disabled = dualOn;
       sw.setAttribute("aria-disabled", dualOn ? "true" : "false");
     }
+    syncChannelSwitchLabel();
+    syncChannelReadout();
     log(`Dual: ${dualOn ? "ON" : "OFF"}`);
     const shouldSend = opts.sendCommand !== false;
     if (shouldSend && (!opts.serialOnly || isSerialReady())) {
@@ -2592,11 +2638,13 @@
     if (opts.broadcast !== false) emitControlPatch({ dualOn, reason: opts.reason || "dual-toggle" });
   }
   function isAdvancedValuesActive(){
-    return advancedOpen && advancedEnabled;
+    return advancedEnabled;
   }
   function setAdvancedValuesEnabled(on, opts = {}){
     advancedEnabled = !!on;
+    window.__ADVANCED_VALUES_ENABLED__ = advancedEnabled;
     syncAdvancedValuesUi();
+    syncAdvancedInputsEnabled();
     syncAdvancedReadouts();
     if (!isAdvancedValuesActive()) {
       requestAdvStop();
@@ -3252,6 +3300,7 @@
   }
 
   function updateAdvancedValue(key, raw){
+    if (!advancedEnabled) return;
     if (!advanced) advanced = { ...ADV_DEFAULTS };
     if (key === "durationMs" || key === "delayMs" || key === "preDelayMs") {
       advanced[key] = secToMs(raw, key);
@@ -3296,6 +3345,7 @@
       };
       const format = (v) => decimals > 0 ? v.toFixed(decimals) : String(Math.round(v));
       const bump = (dir) => {
+        if (input.disabled) return;
         const next = clamp(parseVal() + dir * step);
         input.value = format(next);
         input.dispatchEvent(new Event("change", { bubbles: true }));
@@ -3310,6 +3360,7 @@
         holdInterval = null;
       };
       const startHold = (dir) => {
+        if (input.disabled) return;
         bump(dir); // primeira interação imediata
         clearHoldTimers();
         holdDelayTimer = setTimeout(() => {
@@ -3319,6 +3370,7 @@
       spinner.querySelectorAll("button[data-spin]").forEach(btn => {
         const dir = btn.dataset.spin === "inc" ? 1 : -1;
         btn.addEventListener("pointerdown", e => {
+          if (btn.disabled || input.disabled) return;
           e.preventDefault();
           suppressClick = true;
           startHold(dir);
@@ -3331,6 +3383,7 @@
         });
         // fallback para teclado/space/enter
         btn.addEventListener("click", () => {
+          if (btn.disabled || input.disabled) return;
           if (suppressClick) { suppressClick = false; return; }
           bump(dir);
         });
@@ -3446,6 +3499,7 @@
     syncAdvancedValuesUi();
     syncAdvancedReadouts();
     if (!advancedOpen) {
+      setAdvancedValuesEnabled(false, { persist: opts.persist, broadcast: opts.broadcast, reason: opts.reason || "advanced-toggle" });
       requestAdvStop();
     }
     if (opts.broadcast !== false) {
@@ -3528,12 +3582,17 @@
     channel = c; window.channel = c;
     const sw = $("#chanSwitch");
     if (sw) sw.checked = channel === 2;
-    const label = $("#channelSwitchValue");
-    if (label) label.textContent = String(channel);
+    syncChannelSwitchLabel();
     log(`Canal: ${channel}`);
     syncChannelReadout();
     if (opts.persist !== false) persistState();
     if (opts.broadcast !== false) broadcastBasics(opts.reason || "channel-change");
+  }
+
+  function syncChannelSwitchLabel(){
+    const label = $("#channelSwitchValue");
+    if (!label) return;
+    label.textContent = dualOn ? "½" : String(channel);
   }
 
   function buildCmdLine(durationOverride){
@@ -3945,11 +4004,14 @@
     })();
   }
   function sendOnce(){
-    const liveCfg = getLiveAdvanced();
-    advanced = liveCfg;
-    persistState();
+    const advActive = isAdvancedValuesActive();
+    const liveCfg = advActive ? getLiveAdvanced() : { ...ADV_DEFAULTS };
+    if (advActive) {
+      advanced = liveCfg;
+      persistState();
+    }
     if (currentMode === "ROULETTE") {
-      if (shouldUseRouletteSequence(liveCfg)) {
+      if (advActive && shouldUseRouletteSequence(liveCfg)) {
         runRouletteBurst(liveCfg);
       } else {
         stopAdvCountdown(false);
@@ -3957,7 +4019,7 @@
       }
       return;
     }
-    if (!advancedOpen) {
+    if (!advActive) {
       stopAdvCountdown(false);
       sendCommand(buildCmdLine());
       return;
@@ -4589,21 +4651,28 @@
       const bandwidthEl = document.getElementById("fg-bandwidth");
       const peerListEl = document.getElementById("fg-peer-list");
       const peerEmptyEl = document.getElementById("fg-peer-empty");
-      const serialPill = document.getElementById("serial-status-pill");
+      const serialPill = document.getElementById("serial-devices-pill");
       const serialStateEl = document.getElementById("serial-conn-state");
-      const serialDevicesPill = document.getElementById("serial-devices-pill");
     const serialDeviceListEl = document.getElementById("serial-device-list");
     const serialDeviceEmptyEl = document.getElementById("serial-device-empty");
     if (!flowgateStateEl || !peerCountEl || !peerListEl || !peerEmptyEl || !serialStateEl) return;
+
+    let serialOpen = false;
 
     const setPillState = (pill, state) => {
       if (!pill) return;
       pill.dataset.status = state;
     };
 
+    const updateSerialPillState = (hasDevices) => {
+      const active = serialOpen || !!hasDevices;
+      setPillState(serialPill, active ? "ok" : "off");
+    };
+
     const setSerialState = (isOpen) => {
-      serialStateEl.textContent = isOpen ? "aberta" : "fechada";
-      setPillState(serialPill, isOpen ? "ok" : "off");
+      serialOpen = !!isOpen;
+      serialStateEl.textContent = serialOpen ? "aberta" : "fechada";
+      updateSerialPillState(false);
     };
 
     const setFlowgateState = (label) => {
@@ -4664,10 +4733,10 @@
     };
 
     const renderSerialDevices = (entries) => {
-      if (!serialDevicesPill || !serialDeviceListEl) return;
+      if (!serialPill || !serialDeviceListEl) return;
       serialDeviceListEl.innerHTML = "";
       const hasDevices = Array.isArray(entries) && entries.length > 0;
-      serialDevicesPill.dataset.status = hasDevices ? "ok" : "off";
+      updateSerialPillState(hasDevices);
       if (serialDeviceEmptyEl) serialDeviceEmptyEl.classList.toggle("d-none", hasDevices);
       if (!hasDevices) return;
       entries.forEach((peer) => {
@@ -5014,6 +5083,7 @@
   }
   advancedOpen = !!savedState?.advancedOpen;
   advancedEnabled = savedState?.advancedEnabled == null ? advancedOpen : !!savedState.advancedEnabled;
+  window.__ADVANCED_VALUES_ENABLED__ = advancedEnabled;
   rampOpen = !!savedState?.rampOpen;
   const initialMode = savedState?.mode || "SHOCK";
   const initialLevel = savedState?.level ?? 0;

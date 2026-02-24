@@ -1,4 +1,4 @@
-﻿<!-- ===== BOTÕES PERSONALIZADOS — v1.0 ================================== -->
+﻿<!-- ===== BOTÕES PERSONALIZADOS — v1.1 (salva modo dual) ================= -->
 <style>
   #customPads {
     margin: 0;
@@ -376,8 +376,9 @@
     }
   }
 
-  async function runAdvancedSequence(baseCmd, cfg, signal){
+  async function runAdvancedSequence(baseCmd, cfg, signal, sendFn){
     if (!cfg) return false;
+    const doSend = (typeof sendFn === "function") ? sendFn : safeSend;
     const plan = {
       pulses: clampNumber(Math.round((cfg.pulses ?? ADV_DEFAULTS.pulses) || ADV_DEFAULTS.pulses), ADV_LIMITS.pulses.min, ADV_LIMITS.pulses.max),
       duration: clampNumber(Number(cfg.duration ?? ADV_DEFAULTS.duration) || ADV_DEFAULTS.duration, ADV_LIMITS.duration.min, ADV_LIMITS.duration.max),
@@ -393,15 +394,15 @@
         let abortedHold = false;
         let holdArmed = false;
         try {
-          await safeSend(`HOLDON ${baseCmd}`);
+          await doSend(`HOLDON ${baseCmd}`);
           holdArmed = true;
           abortedHold = await waitWithStop(durationMs, signal);
         } finally {
-          if (holdArmed) await safeSend("HOLDOFF");
+          if (holdArmed) await doSend("HOLDOFF");
         }
         if (abortedHold) break;
       } else {
-        await safeSend(baseCmd);
+        await doSend(baseCmd);
         const abortedPulse = await waitWithStop(durationMs, signal);
         if (abortedPulse) break;
       }
@@ -539,7 +540,7 @@
   }
 
   function isAdvancedPanelEnabled(){
-    return !!window.__ADVANCED_PANEL_OPEN__;
+    return !!window.__ADVANCED_VALUES_ENABLED__;
   }
 
   // ====== UI / Estado ======
@@ -674,17 +675,21 @@
     return trimmed;
   }
 
-  function buildAdvancedSummary(adv){
-    if (!adv) return "";
+  function buildAdvancedSummary(adv, extraChips){
     const chips = [];
-    if (adv.pulses !== undefined && !approxEqual(adv.pulses, ADV_DEFAULTS.pulses, 0)) {
-      chips.push(`<span class="cp-advanced-chip"><i class="fa-solid fa-wave-square"></i><span>${adv.pulses}x</span></span>`);
+    if (Array.isArray(extraChips) && extraChips.length) {
+      chips.push(...extraChips);
     }
-    if (adv.duration !== undefined && !approxEqual(adv.duration, ADV_DEFAULTS.duration)) {
-      chips.push(`<span class="cp-advanced-chip"><i class="fa-solid fa-stopwatch"></i><span>${formatSeconds(adv.duration)}s</span></span>`);
-    }
-    if (adv.interval !== undefined && !approxEqual(adv.interval, ADV_DEFAULTS.interval)) {
-      chips.push(`<span class="cp-advanced-chip"><i class="fa-solid fa-arrows-left-right"></i><span>${formatSeconds(adv.interval)}s</span></span>`);
+    if (adv) {
+      if (adv.pulses !== undefined && !approxEqual(adv.pulses, ADV_DEFAULTS.pulses, 0)) {
+        chips.push(`<span class="cp-advanced-chip"><i class="fa-solid fa-wave-square"></i><span>${adv.pulses}x</span></span>`);
+      }
+      if (adv.duration !== undefined && !approxEqual(adv.duration, ADV_DEFAULTS.duration)) {
+        chips.push(`<span class="cp-advanced-chip"><i class="fa-solid fa-stopwatch"></i><span>${formatSeconds(adv.duration)}s</span></span>`);
+      }
+      if (adv.interval !== undefined && !approxEqual(adv.interval, ADV_DEFAULTS.interval)) {
+        chips.push(`<span class="cp-advanced-chip"><i class="fa-solid fa-arrows-left-right"></i><span>${formatSeconds(adv.interval)}s</span></span>`);
+      }
     }
     if (!chips.length) return "";
     return `<div class="cp-advanced">${chips.join("")}</div>`;
@@ -717,7 +722,7 @@
     }
   }
 
-  /** @type {{id:string, mode:string, level:number, channel:number, advanced?: { pulses?: number; duration?: number; interval?: number; }}[]} */
+  /** @type {{id:string, mode:string, level:number, channel:number, dualOn?: boolean, advanced?: { pulses?: number; duration?: number; interval?: number; }}[]} */
   let items = [];
   let activePadCancel = null;
 
@@ -744,7 +749,8 @@
       } else {
         items = items.map(entry => ({
           ...entry,
-          advanced: normalizeAdvancedConfig(entry.advanced)
+          advanced: normalizeAdvancedConfig(entry.advanced),
+          dualOn: (entry.dualOn === true) ? true : (entry.dualOn === false ? false : undefined)
         }));
       }
     } catch {
@@ -766,7 +772,11 @@
       const cmd = `${it.mode},${it.level},${it.channel}`;
       const advConfig = normalizeAdvancedConfig(it.advanced) || null;
       it.advanced = advConfig;
-      const advSummary = buildAdvancedSummary(advConfig);
+      const hasDual = it.dualOn === true;
+      const dualChip = hasDual
+        ? `<span class="cp-advanced-chip"><i class="fa-solid fa-toggle-on"></i><span>Dual</span></span>`
+        : "";
+      const advSummary = buildAdvancedSummary(advConfig, dualChip ? [dualChip] : null);
 
       const wrap = document.createElement("div");
       wrap.className = "cp-item";
@@ -782,6 +792,7 @@
       wrap.style.setProperty("--cp-color", modeStyle.color);
       const solidTint = toSolidTint(modeStyle.tint, modeStyle.color);
       wrap.style.setProperty("--cp-bg", `linear-gradient(120deg, ${solidTint}, #05060a)`);
+      const channelLabel = hasDual ? "½" : it.channel;
       b.innerHTML = `<span class="cp-btn-content">
                         <span class="cp-level ${hideLevel ? 'cp-level-no-value' : ''}">${hideLevel ? '' : `<span class="cp-level-value">${it.level}</span>`}<span class="cp-level-icon"><i class="fa-solid ${modeStyle.icon}"></i></span></span>
                         <span class="cp-details">
@@ -790,7 +801,7 @@
                           </strong>
                           <span class="cp-channel">
                             <span>Canal</span>
-                            <span class="cp-channel-value">${it.channel}</span>
+                            <span class="cp-channel-value">${channelLabel}</span>
                           </span>
                           ${advSummary}
                         </span>
@@ -820,6 +831,7 @@
       // Comportamento: mantém HOLD tradicional para botões simples
       // e executa sequências avançadas controlando o latch visual.
       const hasAdvancedSequence = !!advConfig;
+      const useDualPrefix = it.dualOn === true;
       const isRoulette = isRouletteMode(modeKey);
       let safetyTimer = null;
       let suppressClick = false;
@@ -852,12 +864,15 @@
         suppressTimer = setTimeout(() => { suppressClick = false; }, CLICK_SUPPRESS_MS);
       }
 
+      const formatPayload = (payload) => useDualPrefix ? `DUAL ${payload}` : payload;
+      const safeSendDual = async (payload) => safeSend(formatPayload(payload));
+
       async function holdOnSimple(){
         if (simpleHoldActive) return;
         claimPadControl(cancelActive);
         simpleHoldActive = true;
         setActiveState(true);
-        await safeSend(`HOLDON ${cmd}`);
+        await safeSendDual(`HOLDON ${cmd}`);
         clearTimeout(safetyTimer);
         // safetyTimer = setTimeout(() => { holdOffSimple(); }, 2000);
       }
@@ -867,7 +882,7 @@
         setActiveState(false);
         clearTimeout(safetyTimer);
         safetyTimer = null;
-        await safeSend("HOLDOFF");
+        await safeSendDual("HOLDOFF");
         if (!advRunner) releasePadControl(cancelActive);
       }
 
@@ -877,7 +892,8 @@
         claimPadControl(cancelActive);
         advStopSignal = { stop: false };
         setActiveState(true);
-        const runner = (isRoulette ? runRouletteSequence(advConfig, advStopSignal) : runAdvancedSequence(cmd, advConfig, advStopSignal))
+        const sendFn = useDualPrefix ? safeSendDual : safeSend;
+        const runner = (isRoulette ? runRouletteSequence(advConfig, advStopSignal) : runAdvancedSequence(cmd, advConfig, advStopSignal, sendFn))
           .catch(() => false)
           .finally(() => {
             setActiveState(false);
@@ -901,12 +917,12 @@
         }
       }
 
-      b.addEventListener("pointerdown", (e) => {
+      b.addEventListener("pointerdown", async (e) => {
         e.preventDefault();
         b.setPointerCapture?.(e.pointerId);
         engagePointerSuppression();
-        if (!startAdvancedSequence() && !isRoulette) {
-          holdOnSimple();
+        if (!await startAdvancedSequence() && !isRoulette) {
+          await holdOnSimple();
         }
       });
 
@@ -919,11 +935,11 @@
 
       b.addEventListener("pointercancel", () => { cancelActive(); releasePointerSuppression(); });
       window.addEventListener("blur", () => { cancelActive(); releasePointerSuppression(); });
-      b.addEventListener("click", (e) => {
+      b.addEventListener("click", async (e) => {
         if (suppressClick) return;
         e.preventDefault();
-        if (!startAdvancedSequence() && !isRoulette) {
-          holdOnSimple();
+        if (!await startAdvancedSequence() && !isRoulette) {
+          await holdOnSimple();
           setTimeout(() => { holdOffSimple(); }, 120);
         }
       });
@@ -937,6 +953,7 @@
     const mode = readMode();
     const level = (mode === "SHOCK" || mode === "VIBRATION") ? readLevel() : 0;
     const channel = readChannel();
+    const dualOn = (typeof window.dualOn === "boolean") ? window.dualOn : false;
     if ((mode === "SHOCK" || mode === "VIBRATION") && level <= 0) {
       notifyUser("Nivel deve ser maior que 0 para choque/vibracao.", "leave");
       return;
@@ -959,7 +976,7 @@
 
     const id = "cp_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2,8);
 
-    const entry = { id, mode, level, channel };
+    const entry = { id, mode, level, channel, dualOn };
     if (advanced) entry.advanced = advanced;
     items.push(entry);
     save();

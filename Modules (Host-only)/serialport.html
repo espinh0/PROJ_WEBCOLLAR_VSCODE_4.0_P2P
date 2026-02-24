@@ -724,7 +724,12 @@
     </div>
     <div id="smQuickCommands" class="d-flex flex-wrap align-items-center gap-2 mt-2">
       <span class="small text-secondary me-1">Atalhos:</span>
+      <button type="button" class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#smHelpModal" title="Ajuda dos comandos">
+        <i class="fa-solid fa-circle-info"></i>
+      </button>
       <button type="button" class="btn btn-sm btn-danger sm-quick-btn" data-cmd="HOLDOFF" data-send-now="1">HOLDOFF</button>
+      <button type="button" class="btn btn-sm btn-danger sm-quick-btn" data-cmd="DUALOFF" data-send-now="1">DUALOFF</button>
+      <button type="button" class="btn btn-sm btn-outline-light sm-quick-btn" data-cmd="DUALON">DUALON</button>
       <button type="button" class="btn btn-sm btn-outline-light sm-quick-btn" data-cmd="PING" data-send-now="1">PING</button>
       <button type="button" class="btn btn-sm btn-outline-light sm-quick-btn" data-cmd="SHOCK,30,1">SHOCK,30,1</button>
       <button type="button" class="btn btn-sm btn-outline-light sm-quick-btn" data-cmd="VIBRATION,30,1">VIBRATION,30,1</button>
@@ -740,6 +745,106 @@
       <button type="button" class="btn btn-sm btn-outline-light sm-quick-btn" data-cmd="SEQUENCE">SEQUENCE</button>
       <button type="button" class="btn btn-sm btn-outline-light sm-quick-btn" data-cmd="ENDSEQ">ENDSEQ</button>
       <button type="button" class="btn btn-sm btn-outline-light sm-quick-btn" data-cmd="ENDSEQUENCE">ENDSEQUENCE</button>
+    </div>
+    <div class="modal fade" id="smHelpModal" tabindex="-1" aria-labelledby="smHelpModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="smHelpModalLabel"><i class="fa-solid fa-circle-info me-2"></i>Ajuda dos comandos</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <input id="smHelpSearch" type="search" class="form-control form-control-sm" placeholder="Buscar comando ou palavra-chave..." aria-label="Buscar comandos" />
+            </div>
+            <div class="mb-3" data-sm-help-group>
+              <div class="text-uppercase text-secondary fw-semibold small mb-2">Basicos</div>
+              <div class="list-group">
+                <div class="list-group-item" data-sm-help-item>
+                  <div class="fw-semibold">HOLDOFF</div>
+                  <div class="text-secondary small">Parada imediata do motor; interrompe HOLDON, CADENCE, PATTERN e SEQUENCE.</div>
+                </div>
+                <div class="list-group-item" data-sm-help-item>
+                  <div class="fw-semibold">PING</div>
+                  <div class="text-secondary small">Teste rapido de link; resposta esperada: PONG.</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="mb-3" data-sm-help-group>
+              <div class="text-uppercase text-secondary fw-semibold small mb-2">Dual</div>
+              <div class="list-group">
+                <div class="list-group-item" data-sm-help-item>
+                  <div class="fw-semibold">DUALON</div>
+                  <div class="text-secondary small">Ativa espelhamento nos canais 1 e 2; comandos simples passam a enviar nos dois.</div>
+                </div>
+                <div class="list-group-item" data-sm-help-item>
+                  <div class="fw-semibold">DUALOFF</div>
+                  <div class="text-secondary small">Desativa espelhamento; volta a enviar apenas no canal selecionado.</div>
+                </div>
+                <div class="list-group-item" data-sm-help-item>
+                  <div class="fw-semibold">DUAL &lt;COMANDO&gt;</div>
+                  <div class="text-secondary small">Forca modo dual somente para o comando enviado, sem alterar o estado global. Ex.: DUAL SHOCK,50,1 ou DUAL HOLDON VIBRATION,40,1.</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="mb-3" data-sm-help-group>
+              <div class="text-uppercase text-secondary fw-semibold small mb-2">Comandos Simples</div>
+              <div class="list-group">
+                <div class="list-group-item" data-sm-help-item>
+                  <div class="fw-semibold">MODE,LVL,CH[,DUR]</div>
+                  <div class="text-secondary small">Disparo simples. Ex.: SHOCK,30,1 ou SHOCK,30,1,300 em ms.</div>
+                </div>
+                <div class="list-group-item" data-sm-help-item>
+                  <div class="fw-semibold">HOLDON MODE,LVL,CH</div>
+                  <div class="text-secondary small">Mantem ligado em loop ate HOLDOFF. Ex.: HOLDON SHOCK,30,1.</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="mb-3" data-sm-help-group>
+              <div class="text-uppercase text-secondary fw-semibold small mb-2">Comandos Complexos</div>
+              <div class="list-group">
+                <div class="list-group-item" data-sm-help-item>
+                  <div class="fw-semibold">CADENCE MODE,LVL,CH,REPS,GAP</div>
+                  <div class="text-secondary small">Executa REPS pulsos de mesma intensidade; GAP define o intervalo (ms) entre cada pulso. Use para ritmos repetitivos previsiveis sem manter HOLDON ligado. Ex.: CADENCE SHOCK,30,1,5,200 (5 pulsos de 30 no canal 1, 200ms entre eles).</div>
+                </div>
+                <div class="list-group-item" data-sm-help-item>
+                  <div class="fw-semibold">HOLDON CADENCE MODE,LVL,CH,REPS,GAP</div>
+                  <div class="text-secondary small">Igual ao CADENCE, mas em loop continuo ate HOLDOFF. Indicado para manter um trem de pulsos constante por tempo indeterminado.</div>
+                </div>
+                <div class="list-group-item" data-sm-help-item>
+                  <div class="fw-semibold">PATTERN MODE,LVL,CH [on,off,on,...]</div>
+                  <div class="text-secondary small">Define um padrao customizado de tempos em ms. A lista alterna automaticamente entre ligado e desligado: o primeiro valor liga, o segundo desliga, e assim por diante. Ideal para desenhar cadencias irregulares. Ex.: PATTERN SHOCK,30,1 [120,80,250,140].</div>
+                </div>
+                <div class="list-group-item" data-sm-help-item>
+                  <div class="fw-semibold">HOLDON PATTERN MODE,LVL,CH [..]</div>
+                  <div class="text-secondary small">Repete o PATTERN em loop ate HOLDOFF. Use quando quiser manter o padrao indefinidamente.</div>
+                </div>
+              </div>
+            </div>
+
+            <div data-sm-help-group>
+              <div class="text-uppercase text-secondary fw-semibold small mb-2">Sequencias</div>
+              <div class="list-group">
+                <div class="list-group-item" data-sm-help-item>
+                  <div class="fw-semibold">SEQUENCE</div>
+                  <div class="text-secondary small">Inicia captura multi-linha. Cada linha enviada apos SEQUENCE vira um passo (comando simples, CADENCE ou PATTERN). Use para montar rotinas longas encadeadas.</div>
+                </div>
+                <div class="list-group-item" data-sm-help-item>
+                  <div class="fw-semibold">ENDSEQ / ENDSEQUENCE</div>
+                  <div class="text-secondary small">Finaliza a captura e executa a sequencia uma vez, na ordem enviada. Se houver erro de sintaxe em algum passo, a sequencia falha.</div>
+                </div>
+                <div class="list-group-item" data-sm-help-item>
+                  <div class="fw-semibold">HOLDON SEQUENCE</div>
+                  <div class="text-secondary small">Inicia captura e, ao finalizar, executa em loop continuo ate HOLDOFF. Use para playlists de padroes longos.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
     </div>
   </div>
@@ -770,6 +875,7 @@
   const quickCommands = $("#smQuickCommands");
   const cbTs  = $("#smTimestamps");
   const cbWrap= $("#smWrap");
+  const helpSearch = document.getElementById("smHelpSearch");
 
   let paused = false;
   let autoscroll = true;
@@ -872,6 +978,25 @@
   
   if(view && cbWrap) view.style.whiteSpace = cbWrap.checked ? "pre-wrap" : "pre";
   appendLine("Monitor iniciado. Aguardando conexão...", "in");
+
+  if (helpSearch) {
+    const helpItems = Array.from(document.querySelectorAll("[data-sm-help-item]"));
+    const helpGroups = Array.from(document.querySelectorAll("[data-sm-help-group]"));
+    const filterHelp = () => {
+      const term = (helpSearch.value || "").trim().toLowerCase();
+      helpItems.forEach((item) => {
+        const text = (item.textContent || "").toLowerCase();
+        item.style.display = !term || text.includes(term) ? "" : "none";
+      });
+      helpGroups.forEach((group) => {
+        const items = Array.from(group.querySelectorAll("[data-sm-help-item]"));
+        const anyVisible = items.some((item) => item.style.display !== "none");
+        group.style.display = anyVisible ? "" : "none";
+      });
+    };
+    helpSearch.addEventListener("input", filterHelp);
+    filterHelp();
+  }
 })();
 </script>
 

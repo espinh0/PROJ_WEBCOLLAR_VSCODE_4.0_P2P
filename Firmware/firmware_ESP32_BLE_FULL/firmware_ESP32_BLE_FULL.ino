@@ -20,9 +20,9 @@
   - Arduino-ESP32 2.x (recomendado).
   - NimBLE-Arduino instalado.
 
-  Versao: 1.1.4 (2026-02-24)
-  - Adiciona modo DUALON/DUALOFF para espelhar canais 1/2.
-  - Desativa DUAL ao desconectar BLE.
+  Versao: 1.1.5 (2026-02-24)
+  - Prefixo DUAL por comando (nao altera DUALON/OFF global).
+  - Mantem DUALON/DUALOFF e desativa DUAL ao desconectar BLE.
 */
 
 #include <Arduino.h>
@@ -157,6 +157,7 @@ static bool capturingSeq = false;
 static bool seqRepeatOnEnd = false;
 static String seqLines[20];
 static uint8_t seqCount = 0;
+static bool seqForceDual = false;
 
 static bool dualModeEnabled = false;
 
@@ -238,7 +239,7 @@ static bool parseSimpleCmd(const String& lineIn, char* outMode, uint8_t &outLvl,
   return true;
 }
 
-static bool compile_CADENCE(const String& line){
+static bool compile_CADENCE(const String& line, bool forcedDual){
   int sp = line.indexOf(' ');
   if (sp < 0) return false;
   String args = line.substring(sp+1); args.trim();
@@ -260,7 +261,7 @@ static bool compile_CADENCE(const String& line){
   uint16_t gap = (uint16_t)((gapInt>(int)MIN_GAP_MS)?gapInt:(int)MIN_GAP_MS);
 
   uint64_t frame = composeFrame(m.c_str(), lvl, ch);
-  bool dual = dualModeEnabled;
+  bool dual = forcedDual ? true : dualModeEnabled;
   uint64_t frame2 = dual ? composeFrame(m.c_str(), lvl, mirrorChannel(ch)) : 0ULL;
   for (uint8_t i=0;i<reps;i++){
     engineAddOn(frame, PULSE_MS_DEFAULT, frame2, dual);
@@ -269,7 +270,7 @@ static bool compile_CADENCE(const String& line){
   return true;
 }
 
-static bool compile_PATTERN(const String& line){
+static bool compile_PATTERN(const String& line, bool forcedDual){
   int sp = line.indexOf(' ');
   if (sp < 0) return false;
   String rest = line.substring(sp+1); rest.trim();
@@ -285,7 +286,7 @@ static bool compile_PATTERN(const String& line){
   if (!parseSimpleCmd(cmd, mode, lvl, ch, ms)) return false;
 
   uint64_t frame = composeFrame(mode, lvl, ch);
-  bool dual = dualModeEnabled;
+  bool dual = forcedDual ? true : dualModeEnabled;
   uint64_t frame2 = dual ? composeFrame(mode, lvl, mirrorChannel(ch)) : 0ULL;
   bool on = true;
   int idx = 0;
@@ -307,7 +308,8 @@ static bool compile_PATTERN(const String& line){
   return true;
 }
 
-static bool compile_SEQUENCE_finalize(){
+static bool compile_SEQUENCE_finalize(bool forcedDual){
+  bool dual = forcedDual ? true : dualModeEnabled;
   for (uint8_t i=0;i<seqCount;i++){
     String ln = seqLines[i];
     ln.replace("\r","");
@@ -316,14 +318,13 @@ static bool compile_SEQUENCE_finalize(){
 
     String up = ln; up.toUpperCase();
     if (up.startsWith("CADENCE ")) {
-      if (!compile_CADENCE(ln)) return false;
+      if (!compile_CADENCE(ln, dual)) return false;
     } else if (up.startsWith("PATTERN ")) {
-      if (!compile_PATTERN(ln)) return false;
+      if (!compile_PATTERN(ln, dual)) return false;
     } else {
       char mode[16]; uint8_t lvl=0, ch=1; uint16_t ms=PULSE_MS_DEFAULT;
       if (!parseSimpleCmd(ln, mode, lvl, ch, ms)) continue;
       uint64_t frame = composeFrame(mode, lvl, ch);
-      bool dual = dualModeEnabled;
       uint64_t frame2 = dual ? composeFrame(mode, lvl, mirrorChannel(ch)) : 0ULL;
       engineAddOn(frame, ms, frame2, dual);
       engineAddOff(MIN_GAP_MS);
@@ -514,7 +515,14 @@ static void processCommandLine_core1(const char* lineC) {
   line.trim();
   if (!line.length()) return;
 
+  bool forcedDual = false;
   String up = line; up.toUpperCase();
+  if (up.startsWith("DUAL ")) {
+    forcedDual = true;
+    line = line.substring(4);
+    line.trim();
+    up = line; up.toUpperCase();
+  }
 
   uiLogLine(line.c_str());
 
@@ -523,7 +531,7 @@ static void processCommandLine_core1(const char* lineC) {
     if (up.startsWith("ENDSEQ") || up.startsWith("ENDSEQUENCE")) {
       capturingSeq = false;
       stepCount = 0;
-      if (compile_SEQUENCE_finalize()) {
+      if (compile_SEQUENCE_finalize(seqForceDual)) {
         engineStart(seqRepeatOnEnd);
         enqueueTx("OK SEQUENCE");
         uiLogLine("OK SEQUENCE");
@@ -534,6 +542,7 @@ static void processCommandLine_core1(const char* lineC) {
       }
       seqCount = 0;
       seqRepeatOnEnd = false;
+      seqForceDual = false;
       return;
     } else {
       if (seqCount < 20) {
@@ -583,13 +592,13 @@ static void processCommandLine_core1(const char* lineC) {
     engineClear();
 
     if (cmdUp.startsWith("CADENCE ")) {
-      if (compile_CADENCE(cmd)) { engineStart(true); enqueueTx("OK HOLDON CADENCE"); }
+      if (compile_CADENCE(cmd, forcedDual)) { engineStart(true); enqueueTx("OK HOLDON CADENCE"); }
       else enqueueTx("ERR HOLDON CADENCE");
       return;
     }
 
     if (cmdUp.startsWith("PATTERN ")) {
-      if (compile_PATTERN(cmd)) { engineStart(true); enqueueTx("OK HOLDON PATTERN"); }
+      if (compile_PATTERN(cmd, forcedDual)) { engineStart(true); enqueueTx("OK HOLDON PATTERN"); }
       else enqueueTx("ERR HOLDON PATTERN");
       return;
     }
@@ -598,6 +607,7 @@ static void processCommandLine_core1(const char* lineC) {
       capturingSeq = true;
       seqCount = 0;
       seqRepeatOnEnd = true;
+      seqForceDual = forcedDual;
       enqueueTx("OK HOLDON SEQUENCE");
       return;
     }
@@ -609,7 +619,7 @@ static void processCommandLine_core1(const char* lineC) {
       uiSetMLC(mode, lvl, ch);
 
       uint64_t frame = composeFrame(mode, lvl, ch);
-      bool dual = dualModeEnabled;
+      bool dual = forcedDual ? true : dualModeEnabled;
       uint64_t frame2 = dual ? composeFrame(mode, lvl, mirrorChannel(ch)) : 0ULL;
       engineAddOn(frame, ms, frame2, dual);
       engineAddOff(MIN_GAP_MS);
@@ -629,6 +639,7 @@ static void processCommandLine_core1(const char* lineC) {
     capturingSeq = true;
     seqCount = 0;
     seqRepeatOnEnd = false;
+    seqForceDual = forcedDual;
     engineClear();
     enqueueTx("OK SEQUENCE");
     return;
@@ -637,7 +648,7 @@ static void processCommandLine_core1(const char* lineC) {
   // CADENCE
   if (up.startsWith("CADENCE ")) {
     engineClear();
-    if (compile_CADENCE(line)) { engineStart(false); enqueueTx("OK CADENCE"); }
+    if (compile_CADENCE(line, forcedDual)) { engineStart(false); enqueueTx("OK CADENCE"); }
     else enqueueTx("ERR CADENCE");
     return;
   }
@@ -645,7 +656,7 @@ static void processCommandLine_core1(const char* lineC) {
   // PATTERN
   if (up.startsWith("PATTERN ")) {
     engineClear();
-    if (compile_PATTERN(line)) { engineStart(false); enqueueTx("OK PATTERN"); }
+    if (compile_PATTERN(line, forcedDual)) { engineStart(false); enqueueTx("OK PATTERN"); }
     else enqueueTx("ERR PATTERN");
     return;
   }
@@ -659,7 +670,7 @@ static void processCommandLine_core1(const char* lineC) {
     uint64_t frame = composeFrame(mode, lvl, ch);
     // RF imediato (burst curto)
     sendCommandBurst(frame, SINGLE_SHOT_FRAMES_DEFAULT);
-    if (dualModeEnabled) {
+    if (forcedDual || dualModeEnabled) {
       uint64_t frame2 = composeFrame(mode, lvl, mirrorChannel(ch));
       sendCommandBurst(frame2, SINGLE_SHOT_FRAMES_DEFAULT);
     }

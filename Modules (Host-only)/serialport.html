@@ -880,6 +880,8 @@
   let paused = false;
   let autoscroll = true;
   let lastKey = null, lastLineEl = null, lastCount = 1;
+  const SERIAL_TX_WRAP_KEY = "__SERIAL_TX_WRAPPED__";
+  const SERIAL_TX_SUPPRESS_KEY = "__SERIAL_TX_SUPPRESS__";
 
   const nowTs = () => new Date().toLocaleTimeString();
 
@@ -931,12 +933,15 @@
     if (!raw.length) return;
     try {
       if (window.SerialBridge?.send) {
+        window[SERIAL_TX_SUPPRESS_KEY] = true;
         await window.SerialBridge.send(raw);
+        window[SERIAL_TX_SUPPRESS_KEY] = false;
         appendLine(raw, "out");
       } else {
         throw new Error("SerialBridge não está disponível.");
       }
     } catch (e) {
+      window[SERIAL_TX_SUPPRESS_KEY] = false;
       appendLine(`ERRO: ${e?.message || e}`, "out");
       log(`Falha no envio: ${e?.message}`, "error");
     }
@@ -978,6 +983,20 @@
   
   if(view && cbWrap) view.style.whiteSpace = cbWrap.checked ? "pre-wrap" : "pre";
   appendLine("Monitor iniciado. Aguardando conexão...", "in");
+
+  if (!window[SERIAL_TX_WRAP_KEY] && window.SerialBridge?.send) {
+    const originalSend = window.SerialBridge.send.bind(window.SerialBridge);
+    window.SerialBridge.send = async function(line) {
+      const payload = String(line ?? "").trim();
+      const suppress = !!window[SERIAL_TX_SUPPRESS_KEY];
+      const result = await originalSend(line);
+      if (!suppress && payload) {
+        appendLine(payload, "out");
+      }
+      return result;
+    };
+    window[SERIAL_TX_WRAP_KEY] = true;
+  }
 
   if (helpSearch) {
     const helpItems = Array.from(document.querySelectorAll("[data-sm-help-item]"));

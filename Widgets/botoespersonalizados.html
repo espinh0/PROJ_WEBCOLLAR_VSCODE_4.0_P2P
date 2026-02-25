@@ -792,7 +792,7 @@
       wrap.style.setProperty("--cp-color", modeStyle.color);
       const solidTint = toSolidTint(modeStyle.tint, modeStyle.color);
       wrap.style.setProperty("--cp-bg", `linear-gradient(120deg, ${solidTint}, #05060a)`);
-      const channelLabel = hasDual ? "½" : it.channel;
+      const channelLabel = hasDual ? '<i class="fa-solid fa-skull" aria-hidden="true"></i>' : it.channel;
       b.innerHTML = `<span class="cp-btn-content">
                         <span class="cp-level ${hideLevel ? 'cp-level-no-value' : ''}">${hideLevel ? '' : `<span class="cp-level-value">${it.level}</span>`}<span class="cp-level-icon"><i class="fa-solid ${modeStyle.icon}"></i></span></span>
                         <span class="cp-details">

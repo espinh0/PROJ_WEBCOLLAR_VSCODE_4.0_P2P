@@ -1,13 +1,16 @@
-<!-- AUDIO→COLLAR (blog widget) — v1.9 (HOLD via holdSync Flowgate)
-     - Controle por ESTADO (hold.state) em canal dedicado: makeAction('holdSync')
-     - Heartbeat enquanto ON + watchdog timeout no receiver
-     - Loopback local (funciona com 1 peer)
-     - Bridge: opcionalmente emite chat:message com HOLDON/HOLDOFF (silent) para reaproveitar executor existente
+<!-- AUDIO→COLLAR (blog widget) — v2.1 (comandos locais + sync de pico)
+  - Comandos executados apenas no host (SerialBridge)
+  - Flowgate usado somente para sync de picos (audio.level)
+  - Modo espacial: distribui nivel entre canais 1/2 a partir do pan
 -->
 <div class="card p-3 mt-3" id="audio-collar-widget">
   <div class="d-flex align-items-center gap-2 mb-2 audio-card-header">
     <h5 class="m-0"><i class="fa-solid fa-wave-square me-2"></i>Audio</h5>
     <span id="audio-collar-status" class="small ms-auto text-secondary">pronto</span>
+    <span id="audio-collar-spatial-status" class="small text-secondary">Stereo</span>
+    <button id="audio-collar-spatial" class="btn btn-sm btn-outline-secondary" type="button" aria-pressed="false" data-bs-toggle="tooltip" data-bs-title="Espacial (Stereo)">
+      <i class="fa-solid fa-headphones"></i>
+    </button>
     <button id="audio-collar-log-toggle" class="btn btn-sm btn-outline-secondary"
             type="button" title="Mostrar/ocultar log" aria-expanded="false">
       <i class="fa-solid fa-terminal"></i>
@@ -39,6 +42,17 @@
     <div class="audio-spectrum-shell">
       <canvas id="audio-collar-spectrum" height="120" aria-label="Audio spectrum"></canvas>
     </div>
+    <div class="mt-2" aria-label="Spatialidade">
+      <div class="d-flex justify-content-between small text-secondary">
+        <span>Esquerda</span>
+        <span>Centro</span>
+        <span>Direita</span>
+      </div>
+      <div id="audio-collar-spatial-bar" class="audio-spatial-bar">
+        <div id="audio-collar-spatial-left" class="audio-spatial-fill is-left" aria-hidden="true"></div>
+        <div id="audio-collar-spatial-right" class="audio-spatial-fill is-right" aria-hidden="true"></div>
+      </div>
+    </div>
   </div>
   <div class="row g-2 mt-2">
     <div class="col-12 col-md-4 d-flex align-items-center gap-2">
@@ -62,6 +76,7 @@
       <small class="text-secondary small">dB</small>
     </div>
   </div>
+
 
   <div class="row g-2 mt-2">
     <div class="col-12 d-flex align-items-center gap-2 flex-wrap">
@@ -378,6 +393,35 @@
       padding: 8px 10px;
       box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03), 0 16px 30px rgba(0,0,0,0.45);
     }
+    #audio-collar-widget .audio-spatial-bar {
+      position: relative;
+      height: 20px;
+      border-radius: 2px;
+      background: rgba(148,163,184,0.16);
+      border: 1px solid var(--audio-border);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
+      margin-top: 6px;
+      overflow: hidden;
+    }
+    #audio-collar-widget .audio-spatial-fill {
+      position: absolute;
+      top: 50%;
+      height: 100%;
+      transform: translateY(-50%);
+      background: rgba(148,163,184,0.6);
+      box-shadow: 0 0 10px rgba(148,163,184,0.35);
+      transition: width 80ms linear;
+      width: 0%;
+      opacity: 0.9;
+    }
+    #audio-collar-widget .audio-spatial-fill.is-left {
+      right: 50%;
+      border-radius: 2px 0 0 2px;
+    }
+    #audio-collar-widget .audio-spatial-fill.is-right {
+      left: 50%;
+      border-radius: 0 2px 2px 0;
+    }
     #audio-collar-spectrum {
       display: block;
       width: 100%;
@@ -397,14 +441,14 @@
   'use strict';
   const widgetRoot = document.getElementById('audio-collar-widget');
   if (!widgetRoot) return;
-  const prevInstance = window.__AUDIO_COLLAR_WIDGET_V19__;
+  const prevInstance = window.__AUDIO_COLLAR_WIDGET_V20__;
   const prevRoot = prevInstance && prevInstance.root;
   const prevReady = !!(prevRoot && prevRoot.dataset && prevRoot.dataset.audioCollarReady === '1');
   if (prevRoot && document.body.contains(prevRoot) && prevReady) return;
   if (prevInstance && typeof prevInstance.teardown === 'function') {
     try { prevInstance.teardown('reinit'); } catch(_){ }
   }
-  window.__AUDIO_COLLAR_WIDGET_V19__ = { root: widgetRoot, teardown: null };
+  window.__AUDIO_COLLAR_WIDGET_V20__ = { root: widgetRoot, teardown: null };
 
   // ---------- CONFIG ----------
   const POLL_MS   = 35;     // leitura do audio (mais rapida)
@@ -433,6 +477,12 @@
   const SPECTRUM_MAX_HZ = 20000;
   const SPECTRUM_FLOOR = 0.04;
   const SPECTRUM_GAMMA = 0.8;
+
+  // Spatial/pan (deterministico)
+  const SPATIAL_PAN_SMOOTH = 0.2;  // EMA fixo
+  const SPATIAL_PAN_DEADZONE = 0.08;
+  const SPATIAL_PAN_QUANT = 0.02;
+  const SPATIAL_TIME_SAMPLES = 256;
 
   // Estabilidade do limiar
   const THRESH_HYST = 2;        // histerese (%)
@@ -491,6 +541,9 @@
     if (analyserDet) {
       try { node.connect(analyserDet); } catch(_){ }
     }
+    if (spatialSplitter) {
+      try { node.connect(spatialSplitter); } catch(_){ }
+    }
   }
 
   function setStatus(txt, ok){
@@ -524,18 +577,28 @@
     noiseFloorPct: LS.get('noiseFloorPct', 20),
     sensDb:        LS.get('sensDb', 0),
     freqMinHz:     LS.get('freqMinHz', 20),
-    freqMaxHz:     LS.get('freqMaxHz', 70)
+    freqMaxHz:     LS.get('freqMaxHz', 70),
+    spatialEnabled: LS.get('spatialEnabled', false)
   };
 
   // Áudio
   let audioCtx = null;
   let analyserVis = null;
   let analyserDet = null;
+  let analyserDetL = null;
+  let analyserDetR = null;
+  let spatialSplitter = null;
   let elementSources = [];
   let streamSource   = null;
   let micStream = null;
   let tabStream = null;
   let envPeakAbs = 0;
+  let envPeakAbsL = 0;
+  let envPeakAbsR = 0;
+  let spatialPanState = 0;
+  let lastSpatialPan = 0;
+  let lastSpatialSeenAt = 0;
+  let spatialAvailable = true;
   let spectrumCanvas = null;
   let spectrumCtx = null;
   let spectrumW = 0;
@@ -571,20 +634,34 @@
 
   // Controle por estado
   let seq = 1;
-  let desired = { on:false, mode: control.mode, level: 0, ch: control.channel, seq: 0 };
+  let desired = { on:false, mode: control.mode, level: 0, ch: control.channel, level1: 0, level2: 0, pan: 0, split: false, seq: 0 };
   let lastCommittedSeq = 0;
   let controlBusBound = false;
   let lastRxSig = null;
   let warnedNoHoldTx = false;
+  let warnedNoSerial = false;
   let rouletteHoldActive = false;
   let warnedNoRoulette = false;
+  let lastSpatialCmdAt = 0;
+  let lastSpatialPeak = 0;
   let destroyed = false;
   let tickTimer = null;
   let commitTimer = null;
   let controlTimer = null;
+  let spatialTooltip = null;
 
   function isMounted(){
     return !!(widgetRoot && document.body.contains(widgetRoot));
+  }
+
+  function isHost(){
+    try {
+      const peer = (window.Flowgate && window.Flowgate.localPeer) ? window.Flowgate.localPeer : window.__TRYSTERO_PEER__;
+      const tags = (peer && typeof peer.getLocalTags === 'function') ? peer.getLocalTags() : [];
+      const hasTag = Array.isArray(tags) && tags.map(t => String(t || '').toLowerCase()).includes('host');
+      if (hasTag) return true;
+      return document.documentElement.classList.contains('host-on');
+    } catch { return false; }
   }
 
   function teardown(reason){
@@ -597,7 +674,7 @@
     if (cfgBroadcastTimer) { clearTimeout(cfgBroadcastTimer); cfgBroadcastTimer = null; }
     if (freqSliderInitTimer) { clearInterval(freqSliderInitTimer); freqSliderInitTimer = null; }
     try { stopAllSources(); } catch(_){ }
-    window.__AUDIO_COLLAR_WIDGET_V19__ = null;
+    window.__AUDIO_COLLAR_WIDGET_V20__ = null;
     if (reason) appendLog('Widget finalizado: ' + reason);
   }
 
@@ -610,7 +687,8 @@
     control.channel = nextChan;
     if (changed) {
       const nextSeq = desired.on ? ++seq : desired.seq;
-      desired = Object.assign({}, desired, { mode: control.mode, ch: control.channel, seq: nextSeq });
+      const nextCh = (cfg.spatialEnabled && spatialAvailable) ? desired.ch : control.channel;
+      desired = Object.assign({}, desired, { mode: control.mode, ch: nextCh, seq: nextSeq });
       appendLog(`Controle Manual: modo ${control.mode}, canal ${control.channel}. Desired state updated.`);
     } else {
       appendLog(`Controle Manual: modo ${control.mode}, canal ${control.channel}. No change.`);
@@ -755,11 +833,17 @@
         rxLastSeq = sseq;
         rxLastSeenAt = Date.now();
 
+        const level1 = clamp(Number(s.ch1Level || 0), 0, 100);
+        const level2 = clamp(Number(s.ch2Level || 0), 0, 100);
         const state = {
           on: !!s.on,
           mode: String(s.mode || control.mode),
           level: clamp(Number(s.level || 0), 0, 100),
           ch: clamp(Number(s.ch || 1), 1, 2),
+          level1,
+          level2,
+          pan: clamp(Number(s.pan || 0), -1, 1),
+          split: !!s.split,
           seq: sseq
         };
 
@@ -834,10 +918,16 @@
       LS.set('freqMaxHz', cfg.freqMaxHz);
       changed = true;
     }
+    if (typeof patch.spatialEnabled === 'boolean') {
+      cfg.spatialEnabled = !!patch.spatialEnabled;
+      LS.set('spatialEnabled', cfg.spatialEnabled);
+      changed = true;
+    }
     if (changed) {
       updateThresholdUI();
       updateSensUI();
       updateFreqUI();
+      updateSpatialUI();
       
       const g = $('#audio-collar-gamma');
       const gl = $('#audio-collar-gammalbl');
@@ -860,6 +950,7 @@
         sensDb: cfg.sensDb,
         freqMinHz: cfg.freqMinHz,
         freqMaxHz: cfg.freqMaxHz,
+        spatialEnabled: !!cfg.spatialEnabled,
         ts: Date.now(),
         reason: reason || 'update'
       });
@@ -930,8 +1021,6 @@
   }
 
   function bindRoom(room){
-    bindHoldSyncToRoom(room);
-    bindCfgSyncToRoom(room);
     bindLevelSyncToRoom(room);
   }
 
@@ -992,6 +1081,41 @@
   }
 
   // ---------- AUDIO ----------
+  function ensureSpatialNodes(){
+    if (!audioCtx) return;
+    if (!spatialSplitter){
+      spatialSplitter = audioCtx.createChannelSplitter(2);
+    }
+    try { spatialSplitter.channelCount = 2; } catch(_){ }
+    try { spatialSplitter.channelCountMode = 'explicit'; } catch(_){ }
+    try { spatialSplitter.channelInterpretation = 'speakers'; } catch(_){ }
+    if (!analyserDetL){
+      analyserDetL = audioCtx.createAnalyser();
+      analyserDetL.fftSize = 1024;
+      analyserDetL.smoothingTimeConstant = 0.0;
+    }
+    if (!analyserDetR){
+      analyserDetR = audioCtx.createAnalyser();
+      analyserDetR.fftSize = 1024;
+      analyserDetR.smoothingTimeConstant = 0.0;
+    }
+    try { spatialSplitter.disconnect(); } catch(_){ }
+    try { spatialSplitter.connect(analyserDetL, 0); } catch(_){ }
+    try { spatialSplitter.connect(analyserDetR, 1); } catch(_){ }
+  }
+
+  function ensureSpatialConnections(){
+    if (!spatialSplitter) return;
+    const sources = [];
+    if (streamSource) sources.push(streamSource);
+    if (elementSources && elementSources.length) sources.push(...elementSources);
+    sources.forEach((src) => {
+      if (!src || src.__audioCollarSpatialAttached) return;
+      try { src.connect(spatialSplitter); } catch(_){ }
+      src.__audioCollarSpatialAttached = true;
+    });
+  }
+
   async function ensureAudio(rescanElements){
     if (!audioCtx){
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1006,6 +1130,8 @@
       analyserDet.fftSize = 1024;
       analyserDet.smoothingTimeConstant = 0.0;
     }
+    ensureSpatialNodes();
+    ensureSpatialConnections();
 
     if (rescanElements || !elementSources.length){
       const mediaEls = Array.from(document.querySelectorAll('audio,video'));
@@ -1013,12 +1139,17 @@
         try {
           if (el.__audioCollarAttached) return;
           const src = audioCtx.createMediaElementSource(el);
+          try { src.channelCount = 2; } catch(_){ }
+          try { src.channelCountMode = 'explicit'; } catch(_){ }
+          try { src.channelInterpretation = 'speakers'; } catch(_){ }
+          src.__audioCollarSpatialAttached = false;
           connectToAnalysers(src);
           src.connect(audioCtx.destination);
           elementSources.push(src);
           el.__audioCollarAttached = true;
         } catch(e){}
       });
+      ensureSpatialConnections();
     }
 
     if (audioCtx.state === 'suspended'){
@@ -1040,7 +1171,7 @@
     }
     const s = await navigator.mediaDevices.getDisplayMedia({
       video: true,
-      audio: { echoCancellation:false, noiseSuppression:false }
+      audio: { echoCancellation:false, noiseSuppression:false, channelCount: 2 }
     });
     tabStream = s;
     attachStream(s);
@@ -1090,7 +1221,62 @@
     }
     try { streamSource && streamSource.disconnect(); } catch(_){}
     streamSource = audioCtx.createMediaStreamSource(stream);
+    streamSource.__audioCollarSpatialAttached = false;
+    try { streamSource.channelCount = 2; } catch(_){ }
+    try { streamSource.channelCountMode = 'explicit'; } catch(_){ }
+    try { streamSource.channelInterpretation = 'speakers'; } catch(_){ }
     connectToAnalysers(streamSource);
+    ensureSpatialConnections();
+    updateSpatialAvailability(detectStereoFromStream(stream));
+  }
+
+  function detectStereoFromStream(stream){
+    try {
+      const track = stream && stream.getAudioTracks ? stream.getAudioTracks()[0] : null;
+      if (!track) return true;
+      const settings = (typeof track.getSettings === 'function') ? track.getSettings() : {};
+      const caps = (typeof track.getCapabilities === 'function') ? track.getCapabilities() : {};
+      const capCh = caps.channelCount;
+      if (Array.isArray(capCh)) {
+        const maxCap = Math.max.apply(null, capCh.map(Number).filter(Number.isFinite));
+        if (Number.isFinite(maxCap) && maxCap >= 2) return true;
+      } else if (Number.isFinite(Number(capCh)) && Number(capCh) >= 2) {
+        return true;
+      }
+      const ch = Number(settings.channelCount || 0);
+      if (ch >= 2) return true;
+      if (ch === 1) return false;
+    } catch(_) {}
+    return true;
+  }
+
+  function updateSpatialAvailability(isStereo){
+    spatialAvailable = !!isStereo;
+    const spatialToggle = $('#audio-collar-spatial');
+    const spatialStatus = $('#audio-collar-spatial-status');
+    if (!spatialToggle) return;
+    spatialToggle.disabled = !spatialAvailable;
+    spatialToggle.setAttribute('aria-disabled', spatialAvailable ? 'false' : 'true');
+    if (spatialStatus) spatialStatus.textContent = spatialAvailable ? 'Stereo' : 'Mono';
+    const tip = `Espacial (${spatialAvailable ? 'Stereo' : 'Mono'})`;
+    spatialToggle.setAttribute('data-bs-title', tip);
+    spatialToggle.setAttribute('aria-label', tip);
+    if (spatialTooltip && typeof spatialTooltip.setContent === 'function') {
+      try { spatialTooltip.setContent({ '.tooltip-inner': tip }); } catch(_){ }
+    }
+    if (!spatialAvailable) {
+      cfg.spatialEnabled = false;
+      LS.set('spatialEnabled', cfg.spatialEnabled);
+      lastSpatialPan = 0;
+      lastSpatialSeenAt = 0;
+      lastSpatialPeak = 0;
+      lastSpatialCmdAt = 0;
+      spatialToggle.classList.remove('active');
+      spatialToggle.classList.remove('btn-info');
+      spatialToggle.classList.remove('btn-outline-info');
+      spatialToggle.classList.add('btn-outline-secondary');
+      spatialToggle.setAttribute('aria-pressed', 'false');
+    }
   }
 
   function stopAllSources(){
@@ -1101,6 +1287,14 @@
       elementSources.forEach(src => { try { src.disconnect(); } catch(_){} });
       elementSources = [];
       envPeakAbs = 0;
+      envPeakAbsL = 0;
+      envPeakAbsR = 0;
+      spatialPanState = 0;
+      lastSpatialPan = 0;
+      lastSpatialSeenAt = 0;
+      lastSpatialPeak = 0;
+      lastSpatialCmdAt = 0;
+      spatialAvailable = true;
       remoteLevel = null;
       const fill    = $('#audio-collar-fill');
       const over    = $('#audio-collar-overdrive');
@@ -1222,12 +1416,12 @@
     spectrumCtx.clearRect(0, 0, spectrumW, spectrumH);
   }
 
-  function readLevelsInstant(){
-    if (!analyserDet) return {pct:0, peakPct:0};
+  function readLevelsFromAnalyser(analyser, envKey){
+    if (!analyser) return { pct: 0, peakPct: 0, rawPeakPct: 0, procAvgPct: 0 };
 
-    const binCount = analyserDet.frequencyBinCount;
+    const binCount = analyser.frequencyBinCount;
     const data = new Uint8Array(binCount);
-    analyserDet.getByteFrequencyData(data);
+    analyser.getByteFrequencyData(data);
 
     const nyquist = audioCtx && audioCtx.sampleRate ? (audioCtx.sampleRate / 2) : 22050;
     const range = normalizeFreqRange(cfg.freqMinHz, cfg.freqMaxHz, audioCtx ? audioCtx.sampleRate : null);
@@ -1245,7 +1439,13 @@
       if (v > peak) peak = v;
     }
 
-    envPeakAbs = Math.max(peak, envPeakAbs * PEAK_ENV_DECAY, PEAK_MIN_FLOOR);
+    let env = envPeakAbs;
+    if (envKey === 'left') env = envPeakAbsL;
+    else if (envKey === 'right') env = envPeakAbsR;
+    env = Math.max(peak, env * PEAK_ENV_DECAY, PEAK_MIN_FLOOR);
+    if (envKey === 'left') envPeakAbsL = env;
+    else if (envKey === 'right') envPeakAbsR = env;
+    else envPeakAbs = env;
 
     const sensDb = clamp(cfg.sensDb || 0, SENS_DB_MIN, SENS_DB_MAX);
     const gain = Math.pow(10, sensDb / 20);
@@ -1253,10 +1453,11 @@
     let avg = Math.min(1, (sum / count) * gain);
     const pct = clamp(Math.round(avg * 100 * 1.4), 0, 100);
 
-    let env = Math.min(1, envPeakAbs * gain);
+    let envScaled = Math.min(1, env * gain);
+    let rawScaled = Math.min(1, peak * gain);
 
     const nf = clamp(cfg.noiseFloorPct/100, 0, 0.99);
-    let p = env;
+    let p = envScaled;
     if (p <= nf) p = 0;
     else {
       p = (p - nf) / (1 - nf);
@@ -1264,7 +1465,54 @@
     }
     const peakPct = clamp(Math.round(p*100), 0, 100);
 
-    return { pct, peakPct };
+    let pa = avg;
+    if (pa <= nf) pa = 0;
+    else {
+      pa = (pa - nf) / (1 - nf);
+      pa = Math.pow(pa, Math.max(1.0, cfg.gamma));
+    }
+    const procAvgPct = clamp(Math.round(pa*100), 0, 100);
+
+    let pr = rawScaled;
+    if (pr <= nf) pr = 0;
+    else {
+      pr = (pr - nf) / (1 - nf);
+      pr = Math.pow(pr, Math.max(1.0, cfg.gamma));
+    }
+    const rawPeakPct = clamp(Math.round(pr*100), 0, 100);
+
+    return { pct, peakPct, rawPeakPct, procAvgPct };
+  }
+
+  function readLevelsInstant(){
+    return readLevelsFromAnalyser(analyserDet, 'mono');
+  }
+
+  function quantizeLevel(val){
+    return clamp(Math.floor(val / STEP_PCT) * STEP_PCT, 0, 100);
+  }
+
+  function computeSpatialPan(peakL, peakR){
+    const l = clamp(Number(peakL || 0), 0, 100);
+    const r = clamp(Number(peakR || 0), 0, 100);
+    const sum = l + r + 0.0001;
+    let pan = (r - l) / sum;
+    if (Math.abs(pan) < SPATIAL_PAN_DEADZONE) pan = 0;
+    spatialPanState = (spatialPanState * (1 - SPATIAL_PAN_SMOOTH)) + (pan * SPATIAL_PAN_SMOOTH);
+    const q = SPATIAL_PAN_QUANT > 0 ? (Math.round(spatialPanState / SPATIAL_PAN_QUANT) * SPATIAL_PAN_QUANT) : spatialPanState;
+    return { raw: clamp(pan, -1, 1), smooth: clamp(q, -1, 1) };
+  }
+
+
+  function computeSplitLevels(baseLevel, pan){
+    const p = clamp(Number(pan || 0), -1, 1);
+    const w1 = (1 - p) / 2;
+    const w2 = 1 - w1;
+    let lvl1 = Math.round(baseLevel * w1);
+    let lvl2 = Math.round(baseLevel - lvl1);
+    lvl1 = clamp(lvl1, 0, 100);
+    lvl2 = clamp(lvl2, 0, 100);
+    return { lvl1, lvl2 };
   }
 
   function updateSpectrum(){
@@ -1370,18 +1618,20 @@
   }
 
   // ---------- Desired-state update (dwell + hysterese) ----------
-  function updateDesiredFromPeak(peakPct){
+  function updateDesiredFromPeak(peakPct, spatial){
     const now = Date.now();
     const thrOn  = clamp(cfg.thresholdPct, 0, 100);
     const isRoulette = control.mode === 'ROULETTE';
+    const spatialOn = !!(cfg.spatialEnabled && spatialAvailable && !isRoulette);
+    const spatialInfo = spatialOn ? (spatial || { pan: lastSpatialPan, left: 0, right: 0 }) : null;
     if (isRoulette) {
       const shouldHold = peakPct >= thrOn;
       if (shouldHold && !desired.on) {
-        desired = { on:true, mode: control.mode, level: 0, ch: control.channel, seq: ++seq };
+        desired = { on:true, mode: control.mode, level: 0, ch: control.channel, level1: 0, level2: 0, pan: 0, split: false, seq: ++seq };
         aboveSince = 0;
         belowSince = 0;
       } else if (!shouldHold && desired.on) {
-        desired = { on:false, mode: control.mode, level: 0, ch: control.channel, seq: ++seq };
+        desired = { on:false, mode: control.mode, level: 0, ch: control.channel, level1: 0, level2: 0, pan: 0, split: false, seq: ++seq };
         aboveSince = 0;
         belowSince = 0;
       }
@@ -1393,8 +1643,15 @@
       // Fast-path: pico bem acima do threshold dispara sem esperar dwell
       if (peakPct >= (thrOn + FAST_TRIP_MARGIN)) {
         const minLevel = Math.ceil(thrOn/STEP_PCT)*STEP_PCT;
-        const lvl = Math.max(minLevel, Math.floor(peakPct/STEP_PCT)*STEP_PCT);
-        desired = { on:true, mode: control.mode, level: clamp(lvl, 0, 100), ch: control.channel, seq: ++seq };
+        const lvl = Math.max(minLevel, quantizeLevel(peakPct));
+        let next = { on:true, mode: control.mode, level: clamp(lvl, 0, 100), ch: control.channel, level1: 0, level2: 0, pan: 0, split: false, seq: ++seq };
+        if (spatialOn && spatialInfo) {
+          const split = computeSplitLevels(next.level, spatialInfo.pan);
+          const dominantCh = split.lvl1 >= split.lvl2 ? 1 : 2;
+          const dominantLvl = Math.max(split.lvl1, split.lvl2);
+          next = Object.assign({}, next, { level: dominantLvl, ch: dominantCh, level1: split.lvl1, level2: split.lvl2, pan: spatialInfo.pan, split: true });
+        }
+        desired = next;
         aboveSince = 0;
         belowSince = 0;
         return;
@@ -1405,9 +1662,15 @@
         if ((now - aboveSince) >= DWELL_ON_MS) {
           // vira ON
           const minLevel = Math.ceil(thrOn/STEP_PCT)*STEP_PCT;
-          const lvl = Math.max(minLevel, Math.floor(peakPct/STEP_PCT)*STEP_PCT);
-
-          desired = { on:true, mode: control.mode, level: clamp(lvl, 0, 100), ch: control.channel, seq: ++seq };
+          const lvl = Math.max(minLevel, quantizeLevel(peakPct));
+          let next = { on:true, mode: control.mode, level: clamp(lvl, 0, 100), ch: control.channel, level1: 0, level2: 0, pan: 0, split: false, seq: ++seq };
+          if (spatialOn && spatialInfo) {
+            const split = computeSplitLevels(next.level, spatialInfo.pan);
+            const dominantCh = split.lvl1 >= split.lvl2 ? 1 : 2;
+            const dominantLvl = Math.max(split.lvl1, split.lvl2);
+            next = Object.assign({}, next, { level: dominantLvl, ch: dominantCh, level1: split.lvl1, level2: split.lvl2, pan: spatialInfo.pan, split: true });
+          }
+          desired = next;
           belowSince = 0;
           aboveSince = 0;
         }
@@ -1421,7 +1684,7 @@
     if (peakPct < thrOff) {
       if (!belowSince) belowSince = now;
       if ((now - belowSince) >= DWELL_OFF_MS) {
-        desired = { on:false, mode: control.mode, level: 0, ch: control.channel, seq: ++seq };
+        desired = { on:false, mode: control.mode, level: 0, ch: control.channel, level1: 0, level2: 0, pan: 0, split: false, seq: ++seq };
         aboveSince = 0;
         belowSince = 0;
         return;
@@ -1432,51 +1695,91 @@
 
     // Atualiza nível enquanto ON (seguindo pico)
     const minLevel = Math.ceil(thrOn/STEP_PCT)*STEP_PCT;
-    const newLevel = Math.max(minLevel, Math.floor(peakPct/STEP_PCT)*STEP_PCT);
-
-    if (newLevel !== desired.level || control.mode !== desired.mode || control.channel !== desired.ch) {
-      desired = {
-        on:true,
-        mode: control.mode,
-        level: clamp(newLevel, 0, 100),
-        ch: control.channel,
-        seq: ++seq
-      };
+    const newLevel = Math.max(minLevel, quantizeLevel(peakPct));
+    let next = {
+      on:true,
+      mode: control.mode,
+      level: clamp(newLevel, 0, 100),
+      ch: control.channel,
+      level1: 0,
+      level2: 0,
+      pan: 0,
+      split: false,
+      seq: desired.seq
+    };
+    if (spatialOn && spatialInfo) {
+      const split = computeSplitLevels(next.level, spatialInfo.pan);
+      const dominantCh = split.lvl1 >= split.lvl2 ? 1 : 2;
+      const dominantLvl = Math.max(split.lvl1, split.lvl2);
+      next = Object.assign({}, next, { level: dominantLvl, ch: dominantCh, level1: split.lvl1, level2: split.lvl2, pan: spatialInfo.pan, split: true });
+    }
+    const changed = next.level !== desired.level || next.level1 !== desired.level1 || next.level2 !== desired.level2 || next.split !== desired.split || control.mode !== desired.mode || next.ch !== desired.ch;
+    if (changed) {
+      next.seq = ++seq;
+      desired = next;
     }
   }
 
   // ---------- Commit loop (heartbeat + loopback) ----------
   function sendHoldState(state, meta){
-    const tx = holdTx;
-    const roomOk = !!(roomBound && typeof roomBound.makeAction === 'function' && holdRxBound);
+    applyHoldStateLocal(state, Object.assign({ via: 'local.command' }, meta || {}));
 
-    // 1) loopback local: aplica sempre no próprio cliente (resolve "1 peer")
-    applyHoldStateLocal(state, Object.assign({ via: 'holdSync.loopback' }, meta || {}));
+    if (!isHost()) return;
 
-    // 2) envia para os outros (se possível)
-    if (!tx || !roomOk) {
-      if (!warnedNoHoldTx) {
-        appendLog('WARN: holdSync TX não disponível ou sala não conectada.');
-        warnedNoHoldTx = true;
+    const modeKey = String(state.mode || control.mode || '').toUpperCase();
+    if (!modeKey) return;
+    if (modeKey === 'ROULETTE') return;
+
+    let level1 = clamp(Number(state.level1 || 0), 0, 100);
+    let level2 = clamp(Number(state.level2 || 0), 0, 100);
+    const dominantCh = level1 >= level2 ? 1 : 2;
+    const dominantLvl = Math.max(level1, level2, clamp(Number(state.level || 0), 0, 100));
+    const ch = clamp(Number(state.ch || dominantCh), 1, 2);
+    const shouldDual = !!(cfg.spatialEnabled && spatialAvailable && modeKey !== 'ROULETTE');
+
+    if (shouldDual && (!state.split || (level1 === 0 && level2 === 0))) {
+      const split = computeSplitLevels(dominantLvl, lastSpatialPan);
+      level1 = split.lvl1;
+      level2 = split.lvl2;
+    }
+
+    if (shouldDual && state.on) {
+      const peakNow = Math.max(level1, level2, dominantLvl);
+      const now = Date.now();
+      const minInterval = COMMIT_MS * 2;
+      if (peakNow > lastSpatialPeak) {
+        lastSpatialPeak = peakNow;
+      } else if ((now - lastSpatialCmdAt) < minInterval) {
+        return; // skip to reduce flood, but never skip a new max
+      }
+      lastSpatialCmdAt = now;
+    } else if (!state.on) {
+      lastSpatialPeak = 0;
+      lastSpatialCmdAt = 0;
+    }
+
+    let cmd = '';
+    if (!state.on) {
+      cmd = 'HOLDOFF';
+    } else if (shouldDual) {
+      cmd = `HOLDON DUALX ${modeKey},${Math.round(level1)},1+${modeKey},${Math.round(level2)},2`;
+    } else {
+      cmd = `HOLDON ${modeKey},${Math.round(dominantLvl)},${ch}`;
+    }
+
+    if (!(window.SerialBridge && typeof window.SerialBridge.send === 'function')) {
+      if (!warnedNoSerial) {
+        appendLog('WARN: SerialBridge indisponivel (modo host).');
+        warnedNoSerial = true;
       }
       return;
     }
-    warnedNoHoldTx = false; // reset warning if it becomes available
+    warnedNoSerial = false;
 
     try {
-      const payload = {
-        type: 'hold.state',
-        on: !!state.on,
-        mode: String(state.mode || control.mode),
-        level: clamp(Number(state.level || 0), 0, 100),
-        ch: clamp(Number(state.ch || 1), 1, 2),
-        seq: Number(state.seq || 0),
-        t: Date.now()
-      };
-      appendLog('Enviando hold.state: ' + JSON.stringify(payload));
-      tx(payload);
+      window.SerialBridge.send(cmd);
     } catch (e) {
-      appendLog('ERRO ao enviar hold.state: ' + (e?.message || e));
+      appendLog('ERRO ao enviar comando local: ' + (e?.message || e));
     }
   }
 
@@ -1598,9 +1901,11 @@
     if (btnTest){
       btnTest.addEventListener('click', ()=>{
         // publica um pulso ON curto via desired-state
-        desired = { on:true, mode: control.mode, level: 100, ch: control.channel, seq: ++seq };
+        const nextCh = (cfg.spatialEnabled && spatialAvailable) ? desired.ch : control.channel;
+        desired = { on:true, mode: control.mode, level: 100, ch: nextCh, seq: ++seq };
         setTimeout(() => {
-          desired = { on:false, mode: control.mode, level: 0, ch: control.channel, seq: ++seq };
+          const offCh = (cfg.spatialEnabled && spatialAvailable) ? desired.ch : control.channel;
+          desired = { on:false, mode: control.mode, level: 0, ch: offCh, seq: ++seq };
         }, 250);
       });
     }
@@ -1615,6 +1920,7 @@
     const presetBtn = $('#audio-collar-freq-preset-btn');
     const presetSearch = $('#audio-collar-freq-preset-search');
     const presetList = $('#audio-collar-freq-preset-list');
+    const spatialToggle = $('#audio-collar-spatial');
 
     if (g && gl){
       g.value = String(cfg.gamma);
@@ -1637,6 +1943,23 @@
         requestCfgBroadcast('noise');
       });
       nf.addEventListener('change', ()=> flushCfgBroadcast('noise'));
+    }
+
+    function setSpatialEnabled(val, opts){
+      cfg.spatialEnabled = !!val;
+      LS.set('spatialEnabled', cfg.spatialEnabled);
+      updateSpatialUI();
+      if (opts && opts.flush) flushCfgBroadcast('spatial');
+      else requestCfgBroadcast('spatial');
+    }
+    if (spatialToggle){
+      if (window.bootstrap && typeof window.bootstrap.Tooltip === 'function') {
+        try { spatialTooltip = new window.bootstrap.Tooltip(spatialToggle); } catch(_){ }
+      }
+      spatialToggle.addEventListener('click', () => {
+        if (spatialToggle.disabled) return;
+        setSpatialEnabled(!cfg.spatialEnabled, { flush: true });
+      });
     }
 
     function setFreqRange(nextMin, nextMax, opts){
@@ -1835,7 +2158,12 @@
 
     btnStop && btnStop.addEventListener('click', async ()=>{
       btnStop.disabled = true;
-      try { stopAllSources(); } finally { btnStop.disabled = false; }
+      try {
+        stopAllSources();
+        desired = { on:false, mode: control.mode, level: 0, ch: desired.ch || control.channel, seq: ++seq };
+        lastCommittedSeq = 0;
+        sendHoldState(desired, { reason: 'stop' });
+      } finally { btnStop.disabled = false; }
     });
 
     const logToggle = $('#audio-collar-log-toggle');
@@ -1855,6 +2183,29 @@
     updateThresholdUI();
     updateSensUI();
     updateFreqUI();
+    updateSpatialUI();
+  }
+
+  function updateSpatialUI(){
+    const spatialToggle = $('#audio-collar-spatial');
+    const spatialStatus = $('#audio-collar-spatial-status');
+    if (spatialToggle) {
+      const on = spatialAvailable ? !!cfg.spatialEnabled : false;
+      spatialToggle.classList.toggle('active', on);
+      spatialToggle.classList.toggle('btn-info', on);
+      spatialToggle.classList.toggle('btn-outline-info', false);
+      spatialToggle.classList.toggle('btn-outline-secondary', !on);
+      spatialToggle.setAttribute('aria-pressed', on ? 'true' : 'false');
+      spatialToggle.disabled = !spatialAvailable;
+      spatialToggle.setAttribute('aria-disabled', spatialAvailable ? 'false' : 'true');
+      const tip = `Espacial (${spatialAvailable ? 'Stereo' : 'Mono'})`;
+      spatialToggle.setAttribute('data-bs-title', tip);
+      spatialToggle.setAttribute('aria-label', tip);
+      if (spatialTooltip && typeof spatialTooltip.setContent === 'function') {
+        try { spatialTooltip.setContent({ '.tooltip-inner': tip }); } catch(_){ }
+      }
+    }
+    if (spatialStatus) spatialStatus.textContent = spatialAvailable ? 'Stereo' : 'Mono';
   }
 
   // ---------- main loops ----------
@@ -1865,6 +2216,15 @@
     }
     try { await ensureAudio(false); } catch(e){}
     const { pct, peakPct } = readLevelsInstant();
+    let spatial = null;
+    if (analyserDetL && analyserDetR) {
+      const left = readLevelsFromAnalyser(analyserDetL, 'left');
+      const right = readLevelsFromAnalyser(analyserDetR, 'right');
+      const pan = computeSpatialPan(left.rawPeakPct, right.rawPeakPct);
+      spatial = { pan: pan.smooth, rawPan: pan.raw, left: left.rawPeakPct, right: right.rawPeakPct };
+      lastSpatialPan = pan.smooth;
+      lastSpatialSeenAt = Date.now();
+    }
 
     broadcastLevel(pct, peakPct);
 
@@ -1883,6 +2243,8 @@
     const volEl   = $('#audio-collar-vol');
     const peakEl  = $('#audio-collar-peak');
     const peakLbl = $('#audio-collar-peaklbl');
+    const spatialLeft = $('#audio-collar-spatial-left');
+    const spatialRight = $('#audio-collar-spatial-right');
 
     const safePeak = clamp(dispPeak, 0, 100);
     const thresholdPct = clamp(cfg.thresholdPct || 0, 0, 100);
@@ -1904,14 +2266,23 @@
       }
     }
 
-    updateDesiredFromPeak(peakPct);
+    if (spatialLeft && spatialRight) {
+      let pan = spatial ? clamp(spatial.rawPan, -1, 1) : 0;
+      const energy = clamp((spatial ? Math.max(spatial.left, spatial.right) : peakPct) / 100, 0, 1);
+      const leftStrength = ((1 - pan) / 2) * energy;
+      const rightStrength = ((1 + pan) / 2) * energy;
+      spatialLeft.style.width = (leftStrength * 100).toFixed(1) + '%';
+      spatialRight.style.width = (rightStrength * 100).toFixed(1) + '%';
+    }
+
+    updateDesiredFromPeak(peakPct, spatial);
     updateSpectrum();
   }
 
   function boot(){
     appendLog('Booting Audio→Collar widget...');
     widgetRoot.dataset.audioCollarReady = '1';
-    window.__AUDIO_COLLAR_WIDGET_V19__.teardown = teardown;
+    window.__AUDIO_COLLAR_WIDGET_V20__.teardown = teardown;
     makeUIBindings();
     initSpectrumCanvas();
     setControlState({ mode: window.currentMode, channel: window.channel });
@@ -1919,8 +2290,8 @@
     startControlPolling();
     exposeStopper();
     setStatus('pronto', false);
-    appendLog('Audio→Collar v1.9 inicializado.');
-    appendLog('Modo robusto: holdSync (estado + heartbeat + timeout).');
+    appendLog('Audio→Collar v2.0 inicializado.');
+    appendLog('Modo local: comandos no host; Flowgate apenas para pico (audio.level).');
 
     populateMicSelect();
 

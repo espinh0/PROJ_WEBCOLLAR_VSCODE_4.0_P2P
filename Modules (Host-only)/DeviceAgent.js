@@ -1,6 +1,7 @@
 ﻿<div class="host-only">
 <script>
 (function(){
+  // v2b.1: add hold:state -> serial bridge
   if (window.__EXECUTOR_V2B_ACTIVE__) return;
   window.__EXECUTOR_V2B_ACTIVE__ = true;
 
@@ -124,6 +125,7 @@
 
   var processed = new Set();
   var MAX = 500;
+  var lastHoldSeqByOrigin = {};
 
   function mark(id){
     processed.add(id);
@@ -197,15 +199,77 @@
     mark(id);
   }
 
+  function clamp(n, min, max){
+    return Math.max(min, Math.min(max, n));
+  }
+
+  function normalizeChannel(ch){
+    return Number(ch) === 2 ? 2 : 1;
+  }
+
+  function extractHoldDetail(e){
+    if (!e) return null;
+    return e.detail || e;
+  }
+
+  function shouldSkipHoldSeq(origin, seq){
+    if (!seq) return false;
+    var key = String(origin || 'local');
+    var last = Number(lastHoldSeqByOrigin[key] || 0);
+    if (seq <= last) return true;
+    lastHoldSeqByOrigin[key] = seq;
+    return false;
+  }
+
+  function onHoldState(e){
+    var detail = extractHoldDetail(e);
+    if (!detail || !detail.state) return;
+    var state = detail.state;
+    var meta = detail.meta || {};
+    var origin = meta.fromPeer || meta.via || 'holdSync';
+    if (meta.via === 'local.command') return;
+
+    var modeKey = String(state.mode || '').toUpperCase();
+    if (modeKey === 'ROULETTE') return;
+
+    var seq = Number(state.seq || 0);
+    if (shouldSkipHoldSeq(origin, seq)) return;
+
+    var level = clamp(Number(state.level || 0), 0, 100);
+    var ch = normalizeChannel(state.ch);
+    var cmd = '';
+    if (typeof state.cmd === 'string' && state.cmd.trim()) {
+      cmd = state.cmd.trim();
+    } else if (!state.on) {
+      cmd = 'HOLDOFF';
+    } else {
+      cmd = `HOLDON ${modeKey},${level},${ch}`;
+    }
+
+    executorLog('received', cmd, origin, { seq: seq, via: meta.via || '' });
+
+    var SERIAL = getSerialAdapter();
+    try {
+      SERIAL.send(cmd);
+      logLine(`holdSync -> collar (${SERIAL.name}): ${cmd}`);
+      executorLog('sent', cmd, SERIAL.name, { serialAdapter: SERIAL.name });
+    } catch(err){
+      logLine(`falha ao enviar via ${SERIAL.name}: ${err && err.message || err}`);
+      executorLog('error', cmd, SERIAL.name, { error: String(err && err.message || err) });
+    }
+  }
+
   window.addEventListener('chat:message', onChatMessage);
   window.addEventListener('cmd:message', onChatMessage);
   window.addEventListener('flowgate:message', onChatMessage);
+  window.addEventListener('hold:state', onHoldState);
 
   logLine(`EXECUTOR iniciado ÔÇö aguardando eventos "chat:message"; adaptador: ${SERIAL.name}.`);
   executorLog('init', 'EXECUTOR_START', 'executor', {adapter: SERIAL.name});
 
   window.addEventListener('beforeunload', function(){
     try { window.removeEventListener('chat:message', onChatMessage); } catch(_){}
+    try { window.removeEventListener('hold:state', onHoldState); } catch(_){ }
   });
 })();
 </script>

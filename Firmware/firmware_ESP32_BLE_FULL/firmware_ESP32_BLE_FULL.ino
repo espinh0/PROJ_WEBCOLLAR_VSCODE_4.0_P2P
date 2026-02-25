@@ -20,9 +20,12 @@
   - Arduino-ESP32 2.x (recomendado).
   - NimBLE-Arduino instalado.
 
-  Versao: 1.1.5 (2026-02-24)
+  Versao: 1.1.7 (2026-02-24)
   - Prefixo DUAL por comando (nao altera DUALON/OFF global).
   - Mantem DUALON/DUALOFF e desativa DUAL ao desconectar BLE.
+  - Novo comando DUALX para dois canais com comandos distintos.
+  - HOLDOFF limpa fila de comandos para evitar restart por fila.
+  - Niveis 0 sao sempre anulados (sem RF).
 */
 
 #include <Arduino.h>
@@ -95,6 +98,9 @@ static bool modeToAK(const char* mode, uint8_t &a4, uint8_t &k4) {
   if (!strcmp(mode, "LIGHT"))     { a4=0b1110; k4=0b1000; return true; }
   return false;
 }
+static bool isLevelSensitiveMode(const char* mode) {
+  return (!strcmp(mode, "SHOCK") || !strcmp(mode, "VIBRATION"));
+}
 static uint8_t channelToDDD(uint8_t ch) { return (ch == 1) ? 0b111 : 0b000; }
 
 static uint64_t composeFrame(const char* mode, uint8_t level, uint8_t channel) {
@@ -140,11 +146,20 @@ static void sendCommandBurst(uint64_t frame, uint8_t times = SINGLE_SHOT_FRAMES_
   }
 }
 
+static void sendCommandBurstDualInterleaved(uint64_t frame1, uint64_t frame2, uint8_t times = SINGLE_SHOT_FRAMES_DEFAULT) {
+  for (uint8_t i=0;i<times;i++){
+    sendFrame_once(frame1);
+    delay(SINGLE_SHOT_GAP_MS);
+    sendFrame_once(frame2);
+    if (i+1 < times) delay(SINGLE_SHOT_GAP_MS);
+  }
+}
+
 // ---------------------
 // Engine (Core1 only)
 // ---------------------
 enum StepKind : uint8_t { STEP_ON_HOLD_MS, STEP_OFF_MS };
-struct Step { StepKind kind; uint32_t ms; uint64_t frame; uint64_t frame2; bool dual; };
+struct Step { StepKind kind; uint32_t ms; uint64_t frame; uint64_t frame2; bool dual; bool dualInterleave; };
 
 static Step     steps[64];
 static uint8_t  stepCount = 0;
@@ -166,14 +181,14 @@ static uint8_t mirrorChannel(uint8_t ch) { return (ch == 2) ? 1 : 2; }
 static void engineClear() { stepCount = 0; stepIdx = 0; engineActive = false; engineRepeat = false; }
 static void engineStop() { engineActive = false; }
 
-static bool engineAddOn(uint64_t frame, uint32_t ms, uint64_t frame2 = 0ULL, bool dual = false){
+static bool engineAddOn(uint64_t frame, uint32_t ms, uint64_t frame2 = 0ULL, bool dual = false, bool dualInterleave = false){
   if (stepCount >= 64) return false;
-  steps[stepCount++] = Step{ STEP_ON_HOLD_MS, ms, frame, frame2, dual };
+  steps[stepCount++] = Step{ STEP_ON_HOLD_MS, ms, frame, frame2, dual, dualInterleave };
   return true;
 }
 static bool engineAddOff(uint32_t ms){
   if (stepCount >= 64) return false;
-  steps[stepCount++] = Step{ STEP_OFF_MS, ms, 0ULL, 0ULL, false };
+  steps[stepCount++] = Step{ STEP_OFF_MS, ms, 0ULL, 0ULL, false, false };
   return true;
 }
 static void engineStart(bool repeat){
@@ -182,8 +197,15 @@ static void engineStart(bool repeat){
   engineActive = true;
   stepIdx = 0;
   if (steps[0].kind == STEP_ON_HOLD_MS) {
-    sendCommandBurst(steps[0].frame, ENGINE_ON_FRAMES_DEFAULT);
-    if (steps[0].dual) sendCommandBurst(steps[0].frame2, ENGINE_ON_FRAMES_DEFAULT);
+    if (steps[0].dual) {
+      if (steps[0].dualInterleave) sendCommandBurstDualInterleaved(steps[0].frame, steps[0].frame2, ENGINE_ON_FRAMES_DEFAULT);
+      else {
+        sendCommandBurst(steps[0].frame, ENGINE_ON_FRAMES_DEFAULT);
+        sendCommandBurst(steps[0].frame2, ENGINE_ON_FRAMES_DEFAULT);
+      }
+    } else {
+      sendCommandBurst(steps[0].frame, ENGINE_ON_FRAMES_DEFAULT);
+    }
   }
   stepEndAt_ms = millis() + steps[0].ms;
 }
@@ -199,8 +221,15 @@ static void engineService(){
   }
   const Step& s = steps[stepIdx];
   if (s.kind == STEP_ON_HOLD_MS) {
-    sendCommandBurst(s.frame, ENGINE_ON_FRAMES_DEFAULT);
-    if (s.dual) sendCommandBurst(s.frame2, ENGINE_ON_FRAMES_DEFAULT);
+    if (s.dual) {
+      if (s.dualInterleave) sendCommandBurstDualInterleaved(s.frame, s.frame2, ENGINE_ON_FRAMES_DEFAULT);
+      else {
+        sendCommandBurst(s.frame, ENGINE_ON_FRAMES_DEFAULT);
+        sendCommandBurst(s.frame2, ENGINE_ON_FRAMES_DEFAULT);
+      }
+    } else {
+      sendCommandBurst(s.frame, ENGINE_ON_FRAMES_DEFAULT);
+    }
   }
   stepEndAt_ms = millis() + s.ms;
 }
@@ -239,6 +268,23 @@ static bool parseSimpleCmd(const String& lineIn, char* outMode, uint8_t &outLvl,
   return true;
 }
 
+static bool parseDualXCmd(const String& lineIn,
+                          char* outMode1, uint8_t &outLvl1, uint8_t &outCh1, uint16_t &outMs1,
+                          char* outMode2, uint8_t &outLvl2, uint8_t &outCh2, uint16_t &outMs2){
+  String line = lineIn;
+  line.replace("\r", "");
+  line.trim();
+  if (!line.length()) return false;
+  int plus = line.indexOf('+');
+  if (plus < 0) return false;
+  String left = line.substring(0, plus); left.trim();
+  String right = line.substring(plus + 1); right.trim();
+  if (!left.length() || !right.length()) return false;
+  if (!parseSimpleCmd(left, outMode1, outLvl1, outCh1, outMs1)) return false;
+  if (!parseSimpleCmd(right, outMode2, outLvl2, outCh2, outMs2)) return false;
+  return true;
+}
+
 static bool compile_CADENCE(const String& line, bool forcedDual){
   int sp = line.indexOf(' ');
   if (sp < 0) return false;
@@ -255,6 +301,7 @@ static bool compile_CADENCE(const String& line, bool forcedDual){
 
   uint8_t lvl = (uint8_t)constrain(args.substring(p1+1,p2).toInt(), 0, 100);
   uint8_t ch  = (uint8_t)((args.substring(p2+1,p3).toInt()==2) ? 2 : 1);
+  if (lvl == 0 && isLevelSensitiveMode(m.c_str())) return true;
   int repsInt = args.substring(p3+1,p4).toInt();
   uint8_t reps = (uint8_t)((repsInt>1)?repsInt:1);
   int gapInt = args.substring(p4+1).toInt();
@@ -264,7 +311,7 @@ static bool compile_CADENCE(const String& line, bool forcedDual){
   bool dual = forcedDual ? true : dualModeEnabled;
   uint64_t frame2 = dual ? composeFrame(m.c_str(), lvl, mirrorChannel(ch)) : 0ULL;
   for (uint8_t i=0;i<reps;i++){
-    engineAddOn(frame, PULSE_MS_DEFAULT, frame2, dual);
+    engineAddOn(frame, PULSE_MS_DEFAULT, frame2, dual, false);
     engineAddOff(gap);
   }
   return true;
@@ -284,6 +331,7 @@ static bool compile_PATTERN(const String& line, bool forcedDual){
 
   char mode[16]; uint8_t lvl=0, ch=1; uint16_t ms=0;
   if (!parseSimpleCmd(cmd, mode, lvl, ch, ms)) return false;
+  if (lvl == 0 && isLevelSensitiveMode(mode)) return true;
 
   uint64_t frame = composeFrame(mode, lvl, ch);
   bool dual = forcedDual ? true : dualModeEnabled;
@@ -298,7 +346,7 @@ static bool compile_PATTERN(const String& line, bool forcedDual){
     if (tok.length()){
       int durInt = tok.toInt();
       uint16_t dur = (uint16_t)((durInt>(int)MIN_GAP_MS)?durInt:(int)MIN_GAP_MS);
-      if (on) engineAddOn(frame, dur, frame2, dual);
+      if (on) engineAddOn(frame, dur, frame2, dual, false);
       else    engineAddOff(dur);
       on = !on;
     }
@@ -324,9 +372,10 @@ static bool compile_SEQUENCE_finalize(bool forcedDual){
     } else {
       char mode[16]; uint8_t lvl=0, ch=1; uint16_t ms=PULSE_MS_DEFAULT;
       if (!parseSimpleCmd(ln, mode, lvl, ch, ms)) continue;
+      if (lvl == 0 && isLevelSensitiveMode(mode)) continue;
       uint64_t frame = composeFrame(mode, lvl, ch);
       uint64_t frame2 = dual ? composeFrame(mode, lvl, mirrorChannel(ch)) : 0ULL;
-      engineAddOn(frame, ms, frame2, dual);
+      engineAddOn(frame, ms, frame2, dual, false);
       engineAddOff(MIN_GAP_MS);
     }
   }
@@ -496,6 +545,12 @@ static void safetyHoldOff_core1(){
   engineStop();
   engineClear();
 
+  if (qCmd) xQueueReset(qCmd);
+  capturingSeq = false;
+  seqCount = 0;
+  seqRepeatOnEnd = false;
+  seqForceDual = false;
+
   digitalWrite(TX_PIN, LOW);
   rfLed(false);
   allLedsOff();
@@ -591,14 +646,49 @@ static void processCommandLine_core1(const char* lineC) {
 
     engineClear();
 
+    if (cmdUp.startsWith("DUALX ")) {
+      String pair = cmd.substring(6); pair.trim();
+      char m1[16] = {0}; uint8_t l1=0, c1=1; uint16_t ms1=PULSE_MS_DEFAULT;
+      char m2[16] = {0}; uint8_t l2=0, c2=2; uint16_t ms2=PULSE_MS_DEFAULT;
+      if (parseDualXCmd(pair, m1, l1, c1, ms1, m2, l2, c2, ms2)) {
+        if (!strcmp(m1, "BEEP") || !strcmp(m1, "LIGHT")) l1 = 0;
+        if (!strcmp(m2, "BEEP") || !strcmp(m2, "LIGHT")) l2 = 0;
+        const bool has1 = isLevelSensitiveMode(m1) ? (l1 > 0) : true;
+        const bool has2 = isLevelSensitiveMode(m2) ? (l2 > 0) : true;
+        if (!has1 && !has2) {
+          safetyHoldOff_core1();
+          enqueueTx("OK HOLDOFF");
+        } else {
+          uint16_t ms = (uint16_t)max(ms1, ms2);
+          if (has1 && has2) {
+            uint64_t f1 = composeFrame(m1, l1, c1);
+            uint64_t f2 = composeFrame(m2, l2, c2);
+            engineAddOn(f1, ms, f2, true, true);
+          } else if (has1) {
+            uint64_t f1 = composeFrame(m1, l1, c1);
+            engineAddOn(f1, ms, 0ULL, false, false);
+          } else {
+            uint64_t f2 = composeFrame(m2, l2, c2);
+            engineAddOn(f2, ms, 0ULL, false, false);
+          }
+          engineAddOff(MIN_GAP_MS);
+          engineStart(true);
+          enqueueTx("OK HOLDON DUALX");
+        }
+      } else {
+        enqueueTx("ERR HOLDON DUALX");
+      }
+      return;
+    }
+
     if (cmdUp.startsWith("CADENCE ")) {
-      if (compile_CADENCE(cmd, forcedDual)) { engineStart(true); enqueueTx("OK HOLDON CADENCE"); }
+      if (compile_CADENCE(cmd, forcedDual)) { engineStart(true); enqueueTx(forcedDual ? "OK DUAL HOLDON CADENCE" : "OK HOLDON CADENCE"); }
       else enqueueTx("ERR HOLDON CADENCE");
       return;
     }
 
     if (cmdUp.startsWith("PATTERN ")) {
-      if (compile_PATTERN(cmd, forcedDual)) { engineStart(true); enqueueTx("OK HOLDON PATTERN"); }
+      if (compile_PATTERN(cmd, forcedDual)) { engineStart(true); enqueueTx(forcedDual ? "OK DUAL HOLDON PATTERN" : "OK HOLDON PATTERN"); }
       else enqueueTx("ERR HOLDON PATTERN");
       return;
     }
@@ -608,7 +698,7 @@ static void processCommandLine_core1(const char* lineC) {
       seqCount = 0;
       seqRepeatOnEnd = true;
       seqForceDual = forcedDual;
-      enqueueTx("OK HOLDON SEQUENCE");
+      enqueueTx(forcedDual ? "OK DUAL HOLDON SEQUENCE" : "OK HOLDON SEQUENCE");
       return;
     }
 
@@ -616,17 +706,22 @@ static void processCommandLine_core1(const char* lineC) {
     char mode[16] = {0}; uint8_t lvl=0, ch=1; uint16_t ms=PULSE_MS_DEFAULT;
     if (parseSimpleCmd(cmd, mode, lvl, ch, ms)) {
       if (!strcmp(mode, "BEEP") || !strcmp(mode, "LIGHT")) lvl = 0;
+      if (lvl == 0 && isLevelSensitiveMode(mode)) {
+        safetyHoldOff_core1();
+        enqueueTx("OK HOLDOFF");
+        return;
+      }
       uiSetMLC(mode, lvl, ch);
 
       uint64_t frame = composeFrame(mode, lvl, ch);
       bool dual = forcedDual ? true : dualModeEnabled;
       uint64_t frame2 = dual ? composeFrame(mode, lvl, mirrorChannel(ch)) : 0ULL;
-      engineAddOn(frame, ms, frame2, dual);
+      engineAddOn(frame, ms, frame2, dual, false);
       engineAddOff(MIN_GAP_MS);
       engineStart(true);
 
       char out[96];
-      snprintf(out, sizeof(out), "OK HOLDON %s,%u,%u", mode, (unsigned)lvl, (unsigned)ch);
+      snprintf(out, sizeof(out), forcedDual ? "OK DUAL HOLDON %s,%u,%u" : "OK HOLDON %s,%u,%u", mode, (unsigned)lvl, (unsigned)ch);
       enqueueTx(out);
     } else {
       enqueueTx("ERR HOLDON");
@@ -641,14 +736,14 @@ static void processCommandLine_core1(const char* lineC) {
     seqRepeatOnEnd = false;
     seqForceDual = forcedDual;
     engineClear();
-    enqueueTx("OK SEQUENCE");
+    enqueueTx(forcedDual ? "OK DUAL SEQUENCE" : "OK SEQUENCE");
     return;
   }
 
   // CADENCE
   if (up.startsWith("CADENCE ")) {
     engineClear();
-    if (compile_CADENCE(line, forcedDual)) { engineStart(false); enqueueTx("OK CADENCE"); }
+    if (compile_CADENCE(line, forcedDual)) { engineStart(false); enqueueTx(forcedDual ? "OK DUAL CADENCE" : "OK CADENCE"); }
     else enqueueTx("ERR CADENCE");
     return;
   }
@@ -656,8 +751,45 @@ static void processCommandLine_core1(const char* lineC) {
   // PATTERN
   if (up.startsWith("PATTERN ")) {
     engineClear();
-    if (compile_PATTERN(line, forcedDual)) { engineStart(false); enqueueTx("OK PATTERN"); }
+    if (compile_PATTERN(line, forcedDual)) { engineStart(false); enqueueTx(forcedDual ? "OK DUAL PATTERN" : "OK PATTERN"); }
     else enqueueTx("ERR PATTERN");
+    return;
+  }
+
+  // DUALX MODE1,LVL1,CH1+MODE2,LVL2,CH2
+  if (up.startsWith("DUALX ")) {
+    String pair = line.substring(6); pair.trim();
+    char m1[16] = {0}; uint8_t l1=0, c1=1; uint16_t ms1=PULSE_MS_DEFAULT;
+    char m2[16] = {0}; uint8_t l2=0, c2=2; uint16_t ms2=PULSE_MS_DEFAULT;
+    if (parseDualXCmd(pair, m1, l1, c1, ms1, m2, l2, c2, ms2)) {
+      if (!strcmp(m1, "BEEP") || !strcmp(m1, "LIGHT")) l1 = 0;
+      if (!strcmp(m2, "BEEP") || !strcmp(m2, "LIGHT")) l2 = 0;
+      const bool has1 = isLevelSensitiveMode(m1) ? (l1 > 0) : true;
+      const bool has2 = isLevelSensitiveMode(m2) ? (l2 > 0) : true;
+      if (!has1 && !has2) {
+        enqueueTx("OK DUALX");
+        return;
+      }
+      if (has1 && has2) {
+        uiSetMLC(m1, l1, c1);
+        uint64_t f1 = composeFrame(m1, l1, c1);
+        uint64_t f2 = composeFrame(m2, l2, c2);
+        sendCommandBurstDualInterleaved(f1, f2, SINGLE_SHOT_FRAMES_DEFAULT);
+        enqueueTx("OK DUALX");
+      } else if (has1) {
+        uiSetMLC(m1, l1, c1);
+        uint64_t f1 = composeFrame(m1, l1, c1);
+        sendCommandBurst(f1, SINGLE_SHOT_FRAMES_DEFAULT);
+        enqueueTx("OK DUALX");
+      } else {
+        uiSetMLC(m2, l2, c2);
+        uint64_t f2 = composeFrame(m2, l2, c2);
+        sendCommandBurst(f2, SINGLE_SHOT_FRAMES_DEFAULT);
+        enqueueTx("OK DUALX");
+      }
+    } else {
+      enqueueTx("ERR DUALX");
+    }
     return;
   }
 
@@ -665,6 +797,10 @@ static void processCommandLine_core1(const char* lineC) {
   char mode[16] = {0}; uint8_t lvl=0, ch=1; uint16_t ms=PULSE_MS_DEFAULT;
   if (parseSimpleCmd(line, mode, lvl, ch, ms)) {
     if (!strcmp(mode, "BEEP") || !strcmp(mode, "LIGHT")) lvl = 0;
+    if (lvl == 0 && isLevelSensitiveMode(mode)) {
+      enqueueTx("OK");
+      return;
+    }
     uiSetMLC(mode, lvl, ch);
 
     uint64_t frame = composeFrame(mode, lvl, ch);
@@ -676,7 +812,7 @@ static void processCommandLine_core1(const char* lineC) {
     }
 
     char out[96];
-    snprintf(out, sizeof(out), "OK %s,%u,%u", mode, (unsigned)lvl, (unsigned)ch);
+    snprintf(out, sizeof(out), forcedDual ? "OK DUAL %s,%u,%u" : "OK %s,%u,%u", mode, (unsigned)lvl, (unsigned)ch);
     enqueueTx(out);
     return;
   }

@@ -16,6 +16,10 @@
           </select>
         </div>
         <div class="d-flex align-items-center gap-1">
+          <label class="small text-secondary">BLE chunk</label>
+          <input id="wsBleChunk" type="number" min="1" max="180" step="1" class="form-control form-control-sm" style="width:90px;" placeholder="20" />
+        </div>
+        <div class="d-flex align-items-center gap-1">
           <label class="small text-secondary">Baud</label>
           <select id="wsBaud" class="form-select form-select-sm" style="width:auto;">
             <option />115200</option>
@@ -77,6 +81,7 @@
   const baudSel = $("#wsBaud");
   const autoChk = $("#wsAuto");
   const transportSel = $("#wsTransport");
+  const bleChunkInput = $("#wsBleChunk");
 
   const hasWebSerial = !!navigator.serial;
 
@@ -85,6 +90,7 @@
   const WANT_AUTO_KEY = "ws.autoReconnect";
   const LAST_BLE_ID_KEY = "ws.lastBleDeviceId";
   const LAST_TRANSPORT_KEY = "ws.lastTransport";
+  const BLE_CHUNK_KEY = "ws.bleMaxChunk";
 
   const state = {
     port: null,
@@ -146,6 +152,28 @@
     } catch {}
   }
 
+  // HOLDOFF latency metric (TX -> OK HOLDOFF)
+  let holdoffMetricId = 0;
+  let holdoffLastTxAt = 0;
+  function markHoldoffTx() {
+    holdoffMetricId += 1;
+    holdoffLastTxAt = Date.now();
+  }
+  function reportHoldoffLatency(line) {
+    if (!/\bOK\s+HOLDOFF\b/i.test(line)) return;
+    if (!holdoffLastTxAt) return;
+    const elapsedMs = Date.now() - holdoffLastTxAt;
+    const ts = new Date().toLocaleTimeString();
+    const transport = state.transport || "--";
+    log(`[${ts}] HOLDOFF priority latency: ${elapsedMs} ms (tx#${holdoffMetricId}, ${transport})`, "info");
+    try {
+      window.dispatchEvent(new CustomEvent("holdoff-metric", {
+        detail: { elapsedMs, id: holdoffMetricId, transport, ts }
+      }));
+    } catch {}
+    holdoffLastTxAt = 0;
+  }
+
   function isHost() {
     try {
       const peer = (window.Flowgate && window.Flowgate.localPeer) ? window.Flowgate.localPeer : window.__TRYSTERO_PEER__;
@@ -171,6 +199,26 @@
     if (btnConnect) btnConnect.disabled = disabled;
     if (btnDisconnect) btnDisconnect.disabled = !connected;
     if (baudSel) baudSel.disabled = !isSerial;
+    if (bleChunkInput) bleChunkInput.disabled = state.transport !== 'ble';
+  }
+
+  function normalizeBleChunk(value) {
+    const num = Number(value);
+    if (!Number.isFinite(num) || num <= 0) return null;
+    return Math.min(180, Math.max(1, Math.floor(num)));
+  }
+
+  function applyBleChunkSetting(value) {
+    const normalized = normalizeBleChunk(value);
+    if (!normalized) {
+      if (bleChunkInput) bleChunkInput.value = "";
+      try { localStorage.removeItem(BLE_CHUNK_KEY); } catch {}
+      delete window.BLE_MAX_CHUNK;
+      return;
+    }
+    if (bleChunkInput) bleChunkInput.value = String(normalized);
+    try { localStorage.setItem(BLE_CHUNK_KEY, String(normalized)); } catch {}
+    window.BLE_MAX_CHUNK = normalized;
   }
 
   function syncGlobals() {
@@ -192,6 +240,7 @@
       if (Array.isArray(listeners) && listeners.length) {
         listeners.slice().forEach((cb) => { try { cb(line); } catch(_) {} });
       }
+      reportHoldoffLatency(line);
       if (typeof window.logSerialLine === "function") {
         window.logSerialLine(line);
       } else {
@@ -533,6 +582,10 @@
     line = String(line ?? "").trim();
     if (!line) return;
 
+    if (/^HOLDOFF\b/i.test(line)) {
+      markHoldoffTx();
+    }
+
     // Permite alternar terminador via window.BLE_LINE_ENDING
     const lineEnding = typeof window.BLE_LINE_ENDING === 'string' ? window.BLE_LINE_ENDING : "\n";
     const payload = line + lineEnding;
@@ -546,12 +599,31 @@
     }
 
     if (state.transport === 'ble') {
-      const maxLen = 20;
+      const defaultMaxLen = 20;
+      // 2026-02-25: allow larger BLE chunks when available, fallback to 20 bytes.
+      const maxLen = (() => {
+        const override = Number(window.BLE_MAX_CHUNK);
+        if (Number.isFinite(override) && override > 0) {
+          return Math.min(180, Math.max(1, Math.floor(override)));
+        }
+        return defaultMaxLen;
+      })();
       let sentRx = false;
+      let fallbackTried = false;
       const canWriteNoRsp = !!(state.bleCharRx && state.bleCharRx.writeValueWithoutResponse && state.bleCharRx.properties && state.bleCharRx.properties.writeWithoutResponse);
       const writeFn = canWriteNoRsp
         ? state.bleCharRx.writeValueWithoutResponse.bind(state.bleCharRx)
         : state.bleCharRx ? state.bleCharRx.writeValue.bind(state.bleCharRx) : null;
+      const sendChunks = async (chunkSize) => {
+        let offset = 0;
+        while (offset < bytes.length) {
+          const chunk = bytes.slice(offset, offset + chunkSize);
+          await writeFn(chunk);
+          log(`BLE: enviado chunk via RX [${offset}-${offset+chunk.length-1}] (${chunk.length} bytes)`, "info");
+          sentRx = true;
+          offset += chunkSize;
+        }
+      };
       // Se o comando couber em um pacote, envie de uma vez só
       if (bytes.length <= maxLen) {
         if (state.bleCharRx) {
@@ -561,24 +633,33 @@
             log(`BLE: enviado comando inteiro via RX (${bytes.length} bytes)`, "info");
             sentRx = true;
           } catch (e) {
-            log(`Erro ao enviar BLE RX: ${e.message || e}`, "warn");
+            if (!sentRx && maxLen > defaultMaxLen && !fallbackTried) {
+              fallbackTried = true;
+              log("BLE: fallback para 20 bytes (tentativa de compatibilidade)", "warn");
+              try { await sendChunks(defaultMaxLen); } catch (e2) {
+                log(`Erro ao enviar BLE RX: ${e2.message || e2}`, "warn");
+              }
+            } else {
+              log(`Erro ao enviar BLE RX: ${e.message || e}`, "warn");
+            }
           }
         }
       } else {
-        // Fragmenta apenas se for maior que 20 bytes
+        // Fragmenta apenas se for maior que o limite atual
         if (state.bleCharRx) {
-          let offset = 0;
-          while (offset < bytes.length) {
-            const chunk = bytes.slice(offset, offset + maxLen);
-            try {
-              if (!writeFn) throw new Error("write indisponivel");
-              await writeFn(chunk);
-              log(`BLE: enviado chunk via RX [${offset}-${offset+chunk.length-1}] (${chunk.length} bytes)`, "info");
-              sentRx = true;
-            } catch (e) {
+          try {
+            if (!writeFn) throw new Error("write indisponivel");
+            await sendChunks(maxLen);
+          } catch (e) {
+            if (!sentRx && maxLen > defaultMaxLen && !fallbackTried) {
+              fallbackTried = true;
+              log("BLE: fallback para 20 bytes (tentativa de compatibilidade)", "warn");
+              try { await sendChunks(defaultMaxLen); } catch (e2) {
+                log(`Erro ao enviar chunk BLE RX: ${e2.message || e2}`, "warn");
+              }
+            } else {
               log(`Erro ao enviar chunk BLE RX: ${e.message || e}`, "warn");
             }
-            offset += maxLen;
           }
         }
       }
@@ -621,6 +702,12 @@
     });
   }
 
+  if (bleChunkInput) {
+    bleChunkInput.addEventListener("change", () => {
+      applyBleChunkSetting(bleChunkInput.value);
+    });
+  }
+
   if (autoChk) {
     autoChk.addEventListener("change", () => {
       localStorage.setItem(WANT_AUTO_KEY, autoChk.checked ? "1" : "0");
@@ -650,6 +737,15 @@
     state.transport = savedTransport || baseTransport;
     if (!hasWebBluetooth && state.transport !== 'serial') state.transport = 'serial';
     if (transportSel) transportSel.value = state.transport;
+
+    const savedChunk = (() => {
+      try { return localStorage.getItem(BLE_CHUNK_KEY); } catch { return null; }
+    })();
+    if (savedChunk != null) {
+      applyBleChunkSetting(savedChunk);
+    } else {
+      applyBleChunkSetting(null);
+    }
 
     const savedAuto = localStorage.getItem(WANT_AUTO_KEY);
     if (savedAuto != null && autoChk) autoChk.checked = savedAuto === "1";
@@ -880,6 +976,7 @@
   let paused = false;
   let autoscroll = true;
   let lastKey = null, lastLineEl = null, lastCount = 1;
+  const MAX_SERIAL_LINES = 500;
   const SERIAL_TX_WRAP_KEY = "__SERIAL_TX_WRAPPED__";
   const SERIAL_TX_SUPPRESS_KEY = "__SERIAL_TX_SUPPRESS__";
 
@@ -926,8 +1023,27 @@
     line.appendChild(msg);
 
     view.appendChild(line);
+    while (view.childElementCount > MAX_SERIAL_LINES) {
+      const first = view.firstElementChild;
+      if (!first) break;
+      if (first === lastLineEl) {
+        lastLineEl = null;
+        lastKey = null;
+        lastCount = 1;
+      }
+      view.removeChild(first);
+    }
     if (autoscroll) view.scrollTop = view.scrollHeight;
   }
+
+  window.addEventListener("holdoff-metric", (ev) => {
+    const d = ev?.detail || {};
+    if (!d.elapsedMs && d.elapsedMs !== 0) return;
+    const ts = d.ts || new Date().toLocaleTimeString();
+    const transport = d.transport || "--";
+    const id = d.id || "?";
+    appendLine(`[${ts}] HOLDOFF latency: ${d.elapsedMs} ms (tx#${id}, ${transport})`, "in");
+  });
 
   async function writeRaw(raw) {
     if (!raw.length) return;
@@ -1070,6 +1186,8 @@
   let autoscroll = true;
   let filterLevel = "all";
   const buffer = []; // mant├®m texto para copiar/salvar
+  const MAX_LOG_LINES = 800;
+  const MAX_LOG_VIEW_LINES = 800;
 
   function nowTs() {
     const d = new Date();
@@ -1101,6 +1219,15 @@
 
     // guarda vers├úo ÔÇ£cruaÔÇØ (sem cor) para export/copy
     buffer.push(`${ts}${level.toUpperCase()}: ${text}`);
+    if (buffer.length > MAX_LOG_LINES) {
+      buffer.splice(0, buffer.length - MAX_LOG_LINES);
+    }
+
+    while (view.childElementCount > MAX_LOG_VIEW_LINES) {
+      const first = view.firstElementChild;
+      if (!first) break;
+      view.removeChild(first);
+    }
 
     if (autoscroll) view.scrollTop = view.scrollHeight;
   }

@@ -161,6 +161,13 @@
     color: var(--cp-color, #fcd34d);
     min-width: 64px;
     display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:4px;
+  }
+  #customPads .cp-level-main {
+    display:flex;
     align-items:center;
     justify-content:center;
     gap:12px;
@@ -206,11 +213,14 @@
     display:flex;
     flex-wrap:wrap;
     gap:6px;
-    margin-top:4px;
+    margin-top:0;
+  }
+  #customPads .cp-advanced.cp-advanced-inline {
+    justify-content:center;
   }
   #customPads .cp-advanced-chip {
-    font-size:.72rem;
-    padding:2px 9px;
+    font-size:.95rem;
+    padding:3px 10px;
     border-radius:999px;
     border:1px solid rgba(255,255,255,0.08);
     background: rgba(255,255,255,0.05);
@@ -221,7 +231,7 @@
     gap:4px;
   }
   #customPads .cp-advanced-chip i {
-    font-size:.65rem;
+    font-size:.82rem;
     opacity:.75;
   }
   #customPads .cp-channel {
@@ -675,24 +685,21 @@
     return trimmed;
   }
 
-  function buildAdvancedSummary(adv, extraChips){
-    const chips = [];
-    if (Array.isArray(extraChips) && extraChips.length) {
-      chips.push(...extraChips);
-    }
+  function buildAdvancedSummary(adv){
+    const tokens = [];
     if (adv) {
       if (adv.pulses !== undefined && !approxEqual(adv.pulses, ADV_DEFAULTS.pulses, 0)) {
-        chips.push(`<span class="cp-advanced-chip"><i class="fa-solid fa-wave-square"></i><span>${adv.pulses}x</span></span>`);
+        tokens.push(`<i class="fa-solid fa-wave-square"></i><span>${adv.pulses}x</span>`);
       }
       if (adv.duration !== undefined && !approxEqual(adv.duration, ADV_DEFAULTS.duration)) {
-        chips.push(`<span class="cp-advanced-chip"><i class="fa-solid fa-stopwatch"></i><span>${formatSeconds(adv.duration)}s</span></span>`);
+        tokens.push(`<i class="fa-solid fa-stopwatch"></i><span>${formatSeconds(adv.duration)}s</span>`);
       }
       if (adv.interval !== undefined && !approxEqual(adv.interval, ADV_DEFAULTS.interval)) {
-        chips.push(`<span class="cp-advanced-chip"><i class="fa-solid fa-arrows-left-right"></i><span>${formatSeconds(adv.interval)}s</span></span>`);
+        tokens.push(`<i class="fa-solid fa-arrows-left-right"></i><span>${formatSeconds(adv.interval)}s</span>`);
       }
     }
-    if (!chips.length) return "";
-    return `<div class="cp-advanced">${chips.join("")}</div>`;
+    if (!tokens.length) return "";
+    return `<div class="cp-advanced cp-advanced-inline"><span class="cp-advanced-chip">${tokens.join(" <span aria-hidden=\"true\">·</span> ")}</span></div>`;
   }
 
   function applyAdvancedConfig(adv){
@@ -773,10 +780,7 @@
       const advConfig = normalizeAdvancedConfig(it.advanced) || null;
       it.advanced = advConfig;
       const hasDual = it.dualOn === true;
-      const dualChip = hasDual
-        ? `<span class="cp-advanced-chip"><i class="fa-solid fa-toggle-on"></i><span>Dual</span></span>`
-        : "";
-      const advSummary = buildAdvancedSummary(advConfig, dualChip ? [dualChip] : null);
+      const advSummary = buildAdvancedSummary(advConfig);
 
       const wrap = document.createElement("div");
       wrap.className = "cp-item";
@@ -794,7 +798,10 @@
       wrap.style.setProperty("--cp-bg", `linear-gradient(120deg, ${solidTint}, #05060a)`);
       const channelLabel = hasDual ? '<i class="fa-solid fa-skull" aria-hidden="true"></i>' : it.channel;
       b.innerHTML = `<span class="cp-btn-content">
-                        <span class="cp-level ${hideLevel ? 'cp-level-no-value' : ''}">${hideLevel ? '' : `<span class="cp-level-value">${it.level}</span>`}<span class="cp-level-icon"><i class="fa-solid ${modeStyle.icon}"></i></span></span>
+                        <span class="cp-level ${hideLevel ? 'cp-level-no-value' : ''}">
+                          <span class="cp-level-main">${hideLevel ? '' : `<span class="cp-level-value">${it.level}</span>`}<span class="cp-level-icon"><i class="fa-solid ${modeStyle.icon}"></i></span></span>
+                          ${advSummary}
+                        </span>
                         <span class="cp-details">
                           <strong class="cp-mode">
                             ${modeLabel}
@@ -803,7 +810,6 @@
                             <span>Canal</span>
                             <span class="cp-channel-value">${channelLabel}</span>
                           </span>
-                          ${advSummary}
                         </span>
                       </span>`;
 

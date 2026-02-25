@@ -20,11 +20,12 @@
   - Arduino-ESP32 2.x (recomendado).
   - NimBLE-Arduino instalado.
 
-  Versao: 1.1.7 (2026-02-24)
+  Versao: 1.1.8 (2026-02-25)
   - Prefixo DUAL por comando (nao altera DUALON/OFF global).
   - Mantem DUALON/DUALOFF e desativa DUAL ao desconectar BLE.
   - Novo comando DUALX para dois canais com comandos distintos.
   - HOLDOFF limpa fila de comandos para evitar restart por fila.
+  - HOLDOFF prioritario interrompe bursts RF rapidamente.
   - Niveis 0 sao sempre anulados (sem RF).
 */
 
@@ -34,6 +35,12 @@
 
 #include <NimBLEDevice.h>
 #include <NimBLEServer.h>
+
+// Forward decls for priority HOLDOFF handling in RF bursts.
+static void safetyHoldOff_core1();
+static bool tryImmediateHoldoff();
+extern volatile bool safetyStopRequested;
+extern volatile bool holdoffRequested;
 
 // ---------------------
 // Pinos / Constantes
@@ -141,17 +148,27 @@ static void sendFrame_once(uint64_t frame) {
 
 static void sendCommandBurst(uint64_t frame, uint8_t times = SINGLE_SHOT_FRAMES_DEFAULT) {
   for (uint8_t i=0;i<times;i++){
+    if (tryImmediateHoldoff()) return;
     sendFrame_once(frame);
-    if (i+1 < times) delay(SINGLE_SHOT_GAP_MS);
+    if (i+1 < times) {
+      if (tryImmediateHoldoff()) return;
+      delay(SINGLE_SHOT_GAP_MS);
+    }
   }
 }
 
 static void sendCommandBurstDualInterleaved(uint64_t frame1, uint64_t frame2, uint8_t times = SINGLE_SHOT_FRAMES_DEFAULT) {
   for (uint8_t i=0;i<times;i++){
+    if (tryImmediateHoldoff()) return;
     sendFrame_once(frame1);
+    if (tryImmediateHoldoff()) return;
     delay(SINGLE_SHOT_GAP_MS);
+    if (tryImmediateHoldoff()) return;
     sendFrame_once(frame2);
-    if (i+1 < times) delay(SINGLE_SHOT_GAP_MS);
+    if (i+1 < times) {
+      if (tryImmediateHoldoff()) return;
+      delay(SINGLE_SHOT_GAP_MS);
+    }
   }
 }
 
@@ -401,7 +418,8 @@ static QueueHandle_t qCmd = nullptr;   // BLE RX -> Core1
 static QueueHandle_t qTx  = nullptr;   // Core1 -> Core0 notify
 
 static TaskHandle_t rfTaskHandle = nullptr;
-static volatile bool safetyStopRequested = false;
+volatile bool safetyStopRequested = false;
+volatile bool holdoffRequested = false;
 
 struct CmdMsg {
   char line[96];
@@ -559,6 +577,14 @@ static void safetyHoldOff_core1(){
   uiLogLine("SAFETY HOLDOFF");
 
   enqueueTx("OK HOLDOFF");
+}
+
+static bool tryImmediateHoldoff(){
+  if (!safetyStopRequested && !holdoffRequested) return false;
+  safetyStopRequested = false;
+  holdoffRequested = false;
+  safetyHoldOff_core1();
+  return true;
 }
 
 // ---------------------
@@ -827,9 +853,9 @@ static void rfTask(void* pv) {
 
   for (;;) {
     // Safety stop (disconnect)
-    if (safetyStopRequested) {
-      safetyStopRequested = false;
-      safetyHoldOff_core1();
+    if (tryImmediateHoldoff()) {
+      vTaskDelay(1);
+      continue;
     }
 
     // Prioridade: consumir comando imediatamente se houver
@@ -947,6 +973,12 @@ private:
     if (!pendingLine.length()) {
       pendingLine = "";
       return;
+    }
+
+    String up = pendingLine;
+    up.toUpperCase();
+    if (up.startsWith("HOLDOFF")) {
+      holdoffRequested = true;
     }
 
     char buf[CMD_LINE_BUF];

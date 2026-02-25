@@ -1,4 +1,4 @@
-﻿<!-- CONTROLE MANUAL v3.5 (Flowgate/Chat Bus; clique = comando unico; segurar = HOLD; sem Firebase; toggle DUALON/OFF + sync serial) -->
+﻿<!-- CONTROLE MANUAL v3.6 (Flowgate/Chat Bus; clique = comando unico; segurar = HOLD; sem Firebase; toggle DUALON/OFF + sync serial; modo com cor ativa/hover) -->
 <style>
   #remoteControlWrapper {
     position: fixed;
@@ -360,7 +360,6 @@
   }
   .mode-toggle {
     max-width: 420px;
-    width: 100%;
     display: flex;
     flex-wrap: wrap;
     gap: 10px;
@@ -402,16 +401,18 @@
   .mode-btn {
     --mc-color: #4d71ff;
     --mc-tint: rgba(77,113,255,0.12);
-    border: 1px solid rgba(255,255,255,0.08);
+    --mc-neutral-color: #9ca3af;
+    --mc-neutral-tint: rgba(148,163,184,0.12);
+    border: 1px solid rgba(148,163,184,0.25);
     border-radius: 14px;
-    background: linear-gradient(120deg, var(--mc-tint), rgba(12,12,14,0.95));
+    background: linear-gradient(120deg, var(--mc-neutral-tint), rgba(12,12,14,0.95));
     color: #e5e7eb;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     padding: 10px;
     min-width: 70px;
-    transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+    transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease, background .2s ease;
     box-shadow: 0 6px 16px rgba(0,0,0,0.28);
   }
   .mode-btn .mode-icon {
@@ -419,17 +420,25 @@
     align-items: center;
     justify-content: center;
     font-size: 2.5rem;
-    color: var(--mc-color);
+    color: var(--mc-neutral-color);
   }
   .mode-btn:hover {
     border-color: var(--mc-color);
+    background: linear-gradient(120deg, var(--mc-tint), rgba(12,12,14,0.95));
     box-shadow: 0 10px 22px rgba(0,0,0,0.35);
     transform: translateY(-1px);
+  }
+  .mode-btn:hover .mode-icon {
+    color: var(--mc-color);
   }
   .mode-btn.active {
     border-color: var(--mc-color);
     border-width: 2px;
+    background: linear-gradient(120deg, var(--mc-tint), rgba(12,12,14,0.95));
     box-shadow: 0 0 0 2px rgba(255,255,255,0.12), 0 12px 26px rgba(0,0,0,0.4);
+  }
+  .mode-btn.active .mode-icon {
+    color: var(--mc-color);
   }
   .mode-btn[data-mode="SHOCK"] { --mc-color: #f97316; --mc-tint: rgba(249,115,22,0.16); }
   .mode-btn[data-mode="VIBRATION"] { --mc-color: #10b981; --mc-tint: rgba(16,185,129,0.18); }
@@ -610,7 +619,7 @@
     position: relative;
     z-index: 1;
     overflow: hidden;
-    border: 3px solid rgba(239,68,68,0.65);
+    border: 3px solid transparent;
     background-color: #2a0d12 !important;
     background-image: linear-gradient(120deg, #4a141c, #220b11) !important;
     opacity: 1 !important;
@@ -622,11 +631,13 @@
   .btn-send:hover {
     background-color: #341018 !important;
     background-image: linear-gradient(120deg, #5a1a24, #2a0f15) !important;
+    border-color: rgba(239,68,68,0.75);
     opacity: 1 !important;
   }
   .btn-send:focus,
   .btn-send:focus-visible {
     outline: none;
+    border-color: rgba(239,68,68,0.75);
     box-shadow:
       inset 0 1px 0 rgba(255,255,255,0.08),
       0 8px 18px rgba(239,68,68,0.22),
@@ -646,6 +657,7 @@
     background-color: #be123c !important;
     background-image: linear-gradient(120deg, #ef4444, #be123c) !important;
     color: #fff !important;
+    border-color: rgba(239,68,68,0.85);
     box-shadow:
       inset 0 1px 0 rgba(255,255,255,0.08),
       0 10px 26px rgba(239,68,68,0.45),
@@ -712,9 +724,9 @@
     min-height: 48px;
     padding: 10px;
     border-radius: 14px;
-    border: 1px solid rgba(168,85,247,0.35);
-    background: linear-gradient(120deg, var(--sb-tint), rgba(12,12,14,0.92));
-    color: #f0fdfa;
+    border: 1px solid rgba(148,163,184,0.35);
+    background: linear-gradient(120deg, rgba(148,163,184,0.12), rgba(12,12,14,0.92));
+    color: #e5e7eb;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -722,7 +734,7 @@
     transition: transform .15s ease, box-shadow .2s ease, border-color .15s ease, background .15s ease, color .12s ease;
   }
   .btn-scoreboard-toggle i {
-    color: var(--sb-color);
+    color: #9ca3af;
     transition: color .12s ease;
   }
   .btn-scoreboard-toggle:hover {
@@ -731,6 +743,9 @@
     color: #ecfeff;
     box-shadow: 0 10px 22px rgba(0,0,0,0.32);
     transform: translateY(-1px);
+  }
+  .btn-scoreboard-toggle:hover i {
+    color: var(--sb-color);
   }
   .btn-scoreboard-toggle:focus-visible {
     outline: none;
@@ -744,7 +759,7 @@
     box-shadow: 0 0 0 2px rgba(34,211,238,0.28), 0 8px 20px rgba(0,0,0,0.35);
   }
   .btn-scoreboard-toggle.active i {
-    color: #ecfeff;
+    color: var(--sb-color);
   }
   .btn-audio-toggle {
     --audio-color: #38bdf8;
@@ -754,9 +769,9 @@
     min-height: 48px;
     padding: 10px;
     border-radius: 14px;
-    border: 1px solid rgba(56,189,248,0.35);
-    background: linear-gradient(120deg, var(--audio-tint), rgba(12,12,14,0.92));
-    color: #f0fdfa;
+    border: 1px solid rgba(148,163,184,0.35);
+    background: linear-gradient(120deg, rgba(148,163,184,0.12), rgba(12,12,14,0.92));
+    color: #e5e7eb;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -764,7 +779,7 @@
     transition: transform .15s ease, box-shadow .2s ease, border-color .15s ease, background .15s ease, color .12s ease;
   }
   .btn-audio-toggle i {
-    color: var(--audio-color);
+    color: #9ca3af;
     transition: color .12s ease;
   }
   .btn-audio-toggle:hover {
@@ -773,6 +788,9 @@
     color: #ecfeff;
     box-shadow: 0 10px 22px rgba(0,0,0,0.32);
     transform: translateY(-1px);
+  }
+  .btn-audio-toggle:hover i {
+    color: var(--audio-color);
   }
   .btn-audio-toggle:focus-visible {
     outline: none;
@@ -786,7 +804,7 @@
     box-shadow: 0 0 0 2px rgba(56,189,248,0.28), 0 8px 20px rgba(0,0,0,0.35);
   }
   .btn-audio-toggle.active i {
-    color: #ecfeff;
+    color: var(--audio-color);
   }
   .btn-naval-toggle {
     --naval-color: #f97316;
@@ -796,9 +814,9 @@
     min-height: 48px;
     padding: 10px;
     border-radius: 14px;
-    border: 1px solid rgba(249,115,22,0.35);
-    background: linear-gradient(120deg, var(--naval-tint), rgba(12,12,14,0.92));
-    color: #fff7ed;
+    border: 1px solid rgba(148,163,184,0.35);
+    background: linear-gradient(120deg, rgba(148,163,184,0.12), rgba(12,12,14,0.92));
+    color: #e5e7eb;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -806,7 +824,7 @@
     transition: transform .15s ease, box-shadow .2s ease, border-color .15s ease, background .15s ease, color .12s ease;
   }
   .btn-naval-toggle i {
-    color: var(--naval-color);
+    color: #9ca3af;
     transition: color .12s ease;
   }
   .btn-naval-toggle:hover {
@@ -815,6 +833,9 @@
     color: #fff7ed;
     box-shadow: 0 10px 22px rgba(0,0,0,0.32);
     transform: translateY(-1px);
+  }
+  .btn-naval-toggle:hover i {
+    color: var(--naval-color);
   }
   .btn-naval-toggle:focus-visible {
     outline: none;
@@ -828,7 +849,7 @@
     box-shadow: 0 0 0 2px rgba(249,115,22,0.28), 0 8px 20px rgba(0,0,0,0.35);
   }
   .btn-naval-toggle.active i {
-    color: #fff7ed;
+    color: var(--naval-color);
   }
   .btn-pulse-toggle {
     --pulse-color: #14b8a6;
@@ -838,9 +859,9 @@
     min-height: 48px;
     padding: 10px;
     border-radius: 14px;
-    border: 1px solid rgba(20,184,166,0.35);
-    background: linear-gradient(120deg, var(--pulse-tint), rgba(12,12,14,0.92));
-    color: #ecfdf5;
+    border: 1px solid rgba(148,163,184,0.35);
+    background: linear-gradient(120deg, rgba(148,163,184,0.12), rgba(12,12,14,0.92));
+    color: #e5e7eb;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -848,7 +869,7 @@
     transition: transform .15s ease, box-shadow .2s ease, border-color .15s ease, background .15s ease, color .12s ease;
   }
   .btn-pulse-toggle i {
-    color: var(--pulse-color);
+    color: #9ca3af;
     transition: color .12s ease;
   }
   .btn-pulse-toggle:hover {
@@ -857,6 +878,9 @@
     color: #ecfdf5;
     box-shadow: 0 10px 22px rgba(0,0,0,0.32);
     transform: translateY(-1px);
+  }
+  .btn-pulse-toggle:hover i {
+    color: var(--pulse-color);
   }
   .btn-pulse-toggle:focus-visible {
     outline: none;
@@ -870,7 +894,7 @@
     box-shadow: 0 0 0 2px rgba(20,184,166,0.28), 0 8px 20px rgba(0,0,0,0.35);
   }
   .btn-pulse-toggle.active i {
-    color: #ecfdf5;
+    color: var(--pulse-color);
   }
   .btn-video-toggle {
     --video-color: #f43f5e;
@@ -880,9 +904,9 @@
     min-height: 48px;
     padding: 10px;
     border-radius: 14px;
-    border: 1px solid rgba(244,63,94,0.35);
-    background: linear-gradient(120deg, var(--video-tint), rgba(12,12,14,0.92));
-    color: #ffe4e6;
+    border: 1px solid rgba(148,163,184,0.35);
+    background: linear-gradient(120deg, rgba(148,163,184,0.12), rgba(12,12,14,0.92));
+    color: #e5e7eb;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -890,7 +914,7 @@
     transition: transform .15s ease, box-shadow .2s ease, border-color .15s ease, background .15s ease, color .12s ease;
   }
   .btn-video-toggle i {
-    color: var(--video-color);
+    color: #9ca3af;
     transition: color .12s ease;
   }
   .btn-video-toggle:hover {
@@ -899,6 +923,9 @@
     color: #ffe4e6;
     box-shadow: 0 10px 22px rgba(0,0,0,0.32);
     transform: translateY(-1px);
+  }
+  .btn-video-toggle:hover i {
+    color: var(--video-color);
   }
   .btn-video-toggle:focus-visible {
     outline: none;
@@ -912,7 +939,7 @@
     box-shadow: 0 0 0 2px rgba(244,63,94,0.28), 0 8px 20px rgba(0,0,0,0.35);
   }
   .btn-video-toggle.active i {
-    color: #ffe4e6;
+    color: var(--video-color);
   }
   .btn-chart-toggle {
     --chart-color: #4d71ff;
@@ -922,9 +949,9 @@
     min-height: 48px;
     padding: 10px;
     border-radius: 14px;
-    border: 1px solid rgba(77,113,255,0.35);
-    background: linear-gradient(120deg, var(--chart-tint), rgba(12,12,14,0.92));
-    color: #f0fdfa;
+    border: 1px solid rgba(148,163,184,0.35);
+    background: linear-gradient(120deg, rgba(148,163,184,0.12), rgba(12,12,14,0.92));
+    color: #e5e7eb;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -932,7 +959,7 @@
     transition: transform .15s ease, box-shadow .2s ease, border-color .15s ease, background .15s ease, color .12s ease;
   }
   .btn-chart-toggle i {
-    color: var(--chart-color);
+    color: #9ca3af;
     transition: color .12s ease;
   }
   .btn-chart-toggle:hover {
@@ -941,6 +968,9 @@
     color: #ecfeff;
     box-shadow: 0 10px 22px rgba(0,0,0,0.32);
     transform: translateY(-1px);
+  }
+  .btn-chart-toggle:hover i {
+    color: var(--chart-color);
   }
   .btn-chart-toggle:focus-visible {
     outline: none;
@@ -954,7 +984,7 @@
     box-shadow: 0 0 0 2px rgba(77,113,255,0.28), 0 8px 20px rgba(0,0,0,0.35);
   }
   .btn-chart-toggle.active i {
-    color: #ecfeff;
+    color: var(--chart-color);
   }
   .btn-ramp-toggle {
     --ramp-color: #22d3ee;
@@ -964,9 +994,9 @@
     min-height: 48px;
     padding: 10px;
     border-radius: 14px;
-    border: 1px solid rgba(34,211,238,0.35);
-    background: linear-gradient(120deg, var(--ramp-tint), rgba(12,12,14,0.92));
-    color: #ecfeff;
+    border: 1px solid rgba(148,163,184,0.35);
+    background: linear-gradient(120deg, rgba(148,163,184,0.12), rgba(12,12,14,0.92));
+    color: #e5e7eb;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -974,7 +1004,7 @@
     transition: transform .15s ease, box-shadow .2s ease, border-color .15s ease, background .15s ease, color .12s ease;
   }
   .btn-ramp-toggle i {
-    color: var(--ramp-color);
+    color: #9ca3af;
     transition: color .12s ease;
   }
   .btn-ramp-toggle:hover {
@@ -983,6 +1013,9 @@
     color: #ecfeff;
     box-shadow: 0 10px 22px rgba(0,0,0,0.32);
     transform: translateY(-1px);
+  }
+  .btn-ramp-toggle:hover i {
+    color: var(--ramp-color);
   }
   .btn-ramp-toggle:focus-visible {
     outline: none;
@@ -996,7 +1029,7 @@
     box-shadow: 0 0 0 2px rgba(34,211,238,0.28), 0 8px 20px rgba(0,0,0,0.35);
   }
   .btn-ramp-toggle.active i {
-    color: #ecfeff;
+    color: var(--ramp-color);
   }
   .control-collapse-btn {
     position: relative;
@@ -1145,14 +1178,21 @@
     pointer-events: none;
     z-index: -1;
   }
+  .control-readouts-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+  }
   .control-readouts {
     display: flex;
     gap: 1rem;
     flex-wrap: wrap;
     align-items: flex-start;
     justify-content: flex-start;
-    margin-bottom: 1rem;
     width: 100%;
+    flex: 1 1 320px;
   }
   .control-readout {
     width: fit-content;
@@ -1161,6 +1201,14 @@
   }
   .control-readout-led {
     align-self: center;
+  }
+  .control-action-group .control-readout-led {
+    display: inline-flex;
+    align-items: center;
+  }
+  .control-action-group .control-readout-value.control-led-value {
+    font-size: 1rem;
+    line-height: 1;
   }
   .control-readout-label {
     font-size: 0.78rem;
@@ -1189,6 +1237,9 @@
       -webkit-backdrop-filter: none;
       background: rgba(5,7,12,0.9);
       box-shadow: none !important;
+    }
+    .control-readouts-bar {
+      justify-content: center;
     }
     .control-readouts {
       justify-content: center;
@@ -1399,7 +1450,10 @@
           <button id="interfaceSoundToggle" class="control-collapse-btn" aria-label="Mutar sons" title="Mutar sons" data-bs-toggle="tooltip" aria-pressed="false">
             <i class="fa-solid fa-volume-high"></i>
           </button>
-          <button id="toggleControl" class="control-collapse-btn" aria-label="Fixar controle na tela" title="Fixar controle na tela" data-bs-toggle="tooltip">
+          <button id="serialConnectBtn" class="control-collapse-btn host-only" aria-label="Conectar dispositivo" title="Conectar dispositivo" data-bs-toggle="tooltip">
+            <i class="fa-solid fa-link"></i>
+          </button>
+          <button id="toggleControl" class="control-collapse-btn host-only" aria-label="Fixar controle na tela" title="Fixar controle na tela" data-bs-toggle="tooltip">
             <i class="fa-solid fa-thumbtack"></i>
           </button>
         </div>
@@ -1423,89 +1477,85 @@
             <span id="serial-conn-state">fechada</span></span>
             <span class="status-icon"><i class="fa-solid fa-microchip"></i></span>
             <div id="serial-device-list" class="serial-device-list"></div>
-            <span id="serial-device-empty" class="serial-device-empty">nenhum</span>
+            <span id="serial-device-empty" class="serial-device-empty">-</span>
           </div>
         </div>
           <div class="control-peer-list">
-            <span class="status-label">Usuários</span>
+            <span class="status-label">Online</span>
             <div id="fg-peer-list" class="d-flex align-items-center flex-wrap gap-2"></div>
-            <span id="fg-peer-empty" class="text-muted small">nenhum peer</span>
+            <span id="fg-peer-empty" class="text-muted small">-</span>
           </div>
         </div>
       </div>
-      <div class="control-readouts my-3">
-        <div class="control-readout">
-          <div class="control-readout-label">Modo</div>
-        <div id="modeReadout" class="control-readout-value">Modo Atual</div>
-        </div>
-        <div class="control-readout control-readout-led">
-          <div class="control-readout-value control-led-value">
-            <div id="controlExecLed" class="adv-led led-off" title="Execucao de comandos"></div>
+      <div class="control-readouts-bar my-3">
+        <div class="control-readouts">
+          <div class="control-readout">
+            <div class="control-readout-label">Modo</div>
+          <div id="modeReadout" class="control-readout-value">Modo Atual</div>
+          </div>
+          <div class="control-readout">
+            <div class="control-readout-label">Intensidade</div>
+            <div id="intensityReadout" class="control-readout-value">0%</div>
+          </div>
+          <div class="control-readout">
+            <div class="control-readout-label">Canal</div>
+          <div id="channelReadout" class="control-readout-value">Canal 1</div>
+          </div>
+          <div class="control-readout">
+            <div class="control-readout-label">Duracao</div>
+            <div id="durationReadout" class="control-readout-value">—</div>
+          </div>
+          <div class="control-readout">
+            <div class="control-readout-label">Pulsos</div>
+            <div id="pulsesReadout" class="control-readout-value">-</div>
           </div>
         </div>
-        <div class="control-readout">
-          <div class="control-readout-label">Intensidade</div>
-          <div id="intensityReadout" class="control-readout-value">0%</div>
-        </div>
-        <div class="control-readout">
-          <div class="control-readout-label">Canal</div>
-        <div id="channelReadout" class="control-readout-value">Canal 1</div>
-        </div>
-        <div class="control-readout">
-          <div class="control-readout-label">Duracao</div>
-          <div id="durationReadout" class="control-readout-value">—</div>
-        </div>
-        <div class="control-readout">
-          <div class="control-readout-label">Pulsos</div>
-          <div id="pulsesReadout" class="control-readout-value">-</div>
+        <div class="module-btn-group">
+          <button id="btnScoreboardToggle" class="btn btn-scoreboard-toggle" title="Mostrar placar" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
+            <i class="fa-solid fa-flag-checkered"></i>
+          </button>
+
+          <button id="btnAudioToggle" class="btn btn-audio-toggle" title="Mostrar audio" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
+            <i class="fa-solid fa-headphones"></i>
+          </button>
+
+          <button id="btnNavalToggle" class="btn btn-naval-toggle" title="Mostrar Batalha Naval" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
+            <i class="fa-solid fa-ship"></i>
+          </button>
+
+          <button id="btnPulseToggle" class="btn btn-pulse-toggle" title="Mostrar Sequenciador" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
+            <i class="fa-solid fa-sliders"></i>
+          </button>
+
+          <button id="btnVideoToggle" class="btn btn-video-toggle" title="Mostrar Video" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
+            <i class="fa-solid fa-clapperboard"></i>
+          </button>
+          <button id="btnChartToggle" class="btn btn-chart-toggle" title="Exibir/ocultar grafico" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
+            <i class="fa-solid fa-chart-line"></i>
+          </button>
+          <button id="btnRampToggle" class="btn btn-ramp-toggle" title="Mostrar ramping control" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
+            <i class="fa-solid fa-gauge-high"></i>
+          </button>
         </div>
       </div>
       <div id="controlContent" class="control-row mb-3">
-    <div class="btn-group mode-toggle" role="group" aria-label="Modo">
-      <button class="mode-btn" data-mode="SHOCK" title="Choque" data-bs-toggle="tooltip">
-        <span class="mode-icon"><i class="fa-solid fa-bolt-lightning"></i></span>
-      </button>
-      <button class="mode-btn" data-mode="VIBRATION" title="Vibracao" data-bs-toggle="tooltip">
-        <span class="mode-icon"><i class="fa-solid fa-mobile-screen-button"></i></span>
-      </button>
-      <button class="mode-btn" data-mode="LIGHT" title="Luz (LED)" data-bs-toggle="tooltip">
-        <span class="mode-icon"><i class="fa-solid fa-lightbulb"></i></span>
-      </button>
-      <button class="mode-btn" data-mode="BEEP" title="Som (Beep)" data-bs-toggle="tooltip">
-        <span class="mode-icon"><i class="fa-solid fa-volume-high"></i></span>
-      </button>
-      <button class="mode-btn" data-mode="ROULETTE" title="Roleta" data-bs-toggle="tooltip">
-        <span class="mode-icon"><i class="fa-solid fa-dice"></i></span>
-      </button>
-    </div>
-
-    <div class="module-btn-group">
-      <button id="btnScoreboardToggle" class="btn btn-scoreboard-toggle" title="Mostrar placar" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
-        <i class="fa-solid fa-flag-checkered"></i>
-      </button>
-
-      <button id="btnAudioToggle" class="btn btn-audio-toggle" title="Mostrar audio" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
-        <i class="fa-solid fa-headphones"></i>
-      </button>
-
-      <button id="btnNavalToggle" class="btn btn-naval-toggle" title="Mostrar Batalha Naval" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
-        <i class="fa-solid fa-ship"></i>
-      </button>
-
-      <button id="btnPulseToggle" class="btn btn-pulse-toggle" title="Mostrar Sequenciador" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
-        <i class="fa-solid fa-sliders"></i>
-      </button>
-
-      <button id="btnVideoToggle" class="btn btn-video-toggle" title="Mostrar Video" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
-        <i class="fa-solid fa-clapperboard"></i>
-      </button>
-      <button id="btnChartToggle" class="btn btn-chart-toggle" title="Exibir/ocultar gráfico" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
-        <i class="fa-solid fa-chart-line"></i>
-      </button>
-      <button id="btnRampToggle" class="btn btn-ramp-toggle" title="Mostrar ramping control" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
-        <i class="fa-solid fa-gauge-high"></i>
-      </button>
-    </div>
+        <div class="btn-group mode-toggle" role="group" aria-label="Modo">
+          <button class="mode-btn" data-mode="SHOCK" title="Choque" data-bs-toggle="tooltip">
+            <span class="mode-icon"><i class="fa-solid fa-bolt-lightning"></i></span>
+          </button>
+          <button class="mode-btn" data-mode="VIBRATION" title="Vibracao" data-bs-toggle="tooltip">
+            <span class="mode-icon"><i class="fa-solid fa-mobile-screen-button"></i></span>
+          </button>
+          <button class="mode-btn" data-mode="LIGHT" title="Luz (LED)" data-bs-toggle="tooltip">
+            <span class="mode-icon"><i class="fa-solid fa-lightbulb"></i></span>
+          </button>
+          <button class="mode-btn" data-mode="BEEP" title="Som (Beep)" data-bs-toggle="tooltip">
+            <span class="mode-icon"><i class="fa-solid fa-volume-high"></i></span>
+          </button>
+          <button class="mode-btn" data-mode="ROULETTE" title="Roleta" data-bs-toggle="tooltip">
+            <span class="mode-icon"><i class="fa-solid fa-dice"></i></span>
+          </button>
+        </div>
 
     <div class="control-action-group">
       <div class="channel-switch form-check form-switch m-0">
@@ -1514,6 +1564,12 @@
           <input class="form-check-input" type="checkbox" id="chanSwitch" aria-label="Canal 1 ou 2" title="Canal 1 ou 2" data-bs-toggle="tooltip"/>
           <span id="channelSwitchValue" class="channel-switch-value">1</span>
         </span>
+      </div>
+
+      <div class="control-readout control-readout-led">
+        <div class="control-readout-value control-led-value">
+          <div id="controlExecLed" class="adv-led led-off" title="Execucao de comandos"></div>
+        </div>
       </div>
 
       <div id="btnSendShell" class="btn-send-shell">
@@ -4192,6 +4248,7 @@
   const toggleBtn = $("#toggleControl");
   const flowgateModalBtn = $("#flowgateModalBtn");
   const serialModalBtn = $("#serialModalBtn");
+  const serialConnectBtn = $("#serialConnectBtn");
   const keepawakeModalBtn = $("#keepawakeModalBtn");
   const interfaceSoundBtn = $("#interfaceSoundToggle");
   const wrapperEl = $("#remoteControlWrapper");
@@ -4540,6 +4597,86 @@
       openSerialModalFromControl();
     });
   }
+
+  function syncSerialConnectShortcut() {
+    if (!serialConnectBtn) return;
+    const wsConnect = document.getElementById("wsConnect");
+    const wsDisconnect = document.getElementById("wsDisconnect");
+    if (!wsConnect || !wsDisconnect) {
+      serialConnectBtn.disabled = true;
+      return;
+    }
+    const isConnected = !!(window.SerialBridge && window.SerialBridge.isConnected || window.serialConnected || (window.port && window.port.writable));
+    const useDisconnect = isConnected || (wsConnect.disabled && !wsDisconnect.disabled);
+    serialConnectBtn.disabled = useDisconnect ? !!wsDisconnect.disabled : !!wsConnect.disabled;
+    const label = useDisconnect ? "Desconectar dispositivo" : "Conectar dispositivo";
+    const icon = serialConnectBtn.querySelector("i");
+    if (icon) {
+      icon.className = useDisconnect ? "fa-solid fa-link-slash" : "fa-solid fa-link";
+    }
+    serialConnectBtn.setAttribute("aria-label", label);
+    serialConnectBtn.setAttribute("title", label);
+    serialConnectBtn.setAttribute("data-bs-original-title", label);
+    refreshTooltipContent(serialConnectBtn, label);
+  }
+
+  function bindSerialConnectObserver() {
+    const wsConnect = document.getElementById("wsConnect");
+    const wsDisconnect = document.getElementById("wsDisconnect");
+    if (!wsConnect || !wsDisconnect) return false;
+    syncSerialConnectShortcut();
+    const observer = new MutationObserver(() => syncSerialConnectShortcut());
+    observer.observe(wsConnect, { attributes: true, attributeFilter: ["disabled"] });
+    observer.observe(wsDisconnect, { attributes: true, attributeFilter: ["disabled"] });
+    return true;
+  }
+
+  if (serialConnectBtn) {
+    serialConnectBtn.addEventListener("click", () => {
+      syncSerialConnectShortcut();
+      if (serialConnectBtn.disabled) return;
+      const isConnected = !!(window.SerialBridge && window.SerialBridge.isConnected || window.serialConnected || (window.port && window.port.writable));
+      const useDisconnect = isConnected;
+      const tryConnect = () => {
+        const connectBtn = document.getElementById("wsConnect");
+        if (connectBtn && !connectBtn.disabled && typeof connectBtn.click === "function") {
+          connectBtn.click();
+          return true;
+        }
+        return false;
+      };
+      const tryDisconnect = () => {
+        const disconnectBtn = document.getElementById("wsDisconnect");
+        if (disconnectBtn && !disconnectBtn.disabled && typeof disconnectBtn.click === "function") {
+          disconnectBtn.click();
+          return true;
+        }
+        return false;
+      };
+      if (useDisconnect) {
+        if (!tryDisconnect()) {
+          openSerialModalFromControl();
+          setTimeout(() => { tryDisconnect(); }, 0);
+        }
+      } else if (!tryConnect()) {
+        openSerialModalFromControl();
+        setTimeout(() => { tryConnect(); }, 0);
+      }
+    });
+  }
+
+  if (!bindSerialConnectObserver()) {
+    let tries = 0;
+    const serialConnectTimer = setInterval(() => {
+      tries += 1;
+      if (bindSerialConnectObserver() || tries > 20) clearInterval(serialConnectTimer);
+    }, 300);
+  }
+
+  window.addEventListener("serial-connected", syncSerialConnectShortcut);
+  window.addEventListener("serial:connected", syncSerialConnectShortcut);
+  window.addEventListener("serial-disconnected", syncSerialConnectShortcut);
+  window.addEventListener("serial:disconnected", syncSerialConnectShortcut);
 
   if (keepawakeModalBtn) {
     keepawakeModalBtn.addEventListener("click", () => {

@@ -369,24 +369,24 @@
     log("Servidor GATT conectado.");
 
     const service = await server.getPrimaryService(SERVICE_UUID);
-    log("Servi??o UART (NUS) encontrado.");
+    log("Serviço UART (NUS) encontrado.");
 
     const [charTx, charRx] = await Promise.all([
         service.getCharacteristic(CHAR_TX_UUID),
         service.getCharacteristic(CHAR_RX_UUID)
     ]);
     
-    // Verifica permiss??es do characteristic RX
+    // Verifica permissões do characteristic RX
     let rxProps = charRx.properties || {};
     if (!rxProps.write && !rxProps.writeWithoutResponse) {
-      log("Aten????o: Caracter??stica RX n??o suporta escrita!", "warn");
+      log("Atenção: Característica RX não suporta escrita!", "warn");
     }
     state.bleCharTx = charTx;
     state.bleCharRx = charRx;
-    log("Caracter??sticas RX/TX encontradas.");
+    log("Características RX/TX encontradas.");
 
     await charTx.startNotifications();
-    log("Inscri????o para notifica????es ativada (TX).");
+    log("Inscrição para notificações ativada (TX).");
 
     state.bleNotifyAbort = new AbortController();
     charTx.addEventListener('characteristicvaluechanged', handleBLENotifications, { signal: state.bleNotifyAbort.signal });
@@ -396,12 +396,12 @@
     state.userDisconnect = false;
     syncGlobals();
     window.dispatchEvent(new Event("serial-connected"));
-    log('Conex??o BLE estabelecida com ' + (device.name || '(sem nome)'));
+    log('Conexão BLE estabelecida com ' + (device.name || '(sem nome)'));
   }
 
   async function connectBLE() {
     const SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
-    log("Procurando por dispositivos BLE com o servi??o UART...");
+    log("Procurando por dispositivos BLE com o serviço UART...");
     let device;
     try {
       device = await navigator.bluetooth.requestDevice({
@@ -410,7 +410,7 @@
       });
       if (!device) throw new Error("Nenhum dispositivo selecionado.");
     } catch (e) {
-      throw new Error(`Sele????o de dispositivo BLE falhou: ${e.message}`);
+      throw new Error(`Seleção de dispositivo BLE falhou: ${e.message}`);
     }
 
     log(`Dispositivo selecionado: ${device.name || 'ID: ' + device.id}`);
@@ -1150,7 +1150,7 @@
           <label class="form-check-label small" for="lmWrap">Quebra</label>
         </div>
         <div class="ms-2 d-flex align-items-center gap-1">
-          <label class="small">N├¡vel</label>
+          <label class="small">Nível</label>
           <select id="lmLevel" class="form-select form-select-sm" style="width:auto;">
             <option value="all" selected />Tudo
             <option value="info" />Info
@@ -1185,7 +1185,7 @@
   let paused = false;
   let autoscroll = true;
   let filterLevel = "all";
-  const buffer = []; // mant├®m texto para copiar/salvar
+  const buffer = []; // mantém texto para copiar/salvar
   const MAX_LOG_LINES = 800;
   const MAX_LOG_VIEW_LINES = 800;
 
@@ -1217,7 +1217,7 @@
     line.style.color = colorFor(level);
     view.appendChild(line);
 
-    // guarda vers├úo ÔÇ£cruaÔÇØ (sem cor) para export/copy
+    // guarda versão “crua” (sem cor) para export/copy
     buffer.push(`${ts}${level.toUpperCase()}: ${text}`);
     if (buffer.length > MAX_LOG_LINES) {
       buffer.splice(0, buffer.length - MAX_LOG_LINES);
@@ -1278,8 +1278,8 @@
   });
 
   // ===== API Global =====
-  // appLog(msg, level="info") ÔÇö n├¡vel: "info"|"warn"|"error"
-  // Tamb├®m aceita CustomEvent('app-log', {detail:{msg, level}})
+  // appLog(msg, level="info") — nível: "info"|"warn"|"error"
+  // Também aceita CustomEvent('app-log', {detail:{msg, level}})
   const originalConsole = {
     log:   console.log.bind(console),
     warn:  console.warn.bind(console),
@@ -1300,7 +1300,7 @@
     } catch(_) {}
   }
 
-  // exp├Áe global
+  // expõe global
   window.appLog = appLog;
 
   // escuta eventos personalizados
@@ -1314,7 +1314,7 @@
   console.warn = (...args) => { originalConsole.warn(...args); appLog(args.map(String).join(" "), "warn"); };
   console.error = (...args) => { originalConsole.error(...args); appLog(args.map(String).join(" "), "error"); };
 
-  // Integra├º├úo opcional: tamb├®m mostra linhas vindas do Serial (se existir)
+  // Integração opcional: também mostra linhas vindas do Serial (se existir)
   const prevLogSerialLine = window.logSerialLine;
   window.logSerialLine = function(line){
     try {

@@ -133,6 +133,7 @@
   .pulse-sequencer-slot,
   .video-player-slot,
   .ramp-module-slot,
+  .voice-command-slot,
   .custom-buttons-slot {
     width: 100%;
   }
@@ -364,6 +365,8 @@
     flex-wrap: wrap;
     gap: 10px;
     justify-content: flex-start;
+    border: 3px solid rgba(128, 128, 128, 0.3);
+    border-radius: 16px;
   }
   .module-btn-group {
     display: flex;
@@ -403,9 +406,9 @@
     --mc-tint: rgba(77,113,255,0.12);
     --mc-neutral-color: #9ca3af;
     --mc-neutral-tint: rgba(148,163,184,0.12);
-    border: 1px solid rgba(148,163,184,0.25);
+    border: none;
     border-radius: 14px;
-    background: linear-gradient(120deg, var(--mc-neutral-tint), rgba(12,12,14,0.95));
+    background: transparent;
     color: #e5e7eb;
     display: inline-flex;
     align-items: center;
@@ -413,7 +416,7 @@
     padding: 10px;
     min-width: 70px;
     transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease, background .2s ease;
-    box-shadow: 0 6px 16px rgba(0,0,0,0.28);
+    box-shadow: none;
   }
   .mode-btn .mode-icon {
     display: inline-flex;
@@ -423,7 +426,7 @@
     color: var(--mc-neutral-color);
   }
   .mode-btn:hover {
-    border-color: var(--mc-color);
+    border: 1px solid var(--mc-color);
     background: linear-gradient(120deg, var(--mc-tint), rgba(12,12,14,0.95));
     box-shadow: 0 10px 22px rgba(0,0,0,0.35);
     transform: translateY(-1px);
@@ -432,8 +435,7 @@
     color: var(--mc-color);
   }
   .mode-btn.active {
-    border-color: var(--mc-color);
-    border-width: 2px;
+    border: 2px solid var(--mc-color);
     background: linear-gradient(120deg, var(--mc-tint), rgba(12,12,14,0.95));
     box-shadow: 0 0 0 2px rgba(255,255,255,0.12), 0 12px 26px rgba(0,0,0,0.4);
   }
@@ -592,7 +594,7 @@
     opacity: .85;
     box-shadow: 0 8px 18px rgba(0,0,0,0.45);
     pointer-events: none;
-    transition: opacity .18s ease, box-shadow .18s ease;
+    transition: opacity .1s ease, box-shadow .1s ease;
     transform: translateY(8px);
     z-index: -1;
   }
@@ -627,6 +629,7 @@
       inset 0 1px 0 rgba(255,255,255,0.08),
       0 8px 18px rgba(239,68,68,0.22),
       0 6px 16px rgba(0,0,0,0.4);
+    transition: background .1s ease, transform .08s ease, box-shadow .1s ease, color .08s ease, border-color .1s ease;
   }
   .btn-send:hover {
     background-color: #341018 !important;
@@ -647,6 +650,7 @@
   }
   .btn-send i {
     font-size: 1.2rem;
+    transition: color .08s ease;
   }
   .btn-send:active,
   .btn-send.pressed {
@@ -1030,6 +1034,51 @@
   }
   .btn-ramp-toggle.active i {
     color: var(--ramp-color);
+  }
+  .btn-voice-toggle {
+    --voice-color: #8b5cf6;
+    --voice-tint: rgba(139,92,246,0.18);
+    --voice-tint-strong: rgba(139,92,246,0.32);
+    min-width: 48px;
+    min-height: 48px;
+    padding: 10px;
+    border-radius: 14px;
+    border: 1px solid rgba(148,163,184,0.35);
+    background: linear-gradient(120deg, rgba(148,163,184,0.12), rgba(12,12,14,0.92));
+    color: #e5e7eb;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 8px 18px rgba(0,0,0,0.28);
+    transition: transform .15s ease, box-shadow .2s ease, border-color .15s ease, background .15s ease, color .12s ease;
+  }
+  .btn-voice-toggle i {
+    color: #9ca3af;
+    transition: color .12s ease;
+  }
+  .btn-voice-toggle:hover {
+    border-color: rgba(139,92,246,0.6);
+    background: linear-gradient(120deg, var(--voice-tint-strong), rgba(18,19,24,0.95));
+    color: #ede9fe;
+    box-shadow: 0 10px 22px rgba(0,0,0,0.32);
+    transform: translateY(-1px);
+  }
+  .btn-voice-toggle:hover i {
+    color: var(--voice-color);
+  }
+  .btn-voice-toggle:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.12), 0 0 0 6px rgba(139,92,246,0.3);
+  }
+  .btn-voice-toggle.active {
+    border-color: rgba(139,92,246,0.75);
+    border-width: 3px;
+    background: linear-gradient(120deg, rgba(139,92,246,0.28), rgba(50,54,65,0.95));
+    color: #ede9fe;
+    box-shadow: 0 0 0 2px rgba(139,92,246,0.28), 0 8px 20px rgba(0,0,0,0.35);
+  }
+  .btn-voice-toggle.active i {
+    color: var(--voice-color);
   }
   .control-collapse-btn {
     position: relative;
@@ -1459,18 +1508,16 @@
         </div>
         <div class="control-status-groups">
           <div class="status-pill-group">
-          <div id="fg-status-pill" class="status-pill" data-status="off">
+          <div id="fg-status-pill" class="status-pill" data-status="off" aria-label="Status e consumo Flowgate" title="Status e consumo Flowgate">
             <span class="status-icon"><i class="fa-solid fa-tower-broadcast" aria-hidden="true"></i></span>
             <span class="visually-hidden">Flowgate:</span>
             <span id="fg-conn-state">desconectado</span>
+            <span id="fg-bandwidth" class="host-only"><i class="fa-solid fa-arrow-up"></i> 0 B / <i class="fa-solid fa-arrow-down"></i> 0 B</span>
           </div>
           <div class="status-pill" aria-label="Peers e bots conectados" title="Peers e bots conectados">
             <span class="status-icon"><i class="fa-solid fa-user-group"></i></span>
             <span id="fg-peer-count">0</span>
             <span class="host-only">/ <i class="fa-solid fa-robot" aria-hidden="true"></i> <span id="fg-bot-count">0</span></span>
-          </div>
-          <div class="status-pill host-only" aria-label="Consumo Flowgate" title="Consumo Flowgate">
-                        <span id="fg-bandwidth"><i class="fa-solid fa-arrow-up"></i> 0 B / <i class="fa-solid fa-arrow-down"></i> 0 B</span>
           </div>
           <div id="serial-devices-pill" class="status-pill" data-status="off" aria-label="Serial e peers" title="Serial e peers">
             <span class="host-only"><i class="fa-solid fa-door-open"></i>
@@ -1519,22 +1566,26 @@
             <i class="fa-solid fa-headphones"></i>
           </button>
 
-          <button id="btnNavalToggle" class="btn btn-naval-toggle" title="Mostrar Batalha Naval" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
+          <button id="btnNavalToggle" class="btn btn-naval-toggle host-only" title="Mostrar Batalha Naval" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
             <i class="fa-solid fa-ship"></i>
           </button>
 
-          <button id="btnPulseToggle" class="btn btn-pulse-toggle" title="Mostrar Sequenciador" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
+          <button id="btnPulseToggle" class="btn btn-pulse-toggle host-only" title="Mostrar Sequenciador" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
             <i class="fa-solid fa-sliders"></i>
           </button>
 
-          <button id="btnVideoToggle" class="btn btn-video-toggle" title="Mostrar Video" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
+          <button id="btnVideoToggle" class="btn btn-video-toggle host-only" title="Mostrar Video" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
             <i class="fa-solid fa-clapperboard"></i>
           </button>
           <button id="btnChartToggle" class="btn btn-chart-toggle" title="Exibir/ocultar grafico" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
             <i class="fa-solid fa-chart-line"></i>
           </button>
-          <button id="btnRampToggle" class="btn btn-ramp-toggle" title="Mostrar ramping control" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
+          <button id="btnRampToggle" class="btn btn-ramp-toggle host-only" title="Mostrar ramping control" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
             <i class="fa-solid fa-gauge-high"></i>
+          </button>
+
+          <button id="btnVoiceToggle" class="btn btn-voice-toggle" title="Mostrar comando por voz" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
+            <i class="fa-solid fa-microphone"></i>
           </button>
         </div>
       </div>
@@ -1683,6 +1734,12 @@
       </div>
     </div>
 
+    <div class="voice-command-slot collapsed mb-3" aria-hidden="true">
+      <div id="voiceCommandMount">
+        <div class="voice-embed-state voice-loading-state">Carregando Voice Command...</div>
+      </div>
+    </div>
+
     <div id="chartBlock" class="chart-block collapsed mb-3" aria-hidden="true">
       <div class="event-canvas-slot">
         <div class="event-canvas-card">
@@ -1826,6 +1883,7 @@
   let pulseOpen = false;
   let videoOpen = false;
   let chartOpen = false;
+  let voiceOpen = false;
   let lastScoreboardArmedState = null;
   const ROULETTE_DEFAULT_HOLD_MS = 220;
   const ROULETTE_HOLD_LIMITS = { min: 200, max: 20000 };
@@ -1882,6 +1940,8 @@
   const videoToggleBtn = $("#btnVideoToggle");
   const rampBlockEl = $(".ramp-module-slot");
   const rampToggleBtn = $("#btnRampToggle");
+  const voiceBlockEl = $(".voice-command-slot");
+  const voiceToggleBtn = $("#btnVoiceToggle");
   let advCountdownTimer = null;
   let advCountdownEndAt = 0;
   let advStopSignal = { stop: false, holdActive: false };
@@ -1974,6 +2034,7 @@
       parsed.pulseOpen = !!parsed.pulseOpen;
       parsed.videoOpen = !!parsed.videoOpen;
       parsed.chartOpen = !!parsed.chartOpen;
+      parsed.voiceOpen = !!parsed.voiceOpen;
       parsed.advancedEnabled = parsed.advancedEnabled == null ? !!parsed.advancedOpen : !!parsed.advancedEnabled;
       parsed.dualOn = !!parsed.dualOn;
       return parsed;
@@ -2034,7 +2095,8 @@
         navalOpen,
         pulseOpen,
         videoOpen,
-        chartOpen
+        chartOpen,
+        voiceOpen
       }));
     } catch(e){
       log(`Falha ao salvar estado: ${e && e.message || e}`, "warn");
@@ -2086,6 +2148,7 @@
   const VIDEO_PLAYER_SRC = "Widgets/Video_player.html";
   const RAMP_CONTROL_SRC = "Widgets/ramping_control.html?v=20260223c";
   const ROULETTE_WIDGET_SRC = "Widgets/Roleta.html";
+  const VOICE_COMMAND_SRC = "Widgets/voice_command.html";
   function runInlineScriptsIn(container){
     if (!container) return;
     const scripts = Array.from(container.querySelectorAll('script'));
@@ -2101,6 +2164,7 @@
   let navalLoaded = false;
   let pulseLoaded = false;
   let videoLoaded = false;
+  let voiceLoaded = false;
   
   function resetScoreboardMount(){
     const mount = document.getElementById('controlScoreboardMount');
@@ -2135,6 +2199,12 @@
     const mount = document.getElementById('rampControlMount');
     if (!mount) return;
     mount.innerHTML = '<div class="ramp-embed-state ramp-loading-state">Carregando Ramping Control...</div>';
+  }
+
+  function resetVoiceCommandMount(){
+    const mount = document.getElementById('voiceCommandMount');
+    if (!mount) return;
+    mount.innerHTML = '<div class="voice-embed-state voice-loading-state">Carregando Voice Command...</div>';
   }
 
   function loadControlScoreboard(){
@@ -2380,6 +2450,33 @@
     rampLoaded = false;
   }
 
+  function loadVoiceCommand(){
+    const mount = document.getElementById('voiceCommandMount');
+    if (!mount) return;
+    resetVoiceCommandMount();
+    fetch(VOICE_COMMAND_SRC)
+      .then((res) => {
+        if (!res.ok) throw new Error('Falha ao carregar Widgets/voice_command.html: ' + res.status);
+        return res.text();
+      })
+      .then((html) => {
+        mount.innerHTML = html;
+        runInlineScriptsIn(mount);
+        voiceLoaded = true;
+      })
+      .catch((err) => {
+        try { console.error(err); } catch(_){ }
+        mount.innerHTML = '<div class="voice-embed-state voice-error-state">Nao foi possivel carregar Voice Command.</div>';
+        voiceLoaded = false;
+      });
+  }
+  resetVoiceCommandMount();
+
+  function unloadVoiceCommand(){
+    resetVoiceCommandMount();
+    voiceLoaded = false;
+  }
+
   function loadRouletteWidget(){
     const mount = document.getElementById('rouletteMount');
     if (!mount) return;
@@ -2418,6 +2515,7 @@
       pulseOpen,
       videoOpen,
       chartOpen,
+      voiceOpen,
       pulses: advanced.pulses,
       gapMs: advanced.delayMs,
       baseMs: advanced.durationMs,
@@ -3305,6 +3403,51 @@
     if (opts.persist !== false) persistState();
     if (opts.syncWidget !== false) syncRampWidgetState(opts.reason || "ramp-sync");
     if (opts.broadcast !== false) emitControlPatch(buildRampPatch(opts.reason || "ramp-change"));
+  }
+
+  function updateVoiceToggleTooltip(label){
+    if (!voiceToggleBtn) return;
+    voiceToggleBtn.setAttribute("title", label);
+    voiceToggleBtn.setAttribute("aria-label", label);
+    voiceToggleBtn.setAttribute("data-bs-original-title", label);
+    const tipInstance = (window.bootstrap && window.bootstrap.Tooltip)
+      ? window.bootstrap.Tooltip.getInstance(voiceToggleBtn)
+      : null;
+    if (tipInstance) {
+      if (typeof tipInstance.setContent === "function") {
+        tipInstance.setContent({ ".tooltip-inner": label });
+      } else if (tipInstance.tip) {
+        const inner = tipInstance.tip.querySelector(".tooltip-inner");
+        if (inner) inner.textContent = label;
+      }
+    }
+  }
+
+  function setVoiceOpen(next, opts){
+    const desired = !!next;
+    if (!opts?.force && voiceOpen === desired) {
+      if (opts?.persist === false) return;
+    }
+    voiceOpen = desired;
+    if (voiceBlockEl) {
+      voiceBlockEl.classList.toggle("collapsed", !voiceOpen);
+      voiceBlockEl.setAttribute("aria-hidden", voiceOpen ? "false" : "true");
+    }
+    if (voiceToggleBtn) {
+      voiceToggleBtn.classList.toggle("active", voiceOpen);
+      voiceToggleBtn.setAttribute("aria-pressed", voiceOpen ? "true" : "false");
+      voiceToggleBtn.setAttribute("aria-expanded", voiceOpen ? "true" : "false");
+      updateVoiceToggleTooltip(voiceOpen ? "Ocultar comando por voz" : "Mostrar comando por voz");
+    }
+    if (voiceOpen) {
+      if (!voiceLoaded) loadVoiceCommand();
+    } else if (voiceLoaded) {
+      unloadVoiceCommand();
+    }
+    if (opts?.persist !== false) persistState();
+    if (opts?.broadcast !== false) {
+      emitControlPatch({ voiceOpen, reason: opts?.reason || "voice-toggle" });
+    }
   }
 
   function getLiveAdvanced(){
@@ -4454,6 +4597,36 @@
     return document.getElementById("flowgate-module-modal");
   }
 
+  function ensureSerialModal() {
+    let modalEl = document.getElementById("serial-module-modal");
+    if (modalEl) {
+      if (document.body && modalEl.parentElement !== document.body) {
+        document.body.appendChild(modalEl);
+      }
+      return modalEl;
+    }
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = `
+      <div class="modal fade" id="serial-module-modal" tabindex="-1" aria-labelledby="serial-module-modal-label" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+          <div class="modal-content" style="background:#111;border:1px solid #333;color:#e5e7eb;">
+            <div class="modal-header" style="border-bottom:1px solid #2a2a2a;">
+              <h5 class="modal-title" id="serial-module-modal-label">
+                <i class="fa-solid fa-plug me-2"></i>Conexao Serial
+              </h5>
+              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+              <div id="serial-module-modal-body"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(wrapper.firstElementChild);
+    return document.getElementById("serial-module-modal");
+  }
+
   function openFlowgateModalFromControl(){
     const navTrigger = document.getElementById("mod-flowgate");
     if (navTrigger && typeof navTrigger.click === "function") {
@@ -4499,12 +4672,7 @@
   }
 
   function openSerialModalFromControl(){
-    const navTrigger = document.getElementById("mod-serial");
-    if (navTrigger && typeof navTrigger.click === "function") {
-      navTrigger.click();
-      return true;
-    }
-    const modalEl = document.getElementById("serial-module-modal");
+    const modalEl = ensureSerialModal();
     if (!modalEl) {
       const card = document.getElementById("serialPortCard");
       if (card) {
@@ -4516,22 +4684,7 @@
       }
       return false;
     }
-    const modalBody = document.getElementById("serial-module-modal-body");
-    if (modalBody && modalBody.dataset.bound !== "true") {
-      const slot = document.querySelector('section[data-module-src="Modules (Host-only)/serialport.html"]');
-      if (slot && slot.children.length) {
-        const wrapper = document.createElement("div");
-        while (slot.firstChild) wrapper.appendChild(slot.firstChild);
-        modalBody.appendChild(wrapper);
-        modalBody.dataset.bound = "true";
-        slot.style.display = "none";
-        const card = document.getElementById("serialPortCard");
-        if (card) {
-          card.classList.remove("serial-hidden");
-          card.style.display = "";
-        }
-      }
-    }
+    moveSerialModuleIntoModal();
     if (window.bootstrap && typeof window.bootstrap.Modal === "function") {
       window.bootstrap.Modal.getOrCreateInstance(modalEl).show();
     } else {
@@ -4542,13 +4695,74 @@
     return true;
   }
 
-  function openKeepawakeModalFromControl(){
-    const navTrigger = document.getElementById("mod-keepawake");
-    if (navTrigger && typeof navTrigger.click === "function") {
-      navTrigger.click();
-      return true;
+  function moveSerialModuleIntoModal() {
+    const modalBody = document.getElementById("serial-module-modal-body");
+    if (!modalBody || modalBody.dataset.bound === "true") return false;
+    const slot = document.querySelector('section[data-module-src="Modules (Host-only)/serialport.html"]');
+    if (!slot || !slot.children.length) return false;
+    const wrapper = document.createElement("div");
+    while (slot.firstChild) wrapper.appendChild(slot.firstChild);
+    modalBody.appendChild(wrapper);
+    modalBody.dataset.bound = "true";
+    slot.style.display = "none";
+    const card = document.getElementById("serialPortCard");
+    if (card) {
+      card.classList.remove("serial-hidden");
+      card.style.display = "";
     }
-    const modalEl = document.getElementById("keepawake-module-modal");
+    return true;
+  }
+
+  function ensureKeepawakeModal() {
+    let modalEl = document.getElementById("keepawake-module-modal");
+    if (modalEl) {
+      if (document.body && modalEl.parentElement !== document.body) {
+        document.body.appendChild(modalEl);
+      }
+      return modalEl;
+    }
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = `
+      <div class="modal fade" id="keepawake-module-modal" tabindex="-1" aria-labelledby="keepawake-module-modal-label" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+          <div class="modal-content" style="background:#111;border:1px solid #333;color:#e5e7eb;">
+            <div class="modal-header" style="border-bottom:1px solid #2a2a2a;">
+              <h5 class="modal-title" id="keepawake-module-modal-label">
+                <i class="fa-solid fa-moon me-2"></i>Keep-awake
+              </h5>
+              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+              <div id="keepawake-module-modal-body"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(wrapper.firstElementChild);
+    return document.getElementById("keepawake-module-modal");
+  }
+
+  function moveKeepawakeModuleIntoModal() {
+    const modalBody = document.getElementById("keepawake-module-modal-body");
+    if (!modalBody || modalBody.dataset.bound === "true") return false;
+    const slot = document.querySelector('section[data-module-src="Modules/Keepawake.html"]');
+    if (!slot || !slot.children.length) return false;
+    const wrapper = document.createElement("div");
+    while (slot.firstChild) wrapper.appendChild(slot.firstChild);
+    modalBody.appendChild(wrapper);
+    modalBody.dataset.bound = "true";
+    slot.style.display = "none";
+    const card = document.getElementById("hbka-widget");
+    if (card) {
+      card.classList.remove("keepawake-hidden");
+      card.style.display = "";
+    }
+    return true;
+  }
+
+  function openKeepawakeModalFromControl(){
+    const modalEl = ensureKeepawakeModal();
     if (!modalEl) {
       const card = document.getElementById("hbka-widget");
       if (card) {
@@ -4560,22 +4774,7 @@
       }
       return false;
     }
-    const modalBody = document.getElementById("keepawake-module-modal-body");
-    if (modalBody && modalBody.dataset.bound !== "true") {
-      const slot = document.querySelector('section[data-module-src="Modules/Keepawake.html"]');
-      if (slot && slot.children.length) {
-        const wrapper = document.createElement("div");
-        while (slot.firstChild) wrapper.appendChild(slot.firstChild);
-        modalBody.appendChild(wrapper);
-        modalBody.dataset.bound = "true";
-        slot.style.display = "none";
-        const card = document.getElementById("hbka-widget");
-        if (card) {
-          card.classList.remove("keepawake-hidden");
-          card.style.display = "";
-        }
-      }
-    }
+    moveKeepawakeModuleIntoModal();
     if (window.bootstrap && typeof window.bootstrap.Modal === "function") {
       window.bootstrap.Modal.getOrCreateInstance(modalEl).show();
     } else {
@@ -4596,6 +4795,30 @@
     serialModalBtn.addEventListener("click", () => {
       openSerialModalFromControl();
     });
+  }
+
+  const bindSerialModuleSilently = () => {
+    ensureSerialModal();
+    return moveSerialModuleIntoModal();
+  };
+  if (!bindSerialModuleSilently()) {
+    let serialBindTries = 0;
+    const serialBindTimer = setInterval(() => {
+      serialBindTries += 1;
+      if (bindSerialModuleSilently() || serialBindTries > 20) clearInterval(serialBindTimer);
+    }, 200);
+  }
+
+  const bindKeepawakeModuleSilently = () => {
+    ensureKeepawakeModal();
+    return moveKeepawakeModuleIntoModal();
+  };
+  if (!bindKeepawakeModuleSilently()) {
+    let keepawakeBindTries = 0;
+    const keepawakeBindTimer = setInterval(() => {
+      keepawakeBindTries += 1;
+      if (bindKeepawakeModuleSilently() || keepawakeBindTries > 20) clearInterval(keepawakeBindTimer);
+    }, 200);
   }
 
   function syncSerialConnectShortcut() {
@@ -4719,6 +4942,7 @@
   if (videoToggleBtn) videoToggleBtn.addEventListener("click", () => setVideoOpen(!videoOpen));
   if (chartToggleBtn) chartToggleBtn.addEventListener("click", () => setChartOpen(!chartOpen));
   if (rampToggleBtn) rampToggleBtn.addEventListener("click", () => setRampOpen(!rampOpen));
+  if (voiceToggleBtn) voiceToggleBtn.addEventListener("click", () => setVoiceOpen(!voiceOpen));
   if (advancedInputs.pulses) advancedInputs.pulses.addEventListener("change", e => updateAdvancedValue("pulses", parseInt(e.target.value,10)));
   if (advancedInputs.duration) advancedInputs.duration.addEventListener("change", e => updateAdvancedValue("durationMs", parseFloat(e.target.value)));
   if (advancedInputs.delay) advancedInputs.delay.addEventListener("change", e => updateAdvancedValue("delayMs", parseFloat(e.target.value)));
@@ -5132,6 +5356,9 @@
     if (payload.chartOpen != null) {
       setChartOpen(!!payload.chartOpen, { force:true, broadcast:false });
     }
+    if (payload.voiceOpen != null) {
+      setVoiceOpen(!!payload.voiceOpen, { force:true, broadcast:false });
+    }
     applyAdvancedPatch(payload, { broadcast:false, reason:"bus-sync" });
     applyRampPatch(payload, { broadcast:false, reason:"bus-sync" });
     if (payload.scoreboardOpen != null) {
@@ -5234,6 +5461,7 @@
   const initialVideoOpen = savedState?.videoOpen ?? false;
   const initialChartOpen = savedState?.chartOpen ?? false;
   const initialRampOpen = savedState?.rampOpen ?? false;
+  const initialVoiceOpen = savedState?.voiceOpen ?? false;
   setMode(initialMode);
   setLevel(initialLevel, { broadcast:false });
   setChannel(initialChannel);
@@ -5245,6 +5473,7 @@
   setVideoOpen(initialVideoOpen, { persist:false, force:true, broadcast:false });
   setChartOpen(initialChartOpen, { persist:false, force:true, broadcast:false });
   setRampOpen(initialRampOpen, { persist:false, force:true, broadcast:false });
+  setVoiceOpen(initialVoiceOpen, { persist:false, force:true, broadcast:false });
   syncAdvancedUi();
   syncRampWidgetState("initial-sync");
   setAdvancedOpen(advancedOpen, { broadcast:false });

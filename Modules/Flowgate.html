@@ -3286,6 +3286,9 @@
       ensureFlowgateApi();
       emitFlowgateEvent('room_changed', { room: null, roomId: '', connected: false });
 
+      // Limpar chat ao desconectar para evitar histórico contaminado de transporte anterior
+      if (msgBox) msgBox.innerHTML = '';
+
       peers = new Map();
       renderPeerList();
 

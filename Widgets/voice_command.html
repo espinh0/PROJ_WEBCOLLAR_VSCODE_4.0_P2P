@@ -1,0 +1,2555 @@
+<!-- VOICE COMMAND v1.0 - Reconhecimento de voz para executar comandos -->
+<div class="card p-3 mt-3" id="voice-command-widget" style="background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.06);border-radius:14px;color:#e5e7eb;">
+  <div class="d-flex align-items-center gap-2 mb-3 voice-card-header">
+    <h5 class="m-0"><i class="fa-solid fa-microphone me-2"></i>Comando por Voz</h5>
+    <span id="voice-status" class="small ms-auto text-secondary">Pronto</span>
+    <span id="voice-confidence" class="small text-muted">Confiança: —</span>
+    <button id="voice-toggle-advanced-btn" class="btn btn-sm btn-outline-secondary" type="button" title="Mostrar/ocultar parâmetros avançados" aria-label="Toggle parâmetros avançados">
+      <i class="fa-solid fa-sliders" style="font-size:0.8rem;"></i>
+    </button>
+    <button id="voice-toggle-log-btn" class="btn btn-sm btn-outline-secondary" type="button" title="Mostrar/ocultar histórico" aria-label="Toggle histórico">
+      <i class="fa-solid fa-history" style="font-size:0.8rem;"></i>
+    </button>
+    <button id="voice-listening-btn" class="btn btn-sm btn-outline-success" type="button" aria-pressed="false" title="Iniciar/parar escuta">
+      <i class="fa-solid fa-circle me-1" style="font-size:0.6rem;"></i> <span id="voice-listening-text">Escutar</span>
+    </button>
+  </div>
+
+  <div class="voice-command-grid">
+    <!-- 1. Monitor de Transcrição -->
+    <div class="voice-monitor-section mb-3">
+      <div class="d-flex align-items-center justify-content-between mb-2">
+        <small class="text-muted">Histórico Contínuo</small>
+        <button id="voice-clear-transcript" class="btn btn-sm btn-outline-secondary" type="button" title="Limpar histórico de transcrição">
+          <i class="fa-solid fa-eraser me-1" style="font-size:0.8rem;"></i>Limpar
+        </button>
+      </div>
+      <div id="voice-transcript-display" class="voice-transcript-box">
+        <div class="voice-transcript-idle">Aguardando entrada de voz...</div>
+      </div>
+    </div>
+
+    <!-- 2. Palavras-Acionadoras (Lista) -->
+    <div class="voice-commands-section mb-3">
+      <div class="d-flex align-items-center justify-content-end mb-2">
+        <button id="voice-clear-all" class="btn btn-sm btn-outline-danger" type="button" title="Remover todas as palavras">
+          <i class="fa-solid fa-trash-alt me-1" style="font-size:0.8rem;"></i>Limpar Tudo
+        </button>
+      </div>
+      <div id="voice-commands-list" class="voice-commands-list">
+        <div class="voice-commands-empty text-muted small text-center py-2">
+          Nenhuma palavra-acionadora configurada
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Caixa de Adição de Palavras -->
+    <div class="voice-trigger-section mb-3">
+      <div class="input-group mb-2">
+        <input 
+          type="text" 
+          id="voice-trigger-input" 
+          class="form-control voice-input-dark" 
+          placeholder="Digite uma palavra e pressione Enter..."
+          style="font-size:0.9rem;"
+        />
+        <button id="voice-trigger-add" class="btn btn-outline-primary" type="button" title="Adicionar palavra">
+          <i class="fa-solid fa-plus"></i>
+        </button>
+      </div>
+      <small class="text-muted d-block">
+        Cada palavra será criada com o modo, intensidade e canal do controle principal.
+      </small>
+    </div>
+
+    <!-- 5. Parâmetros Avançados -->
+    <div class="voice-advanced-settings voice-advanced-settings-hidden mb-3">
+      <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom border-secondary border-opacity-25">
+        <label class="form-label small text-muted m-0">
+          <i class="fa-solid fa-sliders me-1"></i>Parâmetros Avançados
+        </label>
+      </div>
+
+      <div class="row g-3">
+        <!-- Seletor de Idioma -->
+        <div class="col-12 col-md-6">
+          <label for="voice-language-select" class="form-label small text-muted mb-2">
+            <i class="fa-solid fa-globe me-1"></i>Idioma
+          </label>
+          <select id="voice-language-select" class="form-select form-select-sm voice-input-dark">
+            <option value="pt-BR">Português (Brasil)</option>
+            <option value="pt-PT">Português (Portugal)</option>
+            <option value="en-US">English (US)</option>
+            <option value="en-GB">English (UK)</option>
+            <option value="es-ES">Español</option>
+            <option value="fr-FR">Français</option>
+            <option value="de-DE">Deutsch</option>
+            <option value="it-IT">Italiano</option>
+            <option value="ja-JP">日本語</option>
+            <option value="zh-CN">中文 (简体)</option>
+          </select>
+        </div>
+
+        <!-- Modo Contínuo -->
+        <div class="col-12 col-md-6">
+          <label for="voice-continuous-mode" class="form-label small text-muted mb-2">
+            <i class="fa-solid fa-repeat me-1"></i>Modo de Escuta
+          </label>
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="voice-continuous-mode" checked>
+            <label class="form-check-label small" for="voice-continuous-mode">
+              Contínuo <small class="text-secondary">(reinicia automaticamente após cada comando)</small>
+            </label>
+          </div>
+        </div>
+
+        <!-- Modo Escuta Livre -->
+        <div class="col-12 col-md-6">
+          <label for="voice-free-listening-mode" class="form-label small text-muted mb-2">
+            <i class="fa-solid fa-microphone me-1"></i>Escuta Livre
+          </label>
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="voice-free-listening-mode">
+            <label class="form-check-label small" for="voice-free-listening-mode">
+              Sem confirmação <small class="text-secondary">(escreve continuamente)</small>
+            </label>
+          </div>
+          <small class="text-secondary d-block mt-1">Ativo: transcreve em tempo real sem aguardar confirmação</small>
+        </div>
+
+        <!-- Detecção de Sons CC -->
+        <div class="col-12">
+          <label for="voice-sound-detection" class="form-label small text-muted mb-2">
+            <i class="fa-solid fa-closed-captioning me-1"></i>Legendas de Sons
+          </label>
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="voice-sound-detection">
+            <label class="form-check-label small" for="voice-sound-detection">
+              Detectar barulhos ambiente <small class="text-secondary">(Closed Captions - exibe texto e ícone)</small>
+            </label>
+          </div>
+        </div>
+
+        <div class="col-12">
+          <label for="voice-cc-sensitivity" class="form-label small text-muted mb-1">
+            <i class="fa-solid fa-sliders me-1"></i>Sensibilidade CC <span id="voice-cc-sensitivity-display" class="ms-2 badge bg-secondary">50%</span>
+          </label>
+          <input type="range" id="voice-cc-sensitivity" class="form-range" value="50" min="0" max="100" step="5" title="Ajusta a sensibilidade da detecção de barulhos. Menor = mais estável, Maior = mais sensível.">
+          <small class="text-secondary d-block mt-1">Menor valor reduz falsos positivos; maior valor detecta sons mais baixos.</small>
+        </div>
+
+        <!-- Responsividade da Detecção CC -->
+        <div class="col-12">
+          <label for="voice-cc-responsiveness" class="form-label small text-muted mb-1">
+            <i class="fa-solid fa-bolt me-1"></i>Responsividade CC <span id="voice-cc-responsiveness-display" class="ms-2 badge bg-secondary">50%</span>
+          </label>
+          <input type="range" id="voice-cc-responsiveness" class="form-range" value="50" min="0" max="100" step="5" title="Quanto mais alto, mais rápido o CC responde a mudanças. Baixo = mais suave, Alto = mais responsivo.">
+          <small class="text-secondary d-block mt-1">Maior valor = detecta mudanças mais rápido (menos delay); menor = mais suave.</small>
+        </div>
+
+        <!-- Estabilidade da Categoria CC -->
+        <div class="col-12">
+          <label for="voice-cc-stability" class="form-label small text-muted mb-1">
+            <i class="fa-solid fa-anchor me-1"></i>Estabilidade CC <span id="voice-cc-stability-display" class="ms-2 badge bg-secondary">50%</span>
+          </label>
+          <input type="range" id="voice-cc-stability" class="form-range" value="50" min="0" max="100" step="5" title="Tempo de espera para confirmar uma mudança de categoria. Menor = muda rápido, Maior = mais estável.">
+          <small class="text-secondary d-block mt-1">Menor valor = muda rápido entre categorias; maior = mais tempo para confirmar (evita piscar).</small>
+        </div>
+
+        <!-- Velocidade de Confirmação (Phrase Commit Delay) -->
+        <div class="col-12">
+          <label for="voice-phrase-commit-delay" class="form-label small text-muted mb-1">
+            <i class="fa-solid fa-hourglass-end me-1"></i>Velocidade de Confirmação <span id="voice-phrase-commit-delay-display" class="ms-2 badge bg-secondary">220ms</span>
+          </label>
+          <input type="range" id="voice-phrase-commit-delay" class="form-range" value="220" min="50" max="1000" step="50" title="Tempo até confirmar uma frase como final. Menor = mais rápido, Maior = mais conservador (permite edições).">
+          <small class="text-secondary d-block mt-1">Menor valor = confirma rápido (agressivo); maior = espera mais (conservador, permite correções).</small>
+        </div>
+
+        <!-- Presets Rápidos de Delay -->
+        <div class="col-12">
+          <label class="form-label small text-muted mb-2">
+            <i class="fa-solid fa-bolt me-1"></i>Presets Rápidos
+          </label>
+          <div class="d-flex gap-2 flex-wrap">
+            <button type="button" id="voice-preset-responsive" class="btn btn-sm btn-outline-success" title="Responsivo: Mínimo delay, mais responsivo">
+              <i class="fa-solid fa-zap me-1"></i>Responsivo
+            </button>
+            <button type="button" id="voice-preset-balanced" class="btn btn-sm btn-outline-info" title="Balanceado: Equilíbrio entre delay e estabilidade">
+              <i class="fa-solid fa-scale-balanced me-1"></i>Balanceado
+            </button>
+            <button type="button" id="voice-preset-stable" class="btn btn-sm btn-outline-warning" title="Estável: Menos flicker, mais tempo">
+              <i class="fa-solid fa-shield me-1"></i>Estável
+            </button>
+          </div>
+        </div>
+
+        <!-- Máximo de Alternativas da Web Speech API -->
+        <div class="col-6 col-md-6">
+          <label for="voice-api-max-alternatives" class="form-label small text-muted mb-1">
+            <i class="fa-solid fa-list me-1"></i>Alternativas
+          </label>
+          <input type="number" id="voice-api-max-alternatives" class="form-control form-control-sm voice-input-dark" value="1" min="1" max="10" step="1" title="Quantas opções de palavras a API pode sugerir. Mais opções = melhor precisão em ambientes ruidosos.">
+          <small class="text-secondary d-block mt-1">Retorna até <strong>N</strong> sugestões de palavras reconhecidas (padrão: 1)</small>
+        </div>
+
+        <!-- Confiança Mínima da Web Speech API - Slider -->
+        <div class="col-6 col-md-6">
+          <label for="voice-api-confidence" class="form-label small text-muted mb-1">
+            <i class="fa-solid fa-shield me-1"></i>Confiança Mínima <span id="voice-api-confidence-display" class="ms-2 badge bg-secondary">0%</span>
+          </label>
+          <input type="range" id="voice-api-confidence" class="form-range" value="0" min="0" max="100" step="5" title="Rejeita palavras com confiança menor que este valor. 0% = aceita tudo | 100% = rejeita tudo exceto reconhecimento perfeito">
+          <small class="text-secondary d-block mt-1">Filtra resultados por confiança. 0% (aceita tudo) até 100% (rigoroso)</small>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6. Histórico -->
+    <div class="voice-log-section voice-log-section-hidden">
+      <div class="d-flex align-items-center justify-content-between mb-2">
+        <label class="form-label small text-muted m-0">
+          <i class="fa-solid fa-history me-1"></i>Histórico
+        </label>
+        <button id="voice-log-clear" class="btn btn-sm btn-outline-secondary" type="button">
+          <i class="fa-solid fa-trash me-1" style="font-size:0.8rem;"></i>Limpar
+        </button>
+      </div>
+      <div id="voice-log-display" class="voice-log-box">
+        <div class="voice-log-idle text-muted small">Aguardando eventos...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  #voice-command-widget .voice-input-dark {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #e5e7eb;
+    border-radius: 10px;
+  }
+  #voice-command-widget .voice-input-dark:focus {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(77, 113, 255, 0.6);
+    color: #e5e7eb;
+    box-shadow: 0 0 0 0.2rem rgba(77, 113, 255, 0.25);
+  }
+
+  #voice-command-widget select.voice-input-dark {
+    color-scheme: dark;
+    background-color: rgba(255, 255, 255, 0.05);
+    color: #e5e7eb;
+  }
+
+  #voice-command-widget select.voice-input-dark option,
+  #voice-command-widget select.voice-input-dark optgroup {
+    background-color: #111827;
+    color: #e5e7eb;
+  }
+  
+  .voice-transcript-box {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    padding: 12px;
+    min-height: 60px;
+    max-height: 110px;  /* 3 linhas x 35px + padding */
+    overflow-y: auto;
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 1.35rem;
+    line-height: 1.5;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: #60a5fa;
+    display: flex;
+    flex-direction: column;
+  }
+  .voice-transcript-idle {
+    color: #6b7280;
+    font-style: italic;
+  }
+  .voice-transcript-interim {
+    color: #9ca3af;
+    font-style: italic;
+  }
+  .voice-transcript-final {
+    color: #e5e7eb;
+    font-weight: 700;
+  }
+  .voice-transcript-cc {
+    color: #d1d5db;
+    font-weight: 600;
+    font-size: 0.9rem;
+    letter-spacing: 0.01em;
+    margin-top: 6px;
+    text-transform: none;
+  }
+  .voice-transcript-hit {
+    display: inline-block;
+    color: #22c55e;
+    font-weight: 900;
+    text-shadow: 0 0 12px rgba(34,197,94,0.55);
+    animation: voice-monitor-blink 0.22s ease-in-out 0s 3 alternate;
+  }
+  @keyframes voice-monitor-blink {
+    from { opacity: 0.45; transform: scale(1); }
+    to { opacity: 1; transform: scale(1.06); }
+  }
+  .voice-log-box {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    padding: 8px;
+    max-height: 150px;
+    overflow-y: auto;
+    font-size: 0.85rem;
+    line-height: 1.3;
+  }
+  .voice-log-idle {
+    color: #6b7280;
+  }
+  .voice-log-entry {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    margin-bottom: 4px;
+  }
+  .voice-log-entry:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+  }
+  .voice-log-icon {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    border-radius: 50%;
+  }
+  .voice-log-icon.info {
+    background: rgba(59, 130, 246, 0.2);
+    color: #60a5fa;
+  }
+  .voice-log-icon.success {
+    background: rgba(34, 197, 94, 0.2);
+    color: #22c55e;
+  }
+  .voice-log-icon.warning {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ff6b6b;
+  }
+  .voice-log-text {
+    flex: 1;
+    color: #d1d5db;
+  }
+  .voice-log-time {
+    font-size: 0.75rem;
+    color: #6b7280;
+    white-space: nowrap;
+    margin-left: auto;
+  }
+  .voice-commands-list {
+    display:flex;
+    flex-wrap:wrap;
+    gap: 10px;
+
+    padding: 4px;
+    justify-content: flex-start;
+  }
+  .voice-command-item {
+    --voice-color: #a78bfa;
+    --voice-bg: linear-gradient(165deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+    position: relative;
+    z-index: 0;
+    display: flex;
+    align-items: stretch;
+    border-radius: 18px;
+    min-width: 180px;
+    margin-left: 18px;
+  }
+  /* Rabinho do balão de fala com gradiente */
+  .voice-command-item::before {
+    content: "";
+    position: absolute;
+    left: -10px;
+    bottom: 18px;
+    width: 20px;
+    height: 20px;
+    background: var(--voice-bg);
+    transform: rotate(45deg) skewX(10deg);
+    border-radius: 0 0 0 4px;
+    box-shadow: -4px 4px 8px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.03);
+    z-index: 0;
+  }
+  .voice-command-item-content {
+    appearance: none;
+    border: 1px solid rgba(255,255,255,0.08);
+    padding: 14px 16px;
+    padding-right: 50px;
+    color: #e5e5e5;
+    background: var(--voice-bg);
+    text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex: 1;
+    border-radius: 14px;
+    position: relative;
+    z-index: 1;
+    overflow: hidden;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.08);
+    transition: box-shadow .25s ease;
+  }
+  .voice-command-item:hover .voice-command-item-content {
+    box-shadow: 0 14px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1);
+  }
+  .voice-command-item-content::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 0 rgba(0,0,0,0);
+    pointer-events: none;
+    transition: box-shadow .2s ease;
+  }
+  .voice-command-item:hover .voice-command-item-content::after {
+    box-shadow: inset 0 0 0 2px var(--voice-color);
+  }
+  .voice-command-item .btn-outline-danger {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border-radius: 50%;
+    border: 0;
+    background: rgba(0,0,0,0.25);
+    color: rgba(255,255,255,0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background .2s ease, color .2s ease;
+    z-index: 2;
+  }
+  .voice-command-item .btn-outline-danger:hover {
+    background: rgba(239, 68, 68, 0.3);
+    color: #ff6b6b;
+  }
+  .voice-command-item-icon {
+    font-size: 2.5rem;
+    color: var(--voice-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 50px;
+  }
+  .voice-command-item-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+  }
+  .voice-command-item-label {
+    font-weight: 600;
+    font-size: 1.75rem;
+    word-break: break-word;
+    color: #e5e5e5;
+    line-height: 1.2;
+  }
+  .voice-command-item-action {
+    font-size: 0.75rem;
+    color: #9ca3af;
+    font-style: italic;
+  }
+  .voice-command-item.triggered {
+    --voice-color: #22c55e;
+  }
+  .voice-command-item.triggered::after {
+    opacity: 1;
+    box-shadow: 0 8px 20px rgba(34, 197, 94, 0.5);
+  }
+  .voice-command-item.triggered .voice-command-item-content::after {
+    box-shadow: inset 0 0 0 2px rgba(34, 197, 94, 0.8);
+  }
+  .voice-commands-empty {
+    grid-column: 1 / -1;
+  }
+  /* Caixa de parâmetros avançados */
+  .voice-advanced-settings {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 12px;
+  }
+  .voice-advanced-settings .form-label {
+    margin-bottom: 0.5rem;
+  }
+  .voice-advanced-settings .form-check {
+    margin-top: 0.25rem;
+  }
+  .voice-advanced-settings {
+    transition: all 0.3s ease;
+    max-height: 1000px;
+    opacity: 1;
+    overflow: hidden;
+  }
+  .voice-advanced-settings-hidden {
+    max-height: 0;
+    opacity: 0;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    pointer-events: none;
+  }
+  /* Log section visibility control */
+  .voice-log-section {
+    transition: all 0.3s ease;
+    max-height: 500px;
+    opacity: 1;
+    overflow: hidden;
+  }
+  .voice-log-section-hidden {
+    max-height: 0;
+    opacity: 0;
+    margin: 0 !important;
+    padding: 0 !important;
+    pointer-events: none;
+  }
+  #voice-toggle-log-btn,
+  #voice-toggle-advanced-btn {
+    line-height: 1;
+  }
+  #voice-toggle-log-btn.active,
+  #voice-toggle-advanced-btn.active {
+    background: rgba(34, 197, 94, 0.25);
+    border-color: #22c55e;
+    color: #22c55e;
+  }
+  #voice-listening-btn {
+    font-size: 0.85rem;
+  }
+  #voice-listening-btn.listening {
+    background: rgba(34, 197, 94, 0.25);
+    border-color: #22c55e;
+    color: #22c55e;
+  }
+  #voice-listening-btn.error {
+    background: rgba(239, 68, 68, 0.25);
+    border-color: #ff6b6b;
+    color: #ff6b6b;
+  }
+</style>
+
+<script>
+(() => {
+  if (window.__VOICE_COMMAND_READY__) {
+    if (window.__VOICE_COMMAND_APP__ && typeof window.__VOICE_COMMAND_APP__.rehydrate === 'function') {
+      console.log('[VOICE CMD] Remount detectado, reidratando UI existente...');
+      window.__VOICE_COMMAND_APP__.rehydrate();
+    } else {
+      console.warn('Voice Command widget já inicializado. Remova duplicatas.');
+    }
+    return;
+  }
+  window.__VOICE_COMMAND_READY__ = true;
+
+  const $ = (id) => document.getElementById(id);
+  const $$ = (s) => document.querySelectorAll(s);
+
+  // Elementos da UI (lazy loading)
+  let transcriptDisplay, confidenceLabel, languageSelect, continuousMode, triggerInput;
+  let triggerAddBtn, commandsList, listeningBtn, listeningText, statusLabel;
+  let logDisplay, logClearBtn, clearAllBtn, toggleLogBtn, toggleAdvancedBtn, soundDetectionCheckbox;
+  let apiMaxAlternativesInput, apiConfidenceInput, ccSensitivityInput, freeListeningCheckbox;
+
+  function bindElementOnce(el, key, eventName, handler) {
+    if (!el) return;
+    const attr = `data-voice-bound-${key}`;
+    if (el.hasAttribute(attr)) return;
+    el.addEventListener(eventName, handler);
+    el.setAttribute(attr, '1');
+  }
+
+  function bindUiEventListeners() {
+    bindElementOnce(listeningBtn, 'listen-click', 'click', () => {
+      console.log('[VOICE CMD] Botão Escutar clicado');
+      if (isListening) {
+        stopListening();
+      } else {
+        startListening();
+      }
+    });
+
+    bindElementOnce(triggerInput, 'trigger-enter', 'keypress', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        addTriggerWord(triggerInput.value);
+      }
+    });
+
+    bindElementOnce(triggerAddBtn, 'trigger-add', 'click', () => {
+      addTriggerWord(triggerInput.value);
+    });
+
+    bindElementOnce(logClearBtn, 'log-clear', 'click', () => {
+      logEntries = [];
+      updateLogDisplay();
+    });
+
+    bindElementOnce(clearAllBtn, 'clear-all', 'click', () => {
+      clearAllTriggerWords();
+    });
+
+    // Listener para limpar histórico de transcrição
+    const clearTranscriptBtn = document.getElementById('voice-clear-transcript');
+    if (clearTranscriptBtn) {
+      clearTranscriptBtn.addEventListener('click', () => {
+        clearTranscriptHistory();
+      });
+    }
+
+    bindElementOnce(languageSelect, 'lang-change', 'change', () => {
+      if (recognition) {
+        recognition.lang = languageSelect.value;
+        console.log('[VOICE CMD] Idioma alterado em tempo real:', languageSelect.value);
+      }
+      // Persistir novo idioma
+      localStorage.setItem('voice_language', languageSelect.value);
+      addLog(`Idioma alterado: ${languageSelect.options[languageSelect.selectedIndex].text}`, 'success');
+    });
+
+    // Listener para Modo Contínuo
+    if (continuousMode) {
+      bindElementOnce(continuousMode, 'continuous-change', 'change', () => {
+        // Persistir estado
+        localStorage.setItem('voice_continuous_mode', String(continuousMode.checked));
+        
+        // Aplicar em tempo real se estiver escutando
+        if (recognition) {
+          recognition.continuous = continuousMode.checked;
+          console.log('[VOICE CMD] Modo contínuo alterado em tempo real:', continuousMode.checked);
+        }
+        
+        addLog(`Modo contínuo: ${continuousMode.checked ? 'ativado' : 'desativado'}`, 'success');
+      });
+    }
+
+    // NOVO: Listener para Modo Escuta Livre
+    if (freeListeningCheckbox) {
+      bindElementOnce(freeListeningCheckbox, 'free-listening-change', 'change', () => {
+        freeListeningMode = freeListeningCheckbox.checked;
+        // Persistir estado
+        localStorage.setItem('voice_free_listening_mode', String(freeListeningMode));
+        addLog(
+          `Modo Escuta Livre: ${freeListeningMode ? 'ativado - Transcreve sem confirmação' : 'desativado'}`,
+          freeListeningMode ? 'success' : 'info'
+        );
+        console.log('[VOICE CMD] Modo Escuta Livre:', freeListeningMode);
+      });
+    }
+
+    // Listener para detecção de sons CC
+    if (soundDetectionCheckbox) {
+      const soundHandler = async (e) => {
+        soundDetectionActive = e.target.checked;
+        console.log('[VOICE CMD] Detecção de sons:', soundDetectionActive ? 'ativada' : 'desativada');
+        
+        // Persistir estado
+        localStorage.setItem('voice_sound_detection_enabled', soundDetectionActive);
+        
+        if (soundDetectionActive) {
+          // Inicializar análise de áudio
+          if (!audioContext) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          }
+          addLog('Legendas CC ativadas - detectando sons ambiente', 'success');
+          startSoundDetector();
+        } else {
+          // Parar análise de áudio
+          stopSoundDetector();
+          addLog('Legendas CC desativadas', 'info');
+        }
+      };
+      
+      soundDetectionCheckbox.addEventListener('change', soundHandler);
+      console.log('[VOICE CMD] Listener de detecção de sons registrado');
+    }
+
+    if (ccSensitivityInput) {
+      const updateCcSensitivityDisplay = () => {
+        const value = getCcSensitivityValue();
+        const displayEl = document.getElementById('voice-cc-sensitivity-display');
+        if (displayEl) {
+          displayEl.textContent = `${value}%`;
+          if (value <= 30) {
+            displayEl.className = 'ms-2 badge bg-success';
+          } else if (value <= 70) {
+            displayEl.className = 'ms-2 badge bg-secondary';
+          } else {
+            displayEl.className = 'ms-2 badge bg-warning text-dark';
+          }
+        }
+      };
+
+      ccSensitivityInput.addEventListener('input', updateCcSensitivityDisplay);
+      ccSensitivityInput.addEventListener('change', () => {
+        const value = getCcSensitivityValue();
+        localStorage.setItem('voice_cc_sensitivity', String(value));
+        addLog(`Sensibilidade CC: ${value}%`, 'info');
+      });
+
+      updateCcSensitivityDisplay();
+    }
+
+    // Listeners para Responsividade CC
+    const ccResponsivenessInput = document.getElementById('voice-cc-responsiveness');
+    if (ccResponsivenessInput) {
+      const updateResponsivenessDisplay = () => {
+        const value = getCcResponsivenessValue();
+        const displayEl = document.getElementById('voice-cc-responsiveness-display');
+        if (displayEl) {
+          displayEl.textContent = `${value}%`;
+          if (value <= 30) {
+            displayEl.className = 'ms-2 badge bg-info';
+          } else if (value <= 70) {
+            displayEl.className = 'ms-2 badge bg-secondary';
+          } else {
+            displayEl.className = 'ms-2 badge bg-warning text-dark';
+          }
+        }
+      };
+
+      ccResponsivenessInput.addEventListener('input', updateResponsivenessDisplay);
+      ccResponsivenessInput.addEventListener('change', () => {
+        const value = getCcResponsivenessValue();
+        localStorage.setItem('voice_cc_responsiveness', String(value));
+        updateCcDelayParameters();
+        addLog(`Responsividade CC: ${value}% (alpha: ${soundSmoothAlpha.toFixed(3)})`, 'info');
+      });
+
+      updateResponsivenessDisplay();
+    }
+
+    // Listeners para Estabilidade CC
+    const ccStabilityInput = document.getElementById('voice-cc-stability');
+    if (ccStabilityInput) {
+      const updateStabilityDisplay = () => {
+        const value = getCcStabilityValue();
+        const displayEl = document.getElementById('voice-cc-stability-display');
+        if (displayEl) {
+          displayEl.textContent = `${value}%`;
+          if (value <= 30) {
+            displayEl.className = 'ms-2 badge bg-success';
+          } else if (value <= 70) {
+            displayEl.className = 'ms-2 badge bg-secondary';
+          } else {
+            displayEl.className = 'ms-2 badge bg-danger';
+          }
+        }
+      };
+
+      ccStabilityInput.addEventListener('input', updateStabilityDisplay);
+      ccStabilityInput.addEventListener('change', () => {
+        const value = getCcStabilityValue();
+        localStorage.setItem('voice_cc_stability', String(value));
+        updateCcDelayParameters();
+        addLog(`Estabilidade CC: ${value}% (hold: ${soundHoldBaseMs.toFixed(0)}ms)`, 'info');
+      });
+
+      updateStabilityDisplay();
+    }
+
+    // Listener para Velocidade de Confirmação
+    const phraseCommitDelayInput = document.getElementById('voice-phrase-commit-delay');
+    if (phraseCommitDelayInput) {
+      const updateDelayDisplay = () => {
+        const value = getPhraseCommitDelayValue();
+        const displayEl = document.getElementById('voice-phrase-commit-delay-display');
+        if (displayEl) {
+          displayEl.textContent = `${value}ms`;
+          // Cor: vermelho (rápido) → amarelo (meio) → azul (conservador)
+          if (value < 150) {
+            displayEl.className = 'ms-2 badge bg-danger';
+          } else if (value < 300) {
+            displayEl.className = 'ms-2 badge bg-warning';
+          } else {
+            displayEl.className = 'ms-2 badge bg-info';
+          }
+        }
+      };
+
+      phraseCommitDelayInput.addEventListener('input', updateDelayDisplay);
+      phraseCommitDelayInput.addEventListener('change', () => {
+        const value = getPhraseCommitDelayValue();
+        localStorage.setItem('voice_phrase_commit_delay', String(value));
+        updatePhraseCommitDelay();
+        addLog(`Velocidade de Confirmação: ${value}ms`, 'info');
+      });
+
+      updateDelayDisplay();
+    }
+
+    // Listeners para Presets Rápidos
+    const presetResponsiveBtn = document.getElementById('voice-preset-responsive');
+    const presetBalancedBtn = document.getElementById('voice-preset-balanced');
+    const presetStableBtn = document.getElementById('voice-preset-stable');
+
+    if (presetResponsiveBtn) {
+      presetResponsiveBtn.addEventListener('click', () => {
+        applyPreset('responsive');
+      });
+    }
+
+    if (presetBalancedBtn) {
+      presetBalancedBtn.addEventListener('click', () => {
+        applyPreset('balanced');
+      });
+    }
+
+    if (presetStableBtn) {
+      presetStableBtn.addEventListener('click', () => {
+        applyPreset('stable');
+      });
+    }
+
+    // Listeners para parâmetros da Web Speech API
+    if (apiMaxAlternativesInput) {
+      apiMaxAlternativesInput.addEventListener('change', () => {
+        const value = Math.max(1, Math.min(10, parseInt(apiMaxAlternativesInput.value) || 1));
+        apiMaxAlternativesInput.value = String(value);
+        // Persistir valor
+        localStorage.setItem('voice_api_max_alternatives', String(value));
+        console.log('[VOICE CMD] Máx. alternativas salvo:', value);
+        if (isListening) {
+          addLog('⚠️ Parâmetros alterados. Reinicie a escuta para aplicar.', 'warning');
+        } else {
+          addLog('Parâmetro "Alternativas" atualizado', 'info');
+        }
+      });
+    }
+
+    if (apiConfidenceInput) {
+      // Atualizar display do valor do slider em tempo real
+      const updateConfidenceDisplay = () => {
+        const sliderValue = parseInt(apiConfidenceInput.value);
+        const displayEl = document.getElementById('voice-api-confidence-display');
+        if (displayEl) {
+          displayEl.textContent = `${sliderValue}%`;
+          // Mudar cor baseada no valor
+          if (sliderValue <= 20) {
+            displayEl.className = 'ms-2 badge bg-success';
+          } else if (sliderValue <= 50) {
+            displayEl.className = 'ms-2 badge bg-info';
+          } else if (sliderValue <= 80) {
+            displayEl.className = 'ms-2 badge bg-warning text-dark';
+          } else {
+            displayEl.className = 'ms-2 badge bg-danger';
+          }
+        }
+      };
+      
+      apiConfidenceInput.addEventListener('input', updateConfidenceDisplay);
+      apiConfidenceInput.addEventListener('change', () => {
+        const value = Math.max(0, Math.min(100, parseInt(apiConfidenceInput.value) || 0));
+        apiConfidenceInput.value = String(value);
+        // Persistir valor
+        localStorage.setItem('voice_api_confidence', String(value));
+        console.log('[VOICE CMD] Confiança mínima salva:', value);
+        if (isListening) {
+          addLog('⚠️ Parâmetros alterados. Reinicie a escuta para aplicar.', 'warning');
+        } else {
+          addLog('Parâmetro "Confiança Mínima" atualizado', 'info');
+        }
+      });
+      
+      // Inicializar display
+      updateConfidenceDisplay();
+    }
+
+    bindElementOnce(toggleLogBtn, 'toggle-log', 'click', () => {
+      const logSection = $('voice-command-widget').querySelector('.voice-log-section');
+      if (logSection) {
+        logSection.classList.toggle('voice-log-section-hidden');
+        toggleLogBtn.classList.toggle('active');
+      }
+    });
+
+    bindElementOnce(toggleAdvancedBtn, 'toggle-advanced', 'click', () => {
+      const advancedSection = $('voice-command-widget').querySelector('.voice-advanced-settings');
+      if (advancedSection) {
+        advancedSection.classList.toggle('voice-advanced-settings-hidden');
+        toggleAdvancedBtn.classList.toggle('active');
+      }
+    });
+
+    // P0.2: Event delegation para remover palavras (remove inline handlers)
+    bindElementOnce(commandsList, 'remove-trigger-click', 'click', (e) => {
+      const removeBtn = e.target.closest('button[data-action="remove-trigger"]');
+      if (removeBtn) {
+        const triggerId = removeBtn.getAttribute('data-trigger-id');
+        if (triggerId) {
+          removeTriggerWord(triggerId);
+        }
+      }
+    });
+  }
+
+  function rehydrateWidget() {
+    if (!cacheElements()) {
+      console.warn('[VOICE CMD] Rehydrate falhou: elementos não encontrados');
+      return false;
+    }
+
+    bindUiEventListeners();
+    restoreAdvancedParametersState();  // Restaurar todos os parâmetros avançados
+    loadTriggerWords();
+    renderTranscriptDisplay();
+    updateLogDisplay();
+    return true;
+  }
+  
+  function cacheElements() {
+    transcriptDisplay = $('voice-transcript-display');
+    confidenceLabel = $('voice-confidence');
+    languageSelect = $('voice-language-select');
+    continuousMode = $('voice-continuous-mode');
+    freeListeningCheckbox = $('voice-free-listening-mode');
+    triggerInput = $('voice-trigger-input');
+    triggerAddBtn = $('voice-trigger-add');
+    commandsList = $('voice-commands-list');
+    listeningBtn = $('voice-listening-btn');
+    listeningText = $('voice-listening-text');
+    statusLabel = $('voice-status');
+    logDisplay = $('voice-log-display');
+    logClearBtn = $('voice-log-clear');
+    clearAllBtn = $('voice-clear-all');
+    toggleLogBtn = $('voice-toggle-log-btn');
+    toggleAdvancedBtn = $('voice-toggle-advanced-btn');
+    soundDetectionCheckbox = $('voice-sound-detection');
+    ccSensitivityInput = $('voice-cc-sensitivity');
+    
+    // Parâmetros de delay do CC
+    const ccResponsivenessInput = $('voice-cc-responsiveness');
+    const ccStabilityInput = $('voice-cc-stability');
+    
+    // Parâmetros da Web Speech API
+    apiMaxAlternativesInput = $('voice-api-max-alternatives');
+    apiConfidenceInput = $('voice-api-confidence');
+    
+    // Verificar se todos foram carregados
+    const missing = [];
+    if (!transcriptDisplay) missing.push('voice-transcript-display');
+    if (!listeningBtn) missing.push('voice-listening-btn');
+    if (!triggerInput) missing.push('voice-trigger-input');
+    if (!commandsList) missing.push('voice-commands-list');
+    if (!statusLabel) missing.push('voice-status');
+    
+    if (missing.length > 0) {
+      console.error('[VOICE CMD] Elementos DOM ausentes:', missing);
+      return false;
+    }
+    return true;
+  }
+
+  // Estado
+  let isListening = false;
+  let shouldKeepListening = false;
+  let currentTranscript = '';
+  let monitorFinalText = '';
+  let monitorInterimText = '';
+  let monitorSoundText = '';
+  let monitorSoundIcon = 'fa-wave-square';
+  let lastSoundLabel = '';
+  let soundRmsSmooth = 0;
+  let soundStableCandidate = '';
+  let soundCandidateSince = 0;
+  let lastSoundLoggedAt = 0;
+  let monitorHighlightWord = '';
+  let monitorHighlightTimer = null;
+  let interimFrozen = false;  // Flag para congelar interim (melhor que usar timer ID)
+  let pendingFinalTranscript = '';
+  let phraseCommitTimer = null;
+  let nonContinuousTimeoutId = null;
+  let liveTriggeredCounts = new Map();
+  let logEntries = [];
+  let freeListeningMode = false;  // NOVO: Modo Escuta Livre (sem confirmação)
+  let triggerWords = [];  // Array de: { word, mode, intensity, channel, id }
+  let audioContext = null;
+  let soundDetectionActive = false;  // Flag de detecção de sons CC
+  let analyserNode = null;  // Para análise de áudio
+  let detectorRafId = null;  // RAF ID para parar detector
+  let transcriptHistory = [];  // Histórico acumulado de transcrições finais
+  const MAX_TRANSCRIPT_HISTORY = 100;  // Máximo de entradas no histórico
+  const MAX_LOG_ENTRIES = 50;
+  const PHRASE_COMMIT_DELAY_MS_DEFAULT = 220;
+  const NON_CONTINUOUS_TIMEOUT_MS = 45000;
+  const SOUND_SMOOTH_ALPHA_DEFAULT = 0.35;  // Será sobrescrito por slider
+  const SOUND_HOLD_BASE_MS_DEFAULT = 200;   // Será sobrescrito por slider
+  const SOUND_LOG_MIN_INTERVAL_MS = 1200;
+  // P0.1: Idle Detection para otimização de CPU
+  let audioIdleCount = 0;
+  const AUDIO_IDLE_THRESHOLD = 4;      // RMS < 4 = silêncio
+  const AUDIO_IDLE_LIMIT = 60;         // ~1 segundo em 60fps
+  const AUDIO_IDLE_RECOVERY_MS = 2000; // Retomar análise após 2s
+
+  // Variáveis dinâmicas para delay
+  let phraseCommitDelayMs = PHRASE_COMMIT_DELAY_MS_DEFAULT;
+  let soundSmoothAlpha = SOUND_SMOOTH_ALPHA_DEFAULT;
+  let soundHoldBaseMs = SOUND_HOLD_BASE_MS_DEFAULT;
+  const CC_SENSITIVITY_DEFAULT = 50;
+  
+  // Parâmetros da Web Speech API
+  const SPEECH_API_DEFAULTS = Object.freeze({ 
+    maxAlternatives: 1,
+    confidence: 0  // Confiança mínima (0-1), 0 aceita todas
+  });
+  const SPEECH_API_LIMITS = Object.freeze({
+    maxAlternatives: { min: 1, max: 10 },
+    confidence: { min: 0, max: 1 }
+  });
+  const ADV_TOLERANCE = 0.001;
+
+  // Estilos dos modos (mesmo padrão dos botões personalizados)
+  const MODE_STYLES = {
+    SHOCK:     { color: "#f97316", tint: "rgba(249,115,22,0.14)", icon: "fa-bolt-lightning", label: "Choque" },
+    VIBRATION: { color: "#10b981", tint: "rgba(16,185,129,0.14)", icon: "fa-mobile-screen-button", label: "Vibração" },
+    LIGHT:     { color: "#facc15", tint: "rgba(250,204,21,0.16)", icon: "fa-lightbulb", label: "Luz" },
+    BEEP:      { color: "#60a5fa", tint: "rgba(96,165,250,0.16)", icon: "fa-volume-high", label: "Bip" },
+    ROULETTE:  { color: "#f472b6", tint: "rgba(244,114,182,0.18)", icon: "fa-dice", label: "Roleta" },
+    BTN_STATE: { color: "#f43f5e", tint: "rgba(244,63,94,0.16)", icon: "fa-toggle-on", label: "Estado Botão" },
+    DEFAULT:   { color: "#a855f7", tint: "rgba(168,85,247,0.16)", icon: "fa-wave-square", label: "Modo" }
+  };
+
+  const BASE_TINT_BLEND = { r: 12, g: 13, b: 19 };
+
+  function blendChannel(fg, base, alpha) {
+    return fg * alpha + base * (1 - alpha);
+  }
+
+  function toSolidTint(value, fallback) {
+    if (!value) return fallback || `rgb(${BASE_TINT_BLEND.r}, ${BASE_TINT_BLEND.g}, ${BASE_TINT_BLEND.b})`;
+    const match = String(value).match(/rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([0-9.]+))?\s*\)/i);
+    if (match) {
+      const r = Number(match[1]);
+      const g = Number(match[2]);
+      const b = Number(match[3]);
+      const alpha = match[4] !== undefined ? Math.max(0, Math.min(1, Number(match[4]))) : 1;
+      const blendedR = Math.round(blendChannel(r, BASE_TINT_BLEND.r, alpha));
+      const blendedG = Math.round(blendChannel(g, BASE_TINT_BLEND.g, alpha));
+      const blendedB = Math.round(blendChannel(b, BASE_TINT_BLEND.b, alpha));
+      return `rgb(${blendedR}, ${blendedG}, ${blendedB})`;
+    }
+    return value;
+  }
+
+  function getModeStyle(mode) {
+    return MODE_STYLES[mode] || MODE_STYLES.DEFAULT;
+  }
+
+  // Detecção de sons CC (Closed Captions)
+  function startSoundDetector() {
+    if (!soundDetectionActive || !isListening) {
+      console.log('[VOICE CMD] Não é possível iniciar detector de sons');
+      return;
+    }
+
+    try {
+      console.log('[VOICE CMD] Iniciando detector de sons CC');
+      
+      // Criar audioContext se não existir
+      if (!audioContext) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        console.log('[VOICE CMD] AudioContext criado');
+      }
+      
+      // Resume audioContext (Chrome/Firefox suspendem até interação)
+      if (audioContext.state === 'suspended') {
+        audioContext.resume().catch(e => console.warn('[VOICE CMD] Não pôde resumir AudioContext:', e));
+        console.log('[VOICE CMD] AudioContext retomado');
+      }
+      
+      // Se não houver analyser, criar e conectar ao microfone
+      if (!analyserNode) {
+        analyserNode = audioContext.createAnalyser();
+        analyserNode.fftSize = 2048;
+        analyserNode.smoothingTimeConstant = 0.8;  // Suavização adicional
+        console.log('[VOICE CMD] AnalyserNode criado com fftSize=2048');
+        
+        // Conectar microfone ao analyser (assincronamente, mas só inicia loop depois)
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false } })
+            .then(stream => {
+              try {
+                const source = audioContext.createMediaStreamAudioSource(stream);
+                source.connect(analyserNode);
+                console.log('[VOICE CMD] Fonte de áudio conectada ao analyser');
+                
+                // SÓ AGORA iniciar o loop de detecção após confirmar conexão
+                if (!detectorRafId && soundDetectionActive) {
+                  console.log('[VOICE CMD] Iniciando loop de análise de frequência');
+                  analyzeSoundFrame();
+                }
+              } catch (connectErr) {
+                console.error('[VOICE CMD] Erro ao conectar fonte:', connectErr);
+              }
+            })
+            .catch(e => {
+              console.warn('[VOICE CMD] Aviso ao obter microfone:', e);
+              addLog(`CC: Permissão de microfone negada ou indisponível`, 'warning');
+            });
+        }
+      } else if (!detectorRafId) {
+        // Se analyser já existe e loop não está rodando, iniciar
+        console.log('[VOICE CMD] Retomando loop de análise de frequência');
+        analyzeSoundFrame();
+      }
+    } catch (e) {
+      console.error('[VOICE CMD] Erro ao iniciar detector:', e);
+      if (addLog) addLog(`Erro ao ativar CC: ${e.message}`, 'warning');
+    }
+  }
+
+  function stopSoundDetector() {
+    if (detectorRafId) {
+      // P0.1: Verificar se é setTimeout ou rAF
+      if (typeof detectorRafId === 'number' && detectorRafId > 1000000) {
+        cancelAnimationFrame(detectorRafId);  // RAF
+      } else {
+        clearTimeout(detectorRafId);  // Timeout
+      }
+      detectorRafId = null;
+    }
+    audioIdleCount = 0;  // P0.1: Resetar contador de idle
+    monitorSoundText = '';
+    monitorSoundIcon = 'fa-wave-square';
+    lastSoundLabel = '';
+    soundRmsSmooth = 0;
+    soundStableCandidate = '';
+    soundCandidateSince = 0;
+    renderTranscriptDisplay();
+    console.log('[VOICE CMD] Detector de sons parado');
+  }
+
+  function getCcSensitivityValue() {
+    if (!ccSensitivityInput) return CC_SENSITIVITY_DEFAULT;
+    const parsed = Number(ccSensitivityInput.value);
+    if (!Number.isFinite(parsed)) return CC_SENSITIVITY_DEFAULT;
+    return Math.max(0, Math.min(100, Math.round(parsed)));
+  }
+
+  function getCcResponsivenessValue() {
+    const responselnput = document.getElementById('voice-cc-responsiveness');
+    if (!responselnput) return 50;
+    const parsed = Number(responselnput.value);
+    if (!Number.isFinite(parsed)) return 50;
+    return Math.max(0, Math.min(100, Math.round(parsed)));
+  }
+
+  function getCcStabilityValue() {
+    const stabilityInput = document.getElementById('voice-cc-stability');
+    if (!stabilityInput) return 50;
+    const parsed = Number(stabilityInput.value);
+    if (!Number.isFinite(parsed)) return 50;
+    return Math.max(0, Math.min(100, Math.round(parsed)));
+  }
+
+  function getPhraseCommitDelayValue() {
+    const delayInput = document.getElementById('voice-phrase-commit-delay');
+    if (!delayInput) return PHRASE_COMMIT_DELAY_MS_DEFAULT;
+    const parsed = Number(delayInput.value);
+    if (!Number.isFinite(parsed)) return PHRASE_COMMIT_DELAY_MS_DEFAULT;
+    return Math.max(50, Math.min(1000, Math.round(parsed)));
+  }
+
+  function updateCcDelayParameters() {
+    // Responsividade: 0-100 mapeado para 0.1 (pouco responsivo) até 0.8 (muito responsivo)
+    const responsiveness = getCcResponsivenessValue();
+    soundSmoothAlpha = 0.1 + (responsiveness / 100) * 0.7;  // Range: 0.1 - 0.8
+
+    // Estabilidade: 0-100 mapeado para 50ms até 500ms
+    const stability = getCcStabilityValue();
+    soundHoldBaseMs = 50 + (stability / 100) * 450;  // Range: 50 - 500ms
+
+    console.log('[VOICE CMD] Delay params - Responsiveness:', responsiveness, 
+                '(alpha:', soundSmoothAlpha.toFixed(3), ')', 
+                'Stability:', stability, '(ms:', soundHoldBaseMs.toFixed(0), ')');
+  }
+
+  function updatePhraseCommitDelay() {
+    const delay = getPhraseCommitDelayValue();
+    phraseCommitDelayMs = delay;
+    
+    const badge = document.getElementById('voice-phrase-commit-delay-display');
+    if (badge) {
+      badge.textContent = `${delay}ms`;
+      // Cor baseada no delay: vermelho (rápido) → amarelo (meio) → azul (lento)
+      if (delay < 150) badge.className = 'ms-2 badge bg-danger';      // Muito rápido
+      else if (delay < 300) badge.className = 'ms-2 badge bg-warning'; // Balanceado
+      else badge.className = 'ms-2 badge bg-info';                     // Conservador
+    }
+    
+    localStorage.setItem('voice_phrase_commit_delay', String(delay));
+    console.log('[VOICE CMD] Phrase commit delay set to:', delay, 'ms');
+  }
+
+  function applyPreset(presetName) {
+    const presets = {
+      responsive: { responsiveness: 90, stability: 10, phraseDelay: 150 },
+      balanced: { responsiveness: 50, stability: 50, phraseDelay: 220 },
+      stable: { responsiveness: 20, stability: 80, phraseDelay: 500 }
+    };
+
+    const preset = presets[presetName];
+    if (!preset) {
+      console.warn('[VOICE CMD] Preset desconhecido:', presetName);
+      return;
+    }
+
+    // Aplicar aos inputs
+    const responsiveness = document.getElementById('voice-cc-responsiveness');
+    const stability = document.getElementById('voice-cc-stability');
+    const phraseDelay = document.getElementById('voice-phrase-commit-delay');
+
+    if (responsiveness) {
+      responsiveness.value = preset.responsiveness;
+      // Disparar evento de mudança
+      responsiveness.dispatchEvent(new Event('input', { bubbles: true }));
+      responsiveness.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    if (stability) {
+      stability.value = preset.stability;
+      // Disparar evento de mudança
+      stability.dispatchEvent(new Event('input', { bubbles: true }));
+      stability.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    if (phraseDelay) {
+      phraseDelay.value = preset.phraseDelay;
+      // Disparar evento de mudança
+      phraseDelay.dispatchEvent(new Event('input', { bubbles: true }));
+      phraseDelay.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    // Salvar preset escolhido
+    localStorage.setItem('voice_cc_responsiveness', String(preset.responsiveness));
+    localStorage.setItem('voice_cc_stability', String(preset.stability));
+    localStorage.setItem('voice_phrase_commit_delay', String(preset.phraseDelay));
+
+    updateCcDelayParameters();
+    addLog(`Preset aplicado: ${presetName.charAt(0).toUpperCase() + presetName.slice(1)} (Confirmação: ${preset.phraseDelay}ms)`, 'success');
+    console.log('[VOICE CMD] Preset aplicado:', presetName, preset);
+  }
+
+  function restoreCcSensitivityState() {
+    if (!ccSensitivityInput) return;
+    const stored = localStorage.getItem('voice_cc_sensitivity');
+    const parsed = Number(stored);
+    const value = Number.isFinite(parsed)
+      ? Math.max(0, Math.min(100, Math.round(parsed)))
+      : CC_SENSITIVITY_DEFAULT;
+    ccSensitivityInput.value = String(value);
+    const displayEl = document.getElementById('voice-cc-sensitivity-display');
+    if (displayEl) {
+      displayEl.textContent = `${value}%`;
+      if (value <= 30) {
+        displayEl.className = 'ms-2 badge bg-success';
+      } else if (value <= 70) {
+        displayEl.className = 'ms-2 badge bg-secondary';
+      } else {
+        displayEl.className = 'ms-2 badge bg-warning text-dark';
+      }
+    }
+  }
+
+  function restoreAdvancedParametersState() {
+    // Restaurar Idioma
+    if (languageSelect) {
+      const storedLang = localStorage.getItem('voice_language');
+      const langToUse = storedLang || 'pt-BR';  // Padrão: Português Brasil
+      languageSelect.value = langToUse;
+      if (recognition) {
+        recognition.lang = langToUse;
+      }
+      console.log('[VOICE CMD] Idioma restaurado/definido:', langToUse, '(salvo:', !!storedLang, ')');
+    }
+
+    // Restaurar Modo Contínuo
+    if (continuousMode) {
+      const storedContinuous = localStorage.getItem('voice_continuous_mode');
+      const value = storedContinuous === null ? true : storedContinuous === 'true';
+      continuousMode.checked = value;
+      console.log('[VOICE CMD] Modo contínuo restaurado:', value);
+    }
+
+    // NOVO: Restaurar Modo Escuta Livre
+    if (freeListeningCheckbox) {
+      const storedFreeListening = localStorage.getItem('voice_free_listening_mode');
+      const value = storedFreeListening === null ? false : storedFreeListening === 'true';
+      freeListeningCheckbox.checked = value;
+      freeListeningMode = value;
+      console.log('[VOICE CMD] Modo Escuta Livre restaurado:', value);
+    }
+
+    // Restaurar Detecção de Sons CC (já trata via restoreSoundDetectionState)
+    if (soundDetectionCheckbox) {
+      const stored = localStorage.getItem('voice_sound_detection_enabled');
+      const shouldBeEnabled = stored === null ? false : stored === 'true';
+      soundDetectionCheckbox.checked = shouldBeEnabled;
+      soundDetectionActive = shouldBeEnabled;
+      console.log('[VOICE CMD] CC restaurado:', shouldBeEnabled);
+    }
+
+    // Restaurar Sensibilidade CC
+    restoreCcSensitivityState();
+
+    // Restaurar Máximo de Alternativas
+    if (apiMaxAlternativesInput) {
+      const storedAlternatives = localStorage.getItem('voice_api_max_alternatives');
+      if (storedAlternatives) {
+        const value = Math.max(1, Math.min(10, parseInt(storedAlternatives) || 1));
+        apiMaxAlternativesInput.value = String(value);
+        console.log('[VOICE CMD] Máx. alternativas restauradas:', value);
+      }
+    }
+
+    // Restaurar Confiança Mínima
+    if (apiConfidenceInput) {
+      const storedConfidence = localStorage.getItem('voice_api_confidence');
+      if (storedConfidence) {
+        const value = Math.max(0, Math.min(100, parseInt(storedConfidence) || 0));
+        apiConfidenceInput.value = String(value);
+        // Atualizar display do badge
+        const displayEl = document.getElementById('voice-api-confidence-display');
+        if (displayEl) {
+          displayEl.textContent = `${value}%`;
+          if (value <= 20) {
+            displayEl.className = 'ms-2 badge bg-success';
+          } else if (value <= 50) {
+            displayEl.className = 'ms-2 badge bg-info';
+          } else if (value <= 80) {
+            displayEl.className = 'ms-2 badge bg-warning text-dark';
+          } else {
+            displayEl.className = 'ms-2 badge bg-danger';
+          }
+        }
+        console.log('[VOICE CMD] Confiança mínima restaurada:', value);
+      }
+    }
+
+    // Restaurar Responsividade CC
+    const ccResponsivenessInput = document.getElementById('voice-cc-responsiveness');
+    if (ccResponsivenessInput) {
+      const storedResponsiveness = localStorage.getItem('voice_cc_responsiveness');
+      if (storedResponsiveness) {
+        const value = Math.max(0, Math.min(100, parseInt(storedResponsiveness) || 50));
+        ccResponsivenessInput.value = String(value);
+        console.log('[VOICE CMD] Responsividade CC restaurada:', value);
+      }
+    }
+
+    // Restaurar Estabilidade CC
+    const ccStabilityInput = document.getElementById('voice-cc-stability');
+    if (ccStabilityInput) {
+      const storedStability = localStorage.getItem('voice_cc_stability');
+      if (storedStability) {
+        const value = Math.max(0, Math.min(100, parseInt(storedStability) || 50));
+        ccStabilityInput.value = String(value);
+        console.log('[VOICE CMD] Estabilidade CC restaurada:', value);
+      }
+    }
+
+    // Restaurar Velocidade de Confirmação (Phrase Commit Delay)
+    const phraseCommitDelayInput = document.getElementById('voice-phrase-commit-delay');
+    if (phraseCommitDelayInput) {
+      const storedDelay = localStorage.getItem('voice_phrase_commit_delay');
+      if (storedDelay) {
+        const value = Math.max(50, Math.min(1000, parseInt(storedDelay) || PHRASE_COMMIT_DELAY_MS_DEFAULT));
+        phraseCommitDelayInput.value = String(value);
+        phraseCommitDelayMs = value;
+        const displayEl = document.getElementById('voice-phrase-commit-delay-display');
+        if (displayEl) {
+          displayEl.textContent = `${value}ms`;
+          if (value < 150) {
+            displayEl.className = 'ms-2 badge bg-danger';
+          } else if (value < 300) {
+            displayEl.className = 'ms-2 badge bg-warning';
+          } else {
+            displayEl.className = 'ms-2 badge bg-info';
+          }
+        }
+        console.log('[VOICE CMD] Velocidade de Confirmação restaurada:', value, 'ms');
+      }
+    }
+
+    // Aplicar parâmetros de delay após restaurar
+    updateCcDelayParameters();
+
+    console.log('[VOICE CMD] Todos os parâmetros avançados restaurados');
+  }
+
+  function getSoundDescriptor(rms, highFreqAvg, lowFreqAvg, sensitivity = CC_SENSITIVITY_DEFAULT) {
+    const scale = 1 + ((50 - sensitivity) / 100) * 0.9;
+    const thresholdSilence = 4 * scale;       // Reduzido de 14 para capturar sons mais baixos
+    const thresholdLow = 12 * scale;          // Reduzido de 28
+    const thresholdMid = 28 * scale;          // Reduzido de 50
+    const thresholdHigh = 45 * scale;         // Reduzido de 80
+    const tonalRatio = 1.35 + ((50 - sensitivity) / 100) * 0.2;
+
+    if (rms < thresholdSilence) {
+      return { key: 'silence', label: 'Silêncio', icon: 'fa-volume-xmark' };
+    }
+    if (rms < thresholdLow) {
+      return { key: 'low-noise', label: 'Ruído leve', icon: 'fa-volume-low' };
+    }
+    if (rms < thresholdMid) {
+      if (highFreqAvg > lowFreqAvg * tonalRatio) {
+        return { key: 'speech-like', label: 'Voz/Tom agudo', icon: 'fa-microphone-lines' };
+      }
+      if (lowFreqAvg > highFreqAvg * tonalRatio) {
+        return { key: 'music-like', label: 'Tom grave/Música', icon: 'fa-music' };
+      }
+      return { key: 'mid-noise', label: 'Ruído médio', icon: 'fa-wave-square' };
+    }
+    if (rms < thresholdHigh) {
+      return { key: 'loud-noise', label: 'Ruído alto', icon: 'fa-volume-high' };
+    }
+    return { key: 'impact', label: 'Impacto/Ruído forte', icon: 'fa-bell' };
+  }
+
+  function restoreSoundDetectionState() {
+    if (!soundDetectionCheckbox) {
+      console.warn('[VOICE CMD] soundDetectionCheckbox não encontrado');
+      return;
+    }
+
+    try {
+      // Obter estado do localStorage, padrão é true (ativado)
+      const stored = localStorage.getItem('voice_sound_detection_enabled');
+      const shouldBeEnabled = stored === null ? true : stored === 'true';
+      
+      console.log('[VOICE CMD] Restaurando estado de CC:', shouldBeEnabled);
+      
+      // Atualizar checkbox
+      soundDetectionCheckbox.checked = shouldBeEnabled;
+      soundDetectionActive = shouldBeEnabled;
+      
+      if (shouldBeEnabled) {
+        // Inicializar detector se deve estar ativado
+        console.log('[VOICE CMD] Ativando legendas CC automaticamente');
+        if (!audioContext) {
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        addLog('Legendas CC ativadas', 'success');
+        if (isListening) {
+          startSoundDetector();
+        }
+      } else {
+        addLog('Legendas CC desativadas', 'info');
+      }
+    } catch (e) {
+      console.error('[VOICE CMD] Erro ao restaurar estado CC:', e);
+    }
+  }
+
+  function analyzeSoundFrame() {
+    if (!soundDetectionActive || !analyserNode) return;
+
+    const dataArray = new Uint8Array(analyserNode.frequencyBinCount);
+    analyserNode.getByteFrequencyData(dataArray);
+
+    // Calcular RMS (volume)
+    let sum = 0;
+    for (let i = 0; i < dataArray.length; i++) {
+      sum += dataArray[i] * dataArray[i];
+    }
+    const rms = Math.sqrt(sum / dataArray.length);
+    soundRmsSmooth = soundRmsSmooth === 0
+      ? rms
+      : (soundRmsSmooth * (1 - soundSmoothAlpha)) + (rms * soundSmoothAlpha);
+
+    // P0.1: IDLE DETECTION - Otimização CPU em silêncio prolongado
+    if (soundRmsSmooth < AUDIO_IDLE_THRESHOLD) {
+      audioIdleCount++;
+      
+      if (audioIdleCount >= AUDIO_IDLE_LIMIT) {
+        console.log('[VOICE CMD] Audio detector entrando em modo idle (silêncio prolongado)');
+        
+        if (detectorRafId) {
+          cancelAnimationFrame(detectorRafId);
+          detectorRafId = null;
+        }
+        
+        // Agendar retomada após 2 segundos
+        detectorRafId = setTimeout(() => {
+          if (soundDetectionActive && !detectorRafId) {
+            console.log('[VOICE CMD] Retomando análise de áudio após idle');
+            audioIdleCount = 0;
+            analyzeSoundFrame();
+          }
+        }, AUDIO_IDLE_RECOVERY_MS);
+        return;
+      }
+    } else {
+      // Som detectado, resetar contador
+      audioIdleCount = 0;
+    }
+
+    const quarter = Math.max(1, Math.floor(dataArray.length * 0.25));
+    let highSum = 0;
+    let lowSum = 0;
+    for (let i = 0; i < quarter; i++) lowSum += dataArray[i];
+    for (let i = dataArray.length - quarter; i < dataArray.length; i++) highSum += dataArray[i];
+    const highFreqAvg = highSum / quarter;
+    const lowFreqAvg = lowSum / quarter;
+
+    const sensitivity = getCcSensitivityValue();
+    const holdMs = Math.round(soundHoldBaseMs + ((100 - sensitivity) * 3));
+    const descriptor = getSoundDescriptor(soundRmsSmooth, highFreqAvg, lowFreqAvg, sensitivity);
+    const now = Date.now();
+
+    // Debug: log a cada 60 frames (~1 segundo em 60fps)
+    if (typeof window.__VOICE_DEBUG_FRAME_COUNT === 'undefined') {
+      window.__VOICE_DEBUG_FRAME_COUNT = 0;
+    }
+    window.__VOICE_DEBUG_FRAME_COUNT++;
+    if (window.__VOICE_DEBUG_FRAME_COUNT % 60 === 0) {
+      console.log('[VOICE CMD] CC DEBUG - RMS:', rms.toFixed(1), 'Smooth:', soundRmsSmooth.toFixed(1), 
+                  'HighFreq:', highFreqAvg.toFixed(1), 'LowFreq:', lowFreqAvg.toFixed(1), 
+                  'Category:', descriptor.label, 'Sensitivity:', sensitivity);
+    }
+
+    if (soundStableCandidate !== descriptor.key) {
+      soundStableCandidate = descriptor.key;
+      soundCandidateSince = now;
+    }
+
+    if ((now - soundCandidateSince) >= holdMs && lastSoundLabel !== descriptor.label) {
+      lastSoundLabel = descriptor.label;
+      monitorSoundIcon = descriptor.icon;
+      monitorSoundText = `CC: ${descriptor.label}`;
+      renderTranscriptDisplay();
+
+      if (descriptor.key !== 'silence' && (now - lastSoundLoggedAt) >= SOUND_LOG_MIN_INTERVAL_MS) {
+        addLog(`CC detectado: ${descriptor.label}`, 'info');
+        lastSoundLoggedAt = now;
+      }
+    }
+
+    detectorRafId = requestAnimationFrame(analyzeSoundFrame);
+  }
+
+  // Verificar suporte a Web Speech API
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let recognition = null;
+
+  function initSpeechRecognition() {
+    if (!SpeechRecognition) {
+      console.error('[VOICE CMD] Web Speech API não suportada');
+      statusLabel.textContent = 'Não suportado';
+      statusLabel.classList.add('text-danger');
+      listeningBtn.disabled = true;
+      addLog('Web Speech API não suportada neste navegador', 'warning');
+      return false;
+    }
+
+    try {
+      recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      // Aplicar idioma restaurado (ou padrão)
+      recognition.lang = languageSelect ? languageSelect.value : 'pt-BR';
+      console.log('[VOICE CMD] SpeechRecognition inicializado com sucesso, idioma:', recognition.lang);
+    } catch (e) {
+      console.error('[VOICE CMD] Erro ao inicializar SpeechRecognition:', e);
+      addLog(`Erro ao inicializar: ${e.message}`, 'warning');
+      return false;
+    }
+
+    recognition.onstart = () => {
+      isListening = true;
+      liveTriggeredCounts.clear();
+      listeningBtn.classList.add('listening');
+      listeningBtn.setAttribute('aria-pressed', 'true');
+      listeningText.textContent = 'Ouvindo...';
+      statusLabel.textContent = 'Escutando';
+      transcriptDisplay.innerHTML = '<div class="voice-transcript-interim">Aguardando voz...</div>';
+      console.log('[VOICE CMD] onstart: Escuta iniciada');
+      addLog('Escuta iniciada', 'info');
+      
+      // Iniciar detector de sons (CC) se ativado
+      if (soundDetectionActive && soundDetectionCheckbox && soundDetectionCheckbox.checked) {
+        try {
+          startSoundDetector();
+        } catch (e) {
+          console.error('[VOICE CMD] Erro ao iniciar sound detector:', e);
+        }
+      }
+    };
+
+    recognition.onresult = (event) => {
+      console.log('[VOICE CMD] onresult:', event.results.length, 'resultIndex:', event.resultIndex);
+      
+      // Obter confiança mínima configurada (converter de 0-100 para 0-1)
+      const minConfidencePercent = apiConfidenceInput ? parseInt(apiConfidenceInput.value) || 0 : 0;
+      const minConfidence = minConfidencePercent / 100;
+      
+      let interim = '';
+      let final = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        const transcript = result[0]?.transcript || '';
+        const confidence = result[0]?.confidence || 0;
+        const isFinal = result.isFinal;
+        
+        console.log(`[VOICE CMD] Resultado ${i}: "${transcript}" (confiança: ${(confidence * 100).toFixed(0)}%, final: ${isFinal})`);
+        
+        // Verificar confiança mínima apenas para resultados finais
+        if (isFinal && confidence < minConfidence) {
+          console.log(`[VOICE CMD] Resultado rejeitado por baixa confiança (${(confidence * 100).toFixed(0)}% < ${(minConfidence * 100).toFixed(0)}%)`);
+          continue;
+        }
+        
+        if (isFinal) {
+          final += transcript + ' ';
+        } else {
+          interim += transcript;
+        }
+      }
+
+      final = final.trim();  // Limpar espaços extras
+      interim = interim.trim();
+      currentTranscript = (final || interim);
+      
+      console.log('[VOICE CMD] onresult:', {final: final.substring(0,50), interim: interim.substring(0,50), resultIndex: event.resultIndex, totalResults: event.results.length});
+      
+      // CORRIGIDO: Só atualizar display quando houver mudança real
+      // (updateTranscriptDisplay agora faz checks mais rigorosos)
+      updateTranscriptDisplay(final, interim);
+
+      const realtimeText = `${final} ${interim}`.trim();
+      if (realtimeText) {
+        processTranscript(realtimeText, { live: true });
+      }
+
+      // Apenas processar confirmação se for resultado final
+      if (event.results[event.results.length - 1].isFinal && final) {
+        const lastResult = event.results[event.results.length - 1];
+        const confidence = (lastResult[0]?.confidence * 100).toFixed(0);
+        console.log('[VOICE CMD] Confiança final:', confidence);
+        confidenceLabel.textContent = `Confiança: ${confidence}%`;
+
+        // Acumular trechos finais para evitar frases muito curtas
+        queueTranscriptProcessing(final);
+
+        if (!continuousMode.checked) {
+          stopListening();
+        }
+      }
+    };
+
+    recognition.onerror = (event) => {
+      console.error('[VOICE CMD] onerror:', event.error);
+      
+      const errorMessages = {
+        'no-speech': 'Nenhuma fala detectada. Verifique seu microfone e volume.',
+        'audio-capture': 'Nenhum microfone encontrado. Verifique as permissões.',
+        'network': 'Erro de conexão de rede.',
+        'aborted': 'Reconhecimento abortado.',
+        'service-not-allowed': 'Acesso ao microfone negado. Permita no navegador.',
+        'bad-grammar': 'Gramática inválida.',
+        'not-allowed': 'Permissão para usar o microfone foi negada.',
+        'network-error': 'Erro de rede.'
+      };
+      const message = errorMessages[event.error] || `Erro: ${event.error}`;
+      addLog(message, 'warning');
+      statusLabel.textContent = 'Erro';
+      listeningBtn.classList.add('error');
+      
+      setTimeout(() => {
+        listeningBtn.classList.remove('error');
+      }, 2000);
+    };
+
+    recognition.onend = () => {
+      console.log('[VOICE CMD] onend: Escuta finalizada');
+      isListening = false;
+      listeningBtn.classList.remove('listening');
+      listeningBtn.setAttribute('aria-pressed', 'false');
+      listeningText.textContent = 'Escutar';
+      statusLabel.textContent = 'Pronto';
+      
+      // Parar detector de sons (CC)
+      try {
+        stopSoundDetector();
+      } catch (e) {
+        console.error('[VOICE CMD] Erro ao parar sound detector:', e);
+      }
+
+      if (shouldKeepListening && continuousMode.checked) {
+        setTimeout(() => {
+          if (!recognition || isListening || !shouldKeepListening) return;
+          try {
+            recognition.start();
+          } catch (e) {
+            console.warn('[VOICE CMD] Falha ao reiniciar escuta contínua:', e);
+          }
+        }, 250);
+      }
+    };
+
+    return true;
+  }
+
+  function updateTranscriptDisplay(final, interim) {
+    // Adicionar nova transcrição final ao histórico (se não estiver vazio)
+    const finalTrimmed = String(final || '').trim();
+    const interimTrimmed = String(interim || '').trim();
+    
+    // Se há final novo
+    if (finalTrimmed && finalTrimmed !== monitorFinalText) {
+      transcriptHistory.push(finalTrimmed);
+      
+      // Manter limite do histórico (apenas últimas linhas)
+      if (transcriptHistory.length > MAX_TRANSCRIPT_HISTORY) {
+        transcriptHistory.shift();  // Remove o mais antigo
+      }
+      
+      console.log('[VOICE CMD] Adicionado ao histórico:', finalTrimmed, '(total:', transcriptHistory.length, ')');
+      monitorFinalText = finalTrimmed;  // Atualizar texto final anterior
+      
+      // Apenas liberar o freeze, manter interim visível
+      interimFrozen = false;
+    }
+    
+    // NOVO: Só atualizar interim se NÃO estiver congelado (pós-final)
+    if (!interimFrozen) {
+      // Apenas atualizar se interim MUDOU de verdade
+      if (interimTrimmed !== monitorInterimText) {
+        monitorInterimText = interimTrimmed;
+        console.log('[VOICE CMD] Interim atualizado:', interimTrimmed.substring(0, 60));
+        renderTranscriptDisplay();
+      }
+    } else {
+      console.log('[VOICE CMD] ⚠️ Interim congelado, ignorando atualização');
+    }
+  }
+
+  function renderTranscriptDisplay() {
+    let html = '';
+    
+    // Mostrar APENAS as 3 ÚLTIMAS transcrições finais (últimas 3 linhas)
+    if (transcriptHistory.length > 0) {
+      const startIdx = Math.max(0, transcriptHistory.length - 3);
+      for (let i = startIdx; i < transcriptHistory.length; i++) {
+        const finalText = transcriptHistory[i];
+        html += `<div class="voice-transcript-final">${buildTranscriptHtmlWithHighlight(finalText, monitorHighlightWord)}</div>`;
+      }
+    }
+    
+    // NOVO: Mostrar transcrição interim - mas EVITAR flicker
+    // Só mostra interim se houver conteúdo E não esteja em "freeze" pós-final
+    const trimmedInterim = String(monitorInterimText || '').trim();
+    if (trimmedInterim) {
+      // Mostrar interim com estilo diferente (mais transparente)
+      html += `<div class="voice-transcript-interim">${buildTranscriptHtmlWithHighlight(trimmedInterim, monitorHighlightWord)}</div>`;
+    }
+    
+    // Mostrar CC (Closed Captions) - APENAS se houver conteúdo
+    if (monitorSoundText && String(monitorSoundText).trim()) {
+      html += `<div class="voice-transcript-cc"><i class="fa-solid ${monitorSoundIcon} me-1"></i>${escapeHtml(monitorSoundText)}</div>`;
+    }
+    
+    // Se nada houver, mostrar placeholder
+    if (!html) {
+      html = '<div class="voice-transcript-idle">Aguardando entrada de voz...</div>';
+    }
+    
+    transcriptDisplay.innerHTML = html;
+    // Rolar para baixo (mostrar linhas mais novas)
+    transcriptDisplay.scrollTop = transcriptDisplay.scrollHeight;
+  }
+
+  function buildTranscriptHtmlWithHighlight(text, word) {
+    const safeText = String(text || '');
+    const target = String(word || '').trim();
+    if (!target) return escapeHtml(safeText);
+
+    const re = new RegExp(escapeRegExp(target), 'gi');
+    let lastIndex = 0;
+    let out = '';
+    let match;
+
+    while ((match = re.exec(safeText)) !== null) {
+      const start = match.index;
+      const end = start + match[0].length;
+      out += escapeHtml(safeText.slice(lastIndex, start));
+      out += `<span class="voice-transcript-hit">${escapeHtml(safeText.slice(start, end))}</span>`;
+      lastIndex = end;
+    }
+
+    out += escapeHtml(safeText.slice(lastIndex));
+    return out;
+  }
+
+  function blinkWordInMonitor(word) {
+    const target = String(word || '').trim();
+    if (!target) return;
+    monitorHighlightWord = target;
+    renderTranscriptDisplay();
+
+    clearTimeout(monitorHighlightTimer);
+    monitorHighlightTimer = setTimeout(() => {
+      monitorHighlightWord = '';
+      renderTranscriptDisplay();
+    }, 850);
+  }
+
+  function queueTranscriptProcessing(text) {
+    const chunk = String(text || '').trim();
+    if (!chunk) return;
+
+    // NOVO: Se está em Modo Escuta Livre, processa IMEDIATAMENTE
+    if (freeListeningMode) {
+      console.log('[VOICE CMD] Modo Escuta Livre: processando imediatamente, sem delay');
+      processTranscript(chunk, { live: true, commit: true });
+      return;
+    }
+
+    pendingFinalTranscript = pendingFinalTranscript
+      ? `${pendingFinalTranscript} ${chunk}`.trim()
+      : chunk;
+
+    clearTimeout(phraseCommitTimer);
+    phraseCommitTimer = setTimeout(() => {
+      const stableText = pendingFinalTranscript.trim();
+      pendingFinalTranscript = '';
+      if (!stableText) return;
+      processTranscript(stableText, { live: true, commit: true });
+    }, phraseCommitDelayMs);
+  }
+
+  function processTranscript(text, options = {}) {
+    if (!text) return;
+
+    const isLive = options.live === true;
+    const isCommit = options.commit === true;
+
+    const triggers = getTriggerWords();
+    const lowerText = text.toLowerCase();
+    const matches = [];
+
+    for (const trigger of triggers) {
+      const needle = String(trigger.word || '').trim().toLowerCase();
+      if (!needle) continue;
+
+      let cursor = 0;
+      while (cursor < lowerText.length) {
+        const idx = lowerText.indexOf(needle, cursor);
+        if (idx === -1) break;
+
+        const before = idx > 0 ? lowerText[idx - 1] : '';
+        const afterIdx = idx + needle.length;
+        const after = afterIdx < lowerText.length ? lowerText[afterIdx] : '';
+        const validBoundaryBefore = !isWordChar(before);
+        const validBoundaryAfter = !isWordChar(after);
+
+        if (validBoundaryBefore && validBoundaryAfter) {
+          matches.push({ index: idx, trigger });
+        }
+
+        cursor = idx + Math.max(1, needle.length);
+      }
+    }
+
+    if (matches.length === 0) {
+      if (!isLive || isCommit) {
+        addLog(`Nenhuma correspondência para: "${text}"`, 'info');
+      }
+      if (isCommit) {
+        liveTriggeredCounts.clear();
+      }
+      return;
+    }
+
+    matches.sort((a, b) => a.index - b.index);
+
+    let executableMatches = matches;
+
+    if (isLive) {
+      const seenPerTrigger = new Map();
+      const nextTriggeredCounts = new Map(liveTriggeredCounts);
+      executableMatches = [];
+
+      matches.forEach((match) => {
+        const triggerId = String(match.trigger.id || match.trigger.word || '');
+        const seenIndex = seenPerTrigger.get(triggerId) || 0;
+        const alreadyTriggered = liveTriggeredCounts.get(triggerId) || 0;
+
+        if (seenIndex >= alreadyTriggered) {
+          executableMatches.push(match);
+        }
+
+        seenPerTrigger.set(triggerId, seenIndex + 1);
+        const updatedCount = Math.max(alreadyTriggered, seenIndex + 1);
+        nextTriggeredCounts.set(triggerId, updatedCount);
+      });
+
+      liveTriggeredCounts = nextTriggeredCounts;
+    }
+
+    const EXECUTION_STEP_MS = 90;
+    executableMatches.forEach((match, position) => {
+      const run = () => {
+        executeCommand(match.trigger);
+        addLog(`Palavra detectada: "${match.trigger.word}"`, 'success');
+      };
+
+      if (position === 0) {
+        run();
+      } else {
+        setTimeout(run, position * EXECUTION_STEP_MS);
+      }
+    });
+
+    if (isCommit) {
+      liveTriggeredCounts.clear();
+    }
+  }
+
+  function getTriggerWords() {
+    return triggerWords;
+  }
+
+  function clampNumber(value, min, max) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return min;
+    const upper = Number.isFinite(max) ? max : n;
+    return Math.max(min, Math.min(upper, n));
+  }
+
+  function approxEqual(a, b, tolerance = ADV_TOLERANCE) {
+    return Math.abs(Number(a) - Number(b)) <= tolerance;
+  }
+
+  function normalizeAdvancedConfig(raw) {
+    if (!raw) return null;
+    const normalized = {};
+    let meaningful = false;
+
+    if (raw.maxAlternatives !== undefined) {
+      const parsed = Math.round(Number(raw.maxAlternatives));
+      if (Number.isFinite(parsed)) {
+        const val = clampNumber(parsed, SPEECH_API_LIMITS.maxAlternatives.min, SPEECH_API_LIMITS.maxAlternatives.max);
+        normalized.maxAlternatives = val;
+        meaningful = meaningful || (val !== SPEECH_API_DEFAULTS.maxAlternatives);
+      }
+    }
+
+    if (raw.confidence !== undefined) {
+      const parsed = Number(raw.confidence);
+      if (Number.isFinite(parsed)) {
+        const val = Number(clampNumber(parsed, SPEECH_API_LIMITS.confidence.min, SPEECH_API_LIMITS.confidence.max).toFixed(1));
+        normalized.confidence = val;
+        meaningful = meaningful || (Math.abs(val - SPEECH_API_DEFAULTS.confidence) > ADV_TOLERANCE);
+      }
+    }
+
+    if (!meaningful) return null;
+    if (normalized.maxAlternatives === undefined) normalized.maxAlternatives = SPEECH_API_DEFAULTS.maxAlternatives;
+    if (normalized.confidence === undefined) normalized.confidence = SPEECH_API_DEFAULTS.confidence;
+    return normalized;
+  }
+
+  function parseNumericInput(el) {
+    if (!el) return undefined;
+    const raw = (el.value ?? '').toString().replace(',', '.');
+    if (!raw.trim()) return undefined;
+    const num = Number(raw);
+    return Number.isFinite(num) ? num : undefined;
+  }
+
+  function isAdvancedPanelEnabled() {
+    return !!window.__ADVANCED_VALUES_ENABLED__;
+  }
+
+  function readAdvancedSnapshot() {
+    // Ler valores dos inputs de parâmetros da Web Speech API
+    if (!apiMaxAlternativesInput && !apiConfidenceInput) return null;
+
+    const snapshot = {
+      maxAlternatives: parseNumericInput(apiMaxAlternativesInput),
+      confidence: parseNumericInput(apiConfidenceInput)
+    };
+    return normalizeAdvancedConfig(snapshot);
+  }
+
+  function formatSeconds(value) {
+    if (!Number.isFinite(value)) return '';
+    const absVal = Math.abs(value);
+    const withDecimals = absVal < 10 ? value.toFixed(2) : value.toFixed(1);
+    return withDecimals.replace(/\.0+$/, '').replace(/(\.\d*?[1-9])0+$/, '$1');
+  }
+
+  function buildAdvancedSummaryText(adv) {
+    if (!adv) return '';
+    const tokens = [];
+    
+    if (adv.maxAlternatives !== undefined && adv.maxAlternatives !== SPEECH_API_DEFAULTS.maxAlternatives) {
+      tokens.push(`alt ${adv.maxAlternatives}`);
+    }
+    
+    if (adv.confidence !== undefined && Math.abs(adv.confidence - SPEECH_API_DEFAULTS.confidence) > ADV_TOLERANCE) {
+      tokens.push(`conf ${(adv.confidence * 100).toFixed(0)}%`);
+    }
+    
+    return tokens.length ? ` · API [${tokens.join(' · ')}]` : '';
+  }
+
+  function getSelectedControlChannel() {
+    if (window.channel !== undefined && window.channel !== null && window.channel !== "") {
+      return window.channel;
+    }
+
+    // Compatibilidade com implementações antigas
+    if (window.chanelSelec !== undefined && window.chanelSelec !== null && window.chanelSelec !== "") {
+      return window.chanelSelec;
+    }
+
+    const channelSwitch = document.getElementById('chanSwitch');
+    if (channelSwitch) {
+      return channelSwitch.checked ? 2 : 1;
+    }
+
+    const channelValue = document.getElementById('channelSwitchValue')?.textContent?.trim();
+    if (channelValue === '1' || channelValue === '2') {
+      return Number(channelValue);
+    }
+
+    return 1;
+  }
+
+  function addTriggerWord(word) {
+    if (!word || word.trim() === '') return;
+    
+    word = word.trim();
+    
+    // Verificar duplicata
+    if (triggerWords.some(t => t.word.toLowerCase() === word.toLowerCase())) {
+      addLog(`Palavra "${word}" já existe`, 'warning');
+      return;
+    }
+    
+    const currentModeValue = window.currentMode || 'SHOCK';
+    const advancedSnapshot = readAdvancedSnapshot();
+    const newTrigger = {
+      id: Date.now().toString(),
+      word: word,
+      mode: currentModeValue,
+      intensity: window.level !== undefined ? window.level : 50,
+      advanced: advancedSnapshot
+    };
+    
+    // Roleta não usa canal
+    if (currentModeValue !== 'ROULETTE') {
+      newTrigger.channel = getSelectedControlChannel();
+    }
+    
+    triggerWords.push(newTrigger);
+    console.log('[VOICE CMD] 📝 Palavra adicionada:', newTrigger);
+    console.log('[VOICE CMD] 📊 Total no array agora:', triggerWords.length);
+    
+    updateCommandsList();
+    saveTriggerWords();
+    triggerInput.value = '';
+    triggerInput.focus();
+    
+    const channelLog = newTrigger.channel ? ` Canal ${newTrigger.channel}` : '';
+    const advancedLog = buildAdvancedSummaryText(newTrigger.advanced);
+    addLog(`Palavra adicionada: "${word}" (${newTrigger.mode} @ ${newTrigger.intensity}%${channelLog}${advancedLog})`, 'success');
+  }
+
+  function removeTriggerWord(id) {
+    const trigger = triggerWords.find(t => t.id === id);
+    if (trigger) {
+      triggerWords = triggerWords.filter(t => t.id !== id);
+      console.log('[VOICE CMD] Palavra removida:', trigger.word);
+      updateCommandsList();
+      saveTriggerWords();
+      addLog(`Palavra removida: "${trigger.word}"`, 'info');
+    }
+  }
+
+  function clearAllTriggerWords() {
+    if (triggerWords.length === 0) {
+      addLog('Nenhuma palavra para limpar', 'info');
+      return;
+    }
+    
+    const count = triggerWords.length;
+    triggerWords = [];
+    console.log('[VOICE CMD] Todas as palavras removidas');
+    updateCommandsList();
+    saveTriggerWords();
+    addLog(`${count} palavra(s) removida(s)`, 'success');
+  }
+
+  function clearTranscriptHistory() {
+    const count = transcriptHistory.length;
+    transcriptHistory = [];
+    monitorFinalText = '';
+    monitorInterimText = '';
+    renderTranscriptDisplay();
+    console.log('[VOICE CMD] Histórico de transcrição limpo');
+    addLog(`Histórico limpo (${count} entrada(s) removida(s))`, 'success');
+  }
+
+  function identifyCommand(word) {
+    // Simples: retorna o próprio identificador da palavra
+    // O maincontrol é responsável por processar o que fazer com cada palavra
+    return { word: word };
+  }
+
+  function executeCommand(trigger) {
+    const word = trigger.word.toLowerCase();
+    const normalizedAdvanced = normalizeAdvancedConfig(trigger.advanced);
+    console.log('[VOICE CMD] Executando comando para palavra:', word, 'com', trigger.mode, '@', trigger.intensity, 'Canal', trigger.channel, 'ADV', normalizedAdvanced);
+    
+    // Enviar para maincontrol processar
+    if (window.triggerCommand) {
+      window.triggerCommand({
+        voice: word,
+        mode: trigger.mode,
+        intensity: trigger.intensity,
+        channel: trigger.channel,
+        advanced: normalizedAdvanced
+      });
+    }
+    
+    // Feedback visual
+    highlightCommandCard(trigger.id);
+    blinkWordInMonitor(trigger.word);
+  }
+
+  function highlightCommandCard(id) {
+    // Encontrar o card desta palavra e destacá-lo brevemente
+    const card = commandsList.querySelector(`[data-id="${id}"]`);
+    if (card) {
+      card.classList.add('triggered');
+      setTimeout(() => {
+        card.classList.remove('triggered');
+      }, 800);
+    }
+  }
+
+  // P0.2: Criar elemento de card sem inline handlers
+  function createCommandCardElement(trigger) {
+    const modeStyle = getModeStyle(trigger.mode);
+    const solidTint = toSolidTint(modeStyle.tint, modeStyle.color);
+    const gradientBg = `linear-gradient(120deg, ${solidTint}, #05060a)`;
+    const isRoulette = trigger.mode === 'ROULETTE';
+    const channelInfo = !isRoulette && trigger.channel ? ` · Canal ${trigger.channel}` : '';
+    const advancedInfo = buildAdvancedSummaryText(normalizeAdvancedConfig(trigger.advanced));
+    
+    const div = document.createElement('div');
+    div.className = 'voice-command-item';
+    div.setAttribute('data-id', trigger.id);
+    div.setAttribute('data-word', trigger.word);
+    div.style.setProperty('--voice-color', modeStyle.color);
+    div.style.setProperty('--voice-bg', gradientBg);
+
+    div.innerHTML = `
+      <div class="voice-command-item-content">
+        <span class="voice-command-item-icon">
+          <i class="fa-solid ${modeStyle.icon}"></i>
+        </span>
+        <div class="voice-command-item-details">
+          <div class="voice-command-item-label">${escapeHtml(trigger.word.toUpperCase())}</div>
+          <div class="voice-command-item-action">${trigger.mode} @ ${trigger.intensity}%${channelInfo}${escapeHtml(advancedInfo)}</div>
+        </div>
+      </div>
+      <button class="btn btn-outline-danger" data-action="remove-trigger" data-trigger-id="${trigger.id}" aria-label="Remover palavra ${escapeHtml(trigger.word)}" title="Remover">
+        <i class="fa-solid fa-times"></i>
+      </button>
+    `;
+    
+    return div;
+  }
+
+  function updateCommandsList() {
+    const triggers = getTriggerWords();
+    
+    if (triggers.length === 0) {
+      commandsList.innerHTML = '<div class="voice-commands-empty text-muted small text-center py-2">Nenhuma palavra-acionadora configurada. Adicione uma acima.</div>';
+      return;
+    }
+
+    commandsList.innerHTML = '';
+    triggers.forEach(trigger => {
+      const card = createCommandCardElement(trigger);
+      commandsList.appendChild(card);
+    });
+  }
+
+  function startListening() {
+    console.log('[VOICE CMD] startListening(): iniciando via microfone padrão');
+    
+    if (!recognition) {
+      console.log('[VOICE CMD] recognition não existe, inicializando');
+      if (!initSpeechRecognition()) {
+        console.error('[VOICE CMD] Falha ao inicializar recognition');
+        return;
+      }
+    }
+
+    if (isListening) {
+      console.log('[VOICE CMD] Já está ouvindo');
+      return;
+    }
+
+    shouldKeepListening = true;
+    clearTimeout(nonContinuousTimeoutId);
+
+    const lang = languageSelect.value;
+    recognition.lang = lang;
+    console.log('[VOICE CMD] Idioma:', lang);
+
+    const timeout = NON_CONTINUOUS_TIMEOUT_MS;
+    console.log('[VOICE CMD] Timeout:', timeout);
+
+    // Aplicar parâmetros da Web Speech API
+    applyWebSpeechAPIConfig();
+
+    try {
+      console.log('[VOICE CMD] Chamando recognition.start()');
+      recognition.start();
+      
+      addLog('Escutando com: Microfone padrão', 'info');
+      
+      // Log dos parâmetros da Web Speech API
+      const apiSnapshot = readAdvancedSnapshot();
+      if (apiSnapshot) {
+        const apiSummary = buildAdvancedSummaryText(apiSnapshot);
+        addLog(`Parâmetros da API${apiSummary}`, 'info');
+      }
+      
+      // Timeout de segurança
+      nonContinuousTimeoutId = setTimeout(() => {
+        if (isListening && shouldKeepListening && !continuousMode.checked) {
+          console.log('[VOICE CMD] Timeout acionado, parando recognition');
+          recognition.stop();
+        }
+      }, timeout);
+    } catch (e) {
+      console.error('[VOICE CMD] Erro ao iniciar:', e);
+      addLog(`Erro ao iniciar: ${e.message}`, 'warning');
+    }
+  }
+
+  function applyWebSpeechAPIConfig() {
+    if (!recognition) return;
+    
+    try {
+      // Aplicar maxAlternatives
+      if (apiMaxAlternativesInput) {
+        const maxAlt = parseInt(apiMaxAlternativesInput.value) || SPEECH_API_DEFAULTS.maxAlternatives;
+        const clampedAlt = clampNumber(maxAlt, SPEECH_API_LIMITS.maxAlternatives.min, SPEECH_API_LIMITS.maxAlternatives.max);
+        recognition.maxAlternatives = clampedAlt;
+        console.log('[VOICE CMD] maxAlternatives configurado para:', clampedAlt);
+      } else {
+        recognition.maxAlternatives = SPEECH_API_DEFAULTS.maxAlternatives;
+      }
+
+      // Nota: confidence é apenas para leitura/filtragem, não é uma propriedade de escrita do recognition
+      // Usamos para filtrar resultados que o usuário recebe
+      if (apiConfidenceInput) {
+        // Converter de 0-100 (slider) para 0-1 (Web Speech API)
+        const sliderValue = parseInt(apiConfidenceInput.value) || 0;
+        const conf = sliderValue / 100;
+        const clampedConf = clampNumber(conf, SPEECH_API_LIMITS.confidence.min, SPEECH_API_LIMITS.confidence.max);
+        console.log('[VOICE CMD] confiança mínima configurada para:', `${(clampedConf * 100).toFixed(0)}%`);
+      }
+    } catch (e) {
+      console.error('[VOICE CMD] Erro ao aplicar parâmetros da Web Speech API:', e);
+    }
+  }
+
+  function stopListening() {
+    shouldKeepListening = false;
+    clearTimeout(nonContinuousTimeoutId);
+    clearTimeout(phraseCommitTimer);
+    pendingFinalTranscript = '';
+    liveTriggeredCounts.clear();
+
+    if (!recognition) {
+      console.log('[VOICE CMD] stopListening: reconhecimento não existe');
+      return;
+    }
+
+    if (!isListening) {
+      console.log('[VOICE CMD] stopListening: já está parado');
+      return;
+    }
+
+    console.log('[VOICE CMD] stopListening: parando');
+    recognition.stop();
+  }
+
+  function addLog(message, type = 'info') {
+    const entry = {
+      message,
+      type,
+      time: new Date().toLocaleTimeString()
+    };
+
+    logEntries.push(entry);
+    if (logEntries.length > MAX_LOG_ENTRIES) {
+      logEntries.shift();
+    }
+
+    updateLogDisplay();
+  }
+
+  function updateLogDisplay() {
+    if (logEntries.length === 0) {
+      logDisplay.innerHTML = '<div class="voice-log-idle text-muted small">Aguardando eventos...</div>';
+      return;
+    }
+
+    logDisplay.innerHTML = logEntries.map(entry => {
+      const icons = {
+        info: 'ℹ️',
+        success: '✓',
+        warning: '⚠️'
+      };
+
+      return `
+        <div class="voice-log-entry">
+          <div class="voice-log-icon ${entry.type}">${icons[entry.type] || '•'}</div>
+          <div class="voice-log-text">${escapeHtml(entry.message)}</div>
+          <div class="voice-log-time">${entry.time}</div>
+        </div>
+      `;
+    }).join('');
+
+    // Auto-scroll para o final do histórico
+    requestAnimationFrame(() => {
+      logDisplay.scrollTop = logDisplay.scrollHeight;
+    });
+  }
+
+  function escapeHtml(text) {
+    const map = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, m => map[m]);
+  }
+
+  function escapeRegExp(text) {
+    return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  function isWordChar(char) {
+    if (!char) return false;
+    return /[A-Za-zÀ-ÿ0-9_]/.test(char);
+  }
+
+  // Persistência
+  function saveTriggerWords() {
+    try {
+      const dataToSave = JSON.stringify(triggerWords);
+      console.log('[VOICE CMD] saveTriggerWords: Salvando', triggerWords.length, 'palavras');
+      console.log('[VOICE CMD] Dados a salvar:', dataToSave.substring(0, 100));
+      
+      localStorage.setItem('voice_command_triggers_v2', dataToSave);
+      console.log('[VOICE CMD] ✅ Salvo com sucesso em localStorage');
+    } catch (e) {
+      console.error('[VOICE CMD] ❌ ERRO ao salvar:', e);
+      console.error('[VOICE CMD] Stack:', e.stack);
+    }
+  }
+
+  function loadTriggerWords() {
+    try {
+      const saved = localStorage.getItem('voice_command_triggers_v2');
+      console.log('[VOICE CMD] loadTriggerWords: localStorage contém:', saved ? 'SIM' : 'NÃO');
+      
+      if (saved) {
+        console.log('[VOICE CMD] Dados brutos do localStorage:', saved.substring(0, 100));
+        const parsed = JSON.parse(saved);
+        console.log('[VOICE CMD] Após parse JSON:', Array.isArray(parsed) ? `Array com ${parsed.length} items` : 'NÃO é array');
+        
+        triggerWords = Array.isArray(parsed)
+          ? parsed.map(entry => ({
+              ...entry,
+              advanced: normalizeAdvancedConfig(entry?.advanced)
+            }))
+          : [];
+        console.log('[VOICE CMD] Palavras carregadas:', triggerWords.length, triggerWords);
+        updateCommandsList();
+      } else {
+        console.log('[VOICE CMD] Nenhuma palavra salva no localStorage');
+        triggerWords = [];
+      }
+    } catch (e) {
+      console.error('[VOICE CMD] ERRO ao carregar palavras:', e);
+      console.error('[VOICE CMD] Stack:', e.stack);
+      triggerWords = [];
+    }
+  }
+
+  // Requerer permissão de microfone
+  function requestMicrophonePermission() {
+    return navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(stream => {
+        stream.getTracks().forEach(track => track.stop());
+        console.log('[VOICE CMD] Permissão de microfone concedida');
+        return true;
+      })
+      .catch(err => {
+        console.error('[VOICE CMD] Permissão de microfone negada:', err);
+        addLog('Permissão de microfone negada. Permite no navegador.', 'warning');
+        return false;
+      });
+  }
+
+  // Detectar idioma do navegador automaticamente
+  function detectBrowserLanguage() {
+    const browserLang = navigator.language || navigator.languages?.[0] || 'pt-BR';
+    
+    // Mapa de idiomas suportados
+    const supportedLangs = {
+      'pt-BR': 'pt-BR',
+      'pt': 'pt-BR',
+      'pt-PT': 'pt-PT',
+      'en-US': 'en-US',
+      'en': 'en-US',
+      'en-GB': 'en-GB',
+      'es': 'es-ES',
+      'es-ES': 'es-ES',
+      'fr': 'fr-FR',
+      'fr-FR': 'fr-FR',
+      'de': 'de-DE',
+      'de-DE': 'de-DE',
+      'it': 'it-IT',
+      'it-IT': 'it-IT',
+      'ja': 'ja-JP',
+      'ja-JP': 'ja-JP',
+      'zh': 'zh-CN',
+      'zh-CN': 'zh-CN'
+    };
+    
+    // Tentar correspondência exata primeiro
+    if (supportedLangs[browserLang]) {
+      return supportedLangs[browserLang];
+    }
+    
+    // Tentar correspondência do código de idioma
+    const langCode = browserLang.split('-')[0];
+    if (supportedLangs[langCode]) {
+      return supportedLangs[langCode];
+    }
+    
+    // Padrão: português Brasil
+    return 'pt-BR';
+  }
+
+  // Inicialização
+  function init() {
+    console.log('[VOICE CMD] ⚡ init() começando...');
+    console.log('[VOICE CMD] 📦 triggerWords atual:', triggerWords.length, 'palavras');
+    
+    // Carregar elementos da DOM
+    if (!cacheElements()) {
+      console.error('[VOICE CMD] ❌ Falha ao carregar elementos da DOM');
+      return;
+    }
+    console.log('[VOICE CMD] ✅ Elementos da DOM carregados com sucesso');
+    
+    // ADICIONAR EVENT LISTENERS APÓS ELEMENTOS SEREM CARREGADOS
+    console.log('[VOICE CMD] 🔗 Adicionando event listeners...');
+    bindUiEventListeners();
+    console.log('[VOICE CMD] ✅ Event listeners adicionados');
+
+    // Restaurar todos os parâmetros avançados (idioma, contínuo, CC, confiança, etc)
+    restoreAdvancedParametersState();
+    
+    // Inicializar Speech Recognition
+    if (!initSpeechRecognition()) {
+      console.error('[VOICE CMD] ❌ Falha ao inicializar Speech Recognition');
+      return;
+    }
+    
+    console.log('[VOICE CMD] 📝 Carregando palavras-acionadoras...');
+    loadTriggerWords();
+    console.log('[VOICE CMD] ✅ Palavras carregadas:', triggerWords.length);
+    
+    // Detectar e configurar idioma do navegador
+    const detectedLang = detectBrowserLanguage();
+    languageSelect.value = detectedLang;
+    if (recognition) {
+      recognition.lang = detectedLang;
+    }
+    
+    // Requerer permissão de microfone
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      requestMicrophonePermission().then(allowed => {
+        if (allowed) {
+          console.log('[VOICE CMD] Microfone autorizado e pronto para usar');
+          addLog('Microfone pronto! Clique em Escutar.', 'success');
+        }
+      });
+    }
+    
+    console.log('[VOICE CMD] Módulo Voice Command inicializado');
+    console.log('[VOICE CMD] 🎉 ESTADO FINAL: triggerWords =', triggerWords.length, 'palavras');
+    console.log('[VOICE CMD] 📋 Conteúdo:', triggerWords);
+    addLog('Módulo Voice Command inicializado', 'info');
+    addLog(`Idioma detectado: ${detectedLang}`, 'info');
+  }
+
+  // Expor API globalmente para callbacks
+  window.__VOICE_COMMAND_APP__ = {
+    addTriggerWord,
+    removeTriggerWord,
+    clearAllTriggerWords,
+    rehydrate: rehydrateWidget
+  };
+
+  // Encerrar reconhecimento ao descarregar
+  window.addEventListener('beforeunload', () => {
+    if (recognition && isListening) {
+      recognition.stop();
+    }
+  });
+
+  // Expor função de comando para integração
+  window.triggerCommand = window.triggerCommand || function(params) {
+    console.log('[VOICE CMD] triggerCommand:', params);
+    // Integração com o maincontrol: enviar comando
+    if (window.sendCommand) {
+      window.sendCommand(params);
+    }
+  };
+
+  // Initializar quando documento estiver pronto
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      console.log('[VOICE CMD] DOMContentLoaded disparado');
+      init();
+    });
+  } else {
+    console.log('[VOICE CMD] Documento já carregado, inicializando direto');
+    init();
+  }
+})();
+</script>

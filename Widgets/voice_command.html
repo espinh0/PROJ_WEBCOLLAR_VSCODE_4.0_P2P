@@ -18,32 +18,12 @@
   <div class="voice-command-grid">
     <!-- 1. Monitor de Transcrição -->
     <div class="voice-monitor-section mb-3">
-      <div class="d-flex align-items-center justify-content-between mb-2">
-        <small class="text-muted">Histórico Contínuo</small>
-        <button id="voice-clear-transcript" class="btn btn-sm btn-outline-secondary" type="button" title="Limpar histórico de transcrição">
-          <i class="fa-solid fa-eraser me-1" style="font-size:0.8rem;"></i>Limpar
-        </button>
-      </div>
       <div id="voice-transcript-display" class="voice-transcript-box">
         <div class="voice-transcript-idle">Aguardando entrada de voz...</div>
       </div>
     </div>
 
-    <!-- 2. Palavras-Acionadoras (Lista) -->
-    <div class="voice-commands-section mb-3">
-      <div class="d-flex align-items-center justify-content-end mb-2">
-        <button id="voice-clear-all" class="btn btn-sm btn-outline-danger" type="button" title="Remover todas as palavras">
-          <i class="fa-solid fa-trash-alt me-1" style="font-size:0.8rem;"></i>Limpar Tudo
-        </button>
-      </div>
-      <div id="voice-commands-list" class="voice-commands-list">
-        <div class="voice-commands-empty text-muted small text-center py-2">
-          Nenhuma palavra-acionadora configurada
-        </div>
-      </div>
-    </div>
-
-    <!-- 3. Caixa de Adição de Palavras -->
+    <!-- 2. Caixa de Adição de Palavras -->
     <div class="voice-trigger-section mb-3">
       <div class="input-group mb-2">
         <input 
@@ -56,10 +36,19 @@
         <button id="voice-trigger-add" class="btn btn-outline-primary" type="button" title="Adicionar palavra">
           <i class="fa-solid fa-plus"></i>
         </button>
+        <button id="voice-clear-all" class="btn btn-outline-danger" type="button" title="Remover todas as palavras">
+          <i class="fa-solid fa-trash-alt me-1" style="font-size:0.8rem;"></i>Limpar Tudo
+        </button>
       </div>
-      <small class="text-muted d-block">
-        Cada palavra será criada com o modo, intensidade e canal do controle principal.
-      </small>
+    </div>
+
+    <!-- 3. Palavras-Acionadoras (Lista) -->
+    <div class="voice-commands-section mb-3">
+      <div id="voice-commands-list" class="voice-commands-list">
+        <div class="voice-commands-empty text-muted small text-center py-2">
+          Nenhuma palavra-acionadora configurada
+        </div>
+      </div>
     </div>
 
     <!-- 5. Parâmetros Avançados -->
@@ -72,7 +61,7 @@
 
       <div class="row g-3">
         <!-- Seletor de Idioma -->
-        <div class="col-12 col-md-6">
+        <div class="col-12">
           <label for="voice-language-select" class="form-label small text-muted mb-2">
             <i class="fa-solid fa-globe me-1"></i>Idioma
           </label>
@@ -90,31 +79,12 @@
           </select>
         </div>
 
-        <!-- Modo Contínuo -->
-        <div class="col-12 col-md-6">
-          <label for="voice-continuous-mode" class="form-label small text-muted mb-2">
-            <i class="fa-solid fa-repeat me-1"></i>Modo de Escuta
+        <div class="col-12">
+          <label class="form-label small text-muted mb-1">
+            <i class="fa-solid fa-network-wired me-1"></i>Latência de Rede
+            <span id="voice-network-latency-display" class="ms-2 badge bg-secondary">—</span>
           </label>
-          <div class="form-check form-switch">
-            <input class="form-check-input" type="checkbox" id="voice-continuous-mode" checked>
-            <label class="form-check-label small" for="voice-continuous-mode">
-              Contínuo <small class="text-secondary">(reinicia automaticamente após cada comando)</small>
-            </label>
-          </div>
-        </div>
-
-        <!-- Modo Escuta Livre -->
-        <div class="col-12 col-md-6">
-          <label for="voice-free-listening-mode" class="form-label small text-muted mb-2">
-            <i class="fa-solid fa-microphone me-1"></i>Escuta Livre
-          </label>
-          <div class="form-check form-switch">
-            <input class="form-check-input" type="checkbox" id="voice-free-listening-mode">
-            <label class="form-check-label small" for="voice-free-listening-mode">
-              Sem confirmação <small class="text-secondary">(escreve continuamente)</small>
-            </label>
-          </div>
-          <small class="text-secondary d-block mt-1">Ativo: transcreve em tempo real sem aguardar confirmação</small>
+          <small class="text-secondary d-block mt-1">RTT estimado por requisição leve no mesmo domínio.</small>
         </div>
 
         <!-- Detecção de Sons CC -->
@@ -156,33 +126,6 @@
           <small class="text-secondary d-block mt-1">Menor valor = muda rápido entre categorias; maior = mais tempo para confirmar (evita piscar).</small>
         </div>
 
-        <!-- Velocidade de Confirmação (Phrase Commit Delay) -->
-        <div class="col-12">
-          <label for="voice-phrase-commit-delay" class="form-label small text-muted mb-1">
-            <i class="fa-solid fa-hourglass-end me-1"></i>Velocidade de Confirmação <span id="voice-phrase-commit-delay-display" class="ms-2 badge bg-secondary">220ms</span>
-          </label>
-          <input type="range" id="voice-phrase-commit-delay" class="form-range" value="220" min="50" max="1000" step="50" title="Tempo até confirmar uma frase como final. Menor = mais rápido, Maior = mais conservador (permite edições).">
-          <small class="text-secondary d-block mt-1">Menor valor = confirma rápido (agressivo); maior = espera mais (conservador, permite correções).</small>
-        </div>
-
-        <!-- Presets Rápidos de Delay -->
-        <div class="col-12">
-          <label class="form-label small text-muted mb-2">
-            <i class="fa-solid fa-bolt me-1"></i>Presets Rápidos
-          </label>
-          <div class="d-flex gap-2 flex-wrap">
-            <button type="button" id="voice-preset-responsive" class="btn btn-sm btn-outline-success" title="Responsivo: Mínimo delay, mais responsivo">
-              <i class="fa-solid fa-zap me-1"></i>Responsivo
-            </button>
-            <button type="button" id="voice-preset-balanced" class="btn btn-sm btn-outline-info" title="Balanceado: Equilíbrio entre delay e estabilidade">
-              <i class="fa-solid fa-scale-balanced me-1"></i>Balanceado
-            </button>
-            <button type="button" id="voice-preset-stable" class="btn btn-sm btn-outline-warning" title="Estável: Menos flicker, mais tempo">
-              <i class="fa-solid fa-shield me-1"></i>Estável
-            </button>
-          </div>
-        </div>
-
         <!-- Máximo de Alternativas da Web Speech API -->
         <div class="col-6 col-md-6">
           <label for="voice-api-max-alternatives" class="form-label small text-muted mb-1">
@@ -218,6 +161,26 @@
       </div>
     </div>
   </div>
+
+  <div class="modal fade" id="voice-clear-confirm-modal" tabindex="-1" aria-hidden="true" aria-labelledby="voice-clear-confirm-title">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+      <div class="modal-content voice-modal-content">
+        <div class="modal-header border-0 pb-1">
+          <h6 class="modal-title" id="voice-clear-confirm-title">
+            <i class="fa-solid fa-triangle-exclamation me-2 text-warning"></i>Confirmar limpeza
+          </h6>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body pt-1">
+          <p class="small mb-0 text-light">Deseja remover todas as palavras-acionadoras?</p>
+        </div>
+        <div class="modal-footer border-0 pt-2">
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-sm btn-outline-danger" id="voice-clear-confirm-accept">Limpar tudo</button>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <style>
@@ -239,7 +202,6 @@
     background-color: rgba(255, 255, 255, 0.05);
     color: #e5e7eb;
   }
-
   #voice-command-widget select.voice-input-dark option,
   #voice-command-widget select.voice-input-dark optgroup {
     background-color: #111827;
@@ -251,28 +213,36 @@
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 10px;
     padding: 12px;
-    min-height: 60px;
-    max-height: 110px;  /* 3 linhas x 35px + padding */
+    height: 130px;
     overflow-y: auto;
+    scroll-behavior: smooth;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
     font-family: 'Monaco', 'Menlo', monospace;
-    font-size: 1.35rem;
+    font-size: 1.95rem;
     line-height: 1.5;
     text-transform: uppercase;
     letter-spacing: 0.02em;
-    color: #60a5fa;
+    color: #ffffff;
     display: flex;
     flex-direction: column;
+    justify-content: center;
+  }
+  .voice-transcript-box::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
   }
   .voice-transcript-idle {
-    color: #6b7280;
-    font-style: italic;
+    color: #ffffff;
+    font-style: normal;
   }
   .voice-transcript-interim {
-    color: #9ca3af;
-    font-style: italic;
+    color: #ffffff;
+    font-style: normal;
   }
   .voice-transcript-final {
-    color: #e5e7eb;
+    color: #ffffff;
     font-weight: 700;
   }
   .voice-transcript-cc {
@@ -288,11 +258,6 @@
     color: #22c55e;
     font-weight: 900;
     text-shadow: 0 0 12px rgba(34,197,94,0.55);
-    animation: voice-monitor-blink 0.22s ease-in-out 0s 3 alternate;
-  }
-  @keyframes voice-monitor-blink {
-    from { opacity: 0.45; transform: scale(1); }
-    to { opacity: 1; transform: scale(1.06); }
   }
   .voice-log-box {
     background: rgba(255, 255, 255, 0.03);
@@ -542,6 +507,13 @@
     border-color: #ff6b6b;
     color: #ff6b6b;
   }
+  #voice-command-widget .voice-modal-content {
+    background: rgba(8, 12, 20, 0.96);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #e5e7eb;
+    border-radius: 14px;
+    box-shadow: 0 18px 42px rgba(0,0,0,0.55);
+  }
 </style>
 
 <script>
@@ -561,10 +533,11 @@
   const $$ = (s) => document.querySelectorAll(s);
 
   // Elementos da UI (lazy loading)
-  let transcriptDisplay, confidenceLabel, languageSelect, continuousMode, triggerInput;
+  let transcriptDisplay, confidenceLabel, languageSelect, triggerInput;
   let triggerAddBtn, commandsList, listeningBtn, listeningText, statusLabel;
   let logDisplay, logClearBtn, clearAllBtn, toggleLogBtn, toggleAdvancedBtn, soundDetectionCheckbox;
-  let apiMaxAlternativesInput, apiConfidenceInput, ccSensitivityInput, freeListeningCheckbox;
+  let apiMaxAlternativesInput, apiConfidenceInput, ccSensitivityInput, networkLatencyDisplay;
+  let clearConfirmModalEl, clearConfirmAcceptBtn;
 
   function bindElementOnce(el, key, eventName, handler) {
     if (!el) return;
@@ -604,14 +577,6 @@
       clearAllTriggerWords();
     });
 
-    // Listener para limpar histórico de transcrição
-    const clearTranscriptBtn = document.getElementById('voice-clear-transcript');
-    if (clearTranscriptBtn) {
-      clearTranscriptBtn.addEventListener('click', () => {
-        clearTranscriptHistory();
-      });
-    }
-
     bindElementOnce(languageSelect, 'lang-change', 'change', () => {
       if (recognition) {
         recognition.lang = languageSelect.value;
@@ -621,36 +586,6 @@
       localStorage.setItem('voice_language', languageSelect.value);
       addLog(`Idioma alterado: ${languageSelect.options[languageSelect.selectedIndex].text}`, 'success');
     });
-
-    // Listener para Modo Contínuo
-    if (continuousMode) {
-      bindElementOnce(continuousMode, 'continuous-change', 'change', () => {
-        // Persistir estado
-        localStorage.setItem('voice_continuous_mode', String(continuousMode.checked));
-        
-        // Aplicar em tempo real se estiver escutando
-        if (recognition) {
-          recognition.continuous = continuousMode.checked;
-          console.log('[VOICE CMD] Modo contínuo alterado em tempo real:', continuousMode.checked);
-        }
-        
-        addLog(`Modo contínuo: ${continuousMode.checked ? 'ativado' : 'desativado'}`, 'success');
-      });
-    }
-
-    // NOVO: Listener para Modo Escuta Livre
-    if (freeListeningCheckbox) {
-      bindElementOnce(freeListeningCheckbox, 'free-listening-change', 'change', () => {
-        freeListeningMode = freeListeningCheckbox.checked;
-        // Persistir estado
-        localStorage.setItem('voice_free_listening_mode', String(freeListeningMode));
-        addLog(
-          `Modo Escuta Livre: ${freeListeningMode ? 'ativado - Transcreve sem confirmação' : 'desativado'}`,
-          freeListeningMode ? 'success' : 'info'
-        );
-        console.log('[VOICE CMD] Modo Escuta Livre:', freeListeningMode);
-      });
-    }
 
     // Listener para detecção de sons CC
     if (soundDetectionCheckbox) {
@@ -695,7 +630,10 @@
         }
       };
 
-      ccSensitivityInput.addEventListener('input', updateCcSensitivityDisplay);
+      ccSensitivityInput.addEventListener('input', () => {
+        updateCcSensitivityDisplay();
+        localStorage.setItem('voice_cc_sensitivity', String(getCcSensitivityValue()));
+      });
       ccSensitivityInput.addEventListener('change', () => {
         const value = getCcSensitivityValue();
         localStorage.setItem('voice_cc_sensitivity', String(value));
@@ -708,22 +646,11 @@
     // Listeners para Responsividade CC
     const ccResponsivenessInput = document.getElementById('voice-cc-responsiveness');
     if (ccResponsivenessInput) {
-      const updateResponsivenessDisplay = () => {
-        const value = getCcResponsivenessValue();
-        const displayEl = document.getElementById('voice-cc-responsiveness-display');
-        if (displayEl) {
-          displayEl.textContent = `${value}%`;
-          if (value <= 30) {
-            displayEl.className = 'ms-2 badge bg-info';
-          } else if (value <= 70) {
-            displayEl.className = 'ms-2 badge bg-secondary';
-          } else {
-            displayEl.className = 'ms-2 badge bg-warning text-dark';
-          }
-        }
-      };
-
-      ccResponsivenessInput.addEventListener('input', updateResponsivenessDisplay);
+      ccResponsivenessInput.addEventListener('input', () => {
+        updateCcResponsivenessDisplay();
+        localStorage.setItem('voice_cc_responsiveness', String(getCcResponsivenessValue()));
+        updateCcDelayParameters();
+      });
       ccResponsivenessInput.addEventListener('change', () => {
         const value = getCcResponsivenessValue();
         localStorage.setItem('voice_cc_responsiveness', String(value));
@@ -731,28 +658,17 @@
         addLog(`Responsividade CC: ${value}% (alpha: ${soundSmoothAlpha.toFixed(3)})`, 'info');
       });
 
-      updateResponsivenessDisplay();
+      updateCcResponsivenessDisplay();
     }
 
     // Listeners para Estabilidade CC
     const ccStabilityInput = document.getElementById('voice-cc-stability');
     if (ccStabilityInput) {
-      const updateStabilityDisplay = () => {
-        const value = getCcStabilityValue();
-        const displayEl = document.getElementById('voice-cc-stability-display');
-        if (displayEl) {
-          displayEl.textContent = `${value}%`;
-          if (value <= 30) {
-            displayEl.className = 'ms-2 badge bg-success';
-          } else if (value <= 70) {
-            displayEl.className = 'ms-2 badge bg-secondary';
-          } else {
-            displayEl.className = 'ms-2 badge bg-danger';
-          }
-        }
-      };
-
-      ccStabilityInput.addEventListener('input', updateStabilityDisplay);
+      ccStabilityInput.addEventListener('input', () => {
+        updateCcStabilityDisplay();
+        localStorage.setItem('voice_cc_stability', String(getCcStabilityValue()));
+        updateCcDelayParameters();
+      });
       ccStabilityInput.addEventListener('change', () => {
         const value = getCcStabilityValue();
         localStorage.setItem('voice_cc_stability', String(value));
@@ -760,64 +676,17 @@
         addLog(`Estabilidade CC: ${value}% (hold: ${soundHoldBaseMs.toFixed(0)}ms)`, 'info');
       });
 
-      updateStabilityDisplay();
-    }
-
-    // Listener para Velocidade de Confirmação
-    const phraseCommitDelayInput = document.getElementById('voice-phrase-commit-delay');
-    if (phraseCommitDelayInput) {
-      const updateDelayDisplay = () => {
-        const value = getPhraseCommitDelayValue();
-        const displayEl = document.getElementById('voice-phrase-commit-delay-display');
-        if (displayEl) {
-          displayEl.textContent = `${value}ms`;
-          // Cor: vermelho (rápido) → amarelo (meio) → azul (conservador)
-          if (value < 150) {
-            displayEl.className = 'ms-2 badge bg-danger';
-          } else if (value < 300) {
-            displayEl.className = 'ms-2 badge bg-warning';
-          } else {
-            displayEl.className = 'ms-2 badge bg-info';
-          }
-        }
-      };
-
-      phraseCommitDelayInput.addEventListener('input', updateDelayDisplay);
-      phraseCommitDelayInput.addEventListener('change', () => {
-        const value = getPhraseCommitDelayValue();
-        localStorage.setItem('voice_phrase_commit_delay', String(value));
-        updatePhraseCommitDelay();
-        addLog(`Velocidade de Confirmação: ${value}ms`, 'info');
-      });
-
-      updateDelayDisplay();
-    }
-
-    // Listeners para Presets Rápidos
-    const presetResponsiveBtn = document.getElementById('voice-preset-responsive');
-    const presetBalancedBtn = document.getElementById('voice-preset-balanced');
-    const presetStableBtn = document.getElementById('voice-preset-stable');
-
-    if (presetResponsiveBtn) {
-      presetResponsiveBtn.addEventListener('click', () => {
-        applyPreset('responsive');
-      });
-    }
-
-    if (presetBalancedBtn) {
-      presetBalancedBtn.addEventListener('click', () => {
-        applyPreset('balanced');
-      });
-    }
-
-    if (presetStableBtn) {
-      presetStableBtn.addEventListener('click', () => {
-        applyPreset('stable');
-      });
+      updateCcStabilityDisplay();
     }
 
     // Listeners para parâmetros da Web Speech API
     if (apiMaxAlternativesInput) {
+      apiMaxAlternativesInput.addEventListener('input', () => {
+        const value = Math.max(1, Math.min(10, parseInt(apiMaxAlternativesInput.value) || 1));
+        apiMaxAlternativesInput.value = String(value);
+        localStorage.setItem('voice_api_max_alternatives', String(value));
+      });
+
       apiMaxAlternativesInput.addEventListener('change', () => {
         const value = Math.max(1, Math.min(10, parseInt(apiMaxAlternativesInput.value) || 1));
         apiMaxAlternativesInput.value = String(value);
@@ -833,26 +702,11 @@
     }
 
     if (apiConfidenceInput) {
-      // Atualizar display do valor do slider em tempo real
-      const updateConfidenceDisplay = () => {
-        const sliderValue = parseInt(apiConfidenceInput.value);
-        const displayEl = document.getElementById('voice-api-confidence-display');
-        if (displayEl) {
-          displayEl.textContent = `${sliderValue}%`;
-          // Mudar cor baseada no valor
-          if (sliderValue <= 20) {
-            displayEl.className = 'ms-2 badge bg-success';
-          } else if (sliderValue <= 50) {
-            displayEl.className = 'ms-2 badge bg-info';
-          } else if (sliderValue <= 80) {
-            displayEl.className = 'ms-2 badge bg-warning text-dark';
-          } else {
-            displayEl.className = 'ms-2 badge bg-danger';
-          }
-        }
-      };
-      
-      apiConfidenceInput.addEventListener('input', updateConfidenceDisplay);
+      apiConfidenceInput.addEventListener('input', () => {
+        updateApiConfidenceDisplay();
+        const value = Math.max(0, Math.min(100, parseInt(apiConfidenceInput.value) || 0));
+        localStorage.setItem('voice_api_confidence', String(value));
+      });
       apiConfidenceInput.addEventListener('change', () => {
         const value = Math.max(0, Math.min(100, parseInt(apiConfidenceInput.value) || 0));
         apiConfidenceInput.value = String(value);
@@ -867,23 +721,46 @@
       });
       
       // Inicializar display
-      updateConfidenceDisplay();
+      updateApiConfidenceDisplay();
     }
 
     bindElementOnce(toggleLogBtn, 'toggle-log', 'click', () => {
       const logSection = $('voice-command-widget').querySelector('.voice-log-section');
       if (logSection) {
-        logSection.classList.toggle('voice-log-section-hidden');
-        toggleLogBtn.classList.toggle('active');
+        const willShow = logSection.classList.contains('voice-log-section-hidden');
+        applyPanelVisibility(logSection, toggleLogBtn, 'voice-log-section-hidden', willShow);
+        localStorage.setItem(LOG_PANEL_VISIBLE_KEY, String(willShow));
+        persistAdvancedSettingsSnapshot();
       }
     });
 
     bindElementOnce(toggleAdvancedBtn, 'toggle-advanced', 'click', () => {
       const advancedSection = $('voice-command-widget').querySelector('.voice-advanced-settings');
       if (advancedSection) {
-        advancedSection.classList.toggle('voice-advanced-settings-hidden');
-        toggleAdvancedBtn.classList.toggle('active');
+        const willShow = advancedSection.classList.contains('voice-advanced-settings-hidden');
+        applyPanelVisibility(advancedSection, toggleAdvancedBtn, 'voice-advanced-settings-hidden', willShow);
+        localStorage.setItem(ADVANCED_PANEL_VISIBLE_KEY, String(willShow));
+        persistAdvancedSettingsSnapshot();
       }
+    });
+
+    const advancedInputs = [
+      languageSelect,
+      soundDetectionCheckbox,
+      ccSensitivityInput,
+      document.getElementById('voice-cc-responsiveness'),
+      document.getElementById('voice-cc-stability'),
+      apiMaxAlternativesInput,
+      apiConfidenceInput
+    ].filter(Boolean);
+
+    advancedInputs.forEach((el, idx) => {
+      bindElementOnce(el, `adv-persist-input-${idx}`, 'input', () => {
+        persistAdvancedSettingsSnapshot();
+      });
+      bindElementOnce(el, `adv-persist-change-${idx}`, 'change', () => {
+        persistAdvancedSettingsSnapshot();
+      });
     });
 
     // P0.2: Event delegation para remover palavras (remove inline handlers)
@@ -906,6 +783,7 @@
 
     bindUiEventListeners();
     restoreAdvancedParametersState();  // Restaurar todos os parâmetros avançados
+    restorePanelVisibilityState();
     loadTriggerWords();
     renderTranscriptDisplay();
     updateLogDisplay();
@@ -916,8 +794,6 @@
     transcriptDisplay = $('voice-transcript-display');
     confidenceLabel = $('voice-confidence');
     languageSelect = $('voice-language-select');
-    continuousMode = $('voice-continuous-mode');
-    freeListeningCheckbox = $('voice-free-listening-mode');
     triggerInput = $('voice-trigger-input');
     triggerAddBtn = $('voice-trigger-add');
     commandsList = $('voice-commands-list');
@@ -931,6 +807,9 @@
     toggleAdvancedBtn = $('voice-toggle-advanced-btn');
     soundDetectionCheckbox = $('voice-sound-detection');
     ccSensitivityInput = $('voice-cc-sensitivity');
+    networkLatencyDisplay = $('voice-network-latency-display');
+    clearConfirmModalEl = $('voice-clear-confirm-modal');
+    clearConfirmAcceptBtn = $('voice-clear-confirm-accept');
     
     // Parâmetros de delay do CC
     const ccResponsivenessInput = $('voice-cc-responsiveness');
@@ -959,8 +838,6 @@
   let isListening = false;
   let shouldKeepListening = false;
   let currentTranscript = '';
-  let monitorFinalText = '';
-  let monitorInterimText = '';
   let monitorSoundText = '';
   let monitorSoundIcon = 'fa-wave-square';
   let lastSoundLabel = '';
@@ -968,36 +845,53 @@
   let soundStableCandidate = '';
   let soundCandidateSince = 0;
   let lastSoundLoggedAt = 0;
-  let monitorHighlightWord = '';
-  let monitorHighlightTimer = null;
-  let interimFrozen = false;  // Flag para congelar interim (melhor que usar timer ID)
-  let pendingFinalTranscript = '';
-  let phraseCommitTimer = null;
-  let nonContinuousTimeoutId = null;
-  let liveTriggeredCounts = new Map();
+  let lastCcDebugRenderAt = 0;
+
   let logEntries = [];
-  let freeListeningMode = false;  // NOVO: Modo Escuta Livre (sem confirmação)
   let triggerWords = [];  // Array de: { word, mode, intensity, channel, id }
   let audioContext = null;
+  let micStream = null;
+  let micSourceNode = null;
   let soundDetectionActive = false;  // Flag de detecção de sons CC
   let analyserNode = null;  // Para análise de áudio
   let detectorRafId = null;  // RAF ID para parar detector
-  let transcriptHistory = [];  // Histórico acumulado de transcrições finais
-  const MAX_TRANSCRIPT_HISTORY = 100;  // Máximo de entradas no histórico
+  let detectorIdleTimeoutId = null;
+  let monitorHighlightWord = '';
+  let monitorHighlightUntil = 0;
+  let monitorHighlightIndex = -1;
+  let utteranceActive = false;
+  let lastFinalizedResultIndex = -1;
+  let recognitionRestartDelayMs = 20;
+  let recognitionRestartTimerId = null;
+  let networkLatencyTimerId = null;
+  let networkLatencyInFlight = false;
+  const balloonFlashTimers = new Map();
+  let clearConfirmModalInstance = null;
+  const LISTENING_PERSIST_KEY = 'voice_listening_enabled';
+  const ADVANCED_PANEL_VISIBLE_KEY = 'voice_advanced_panel_visible';
+  const LOG_PANEL_VISIBLE_KEY = 'voice_log_panel_visible';
+  const ADVANCED_SETTINGS_SNAPSHOT_KEY = 'voice_advanced_settings_snapshot_v1';
   const MAX_LOG_ENTRIES = 50;
-  const PHRASE_COMMIT_DELAY_MS_DEFAULT = 220;
-  const NON_CONTINUOUS_TIMEOUT_MS = 45000;
+  const RECOGNITION_RESTART_BASE_DELAY_MS = 20;
+  const RECOGNITION_RESTART_MAX_DELAY_MS = 320;
+  const RECOGNITION_RESTART_BACKOFF_MULTIPLIER = 2;
+  const NETWORK_LATENCY_PROBE_INTERVAL_MS = 10000;
+  const NETWORK_LATENCY_TIMEOUT_MS = 4000;
+  const NETWORK_LATENCY_WARN_MS = 250;
+  const NETWORK_LATENCY_BAD_MS = 600;
   const SOUND_SMOOTH_ALPHA_DEFAULT = 0.35;  // Será sobrescrito por slider
   const SOUND_HOLD_BASE_MS_DEFAULT = 200;   // Será sobrescrito por slider
   const SOUND_LOG_MIN_INTERVAL_MS = 1200;
+  const CC_DEBUG_TEXT_ENABLED = true;
+  const CC_DEBUG_RENDER_INTERVAL_MS = 250;
   // P0.1: Idle Detection para otimização de CPU
   let audioIdleCount = 0;
-  const AUDIO_IDLE_THRESHOLD = 4;      // RMS < 4 = silêncio
-  const AUDIO_IDLE_LIMIT = 60;         // ~1 segundo em 60fps
-  const AUDIO_IDLE_RECOVERY_MS = 2000; // Retomar análise após 2s
+  const AUDIO_IDLE_THRESHOLD = 1.5;    // RMS < 1.5 = silêncio forte
+  const AUDIO_IDLE_LIMIT = 300;        // ~5 segundos em 60fps
+  const AUDIO_IDLE_RECOVERY_MS = 400;  // Retomar análise após 0.4s
 
   // Variáveis dinâmicas para delay
-  let phraseCommitDelayMs = PHRASE_COMMIT_DELAY_MS_DEFAULT;
+
   let soundSmoothAlpha = SOUND_SMOOTH_ALPHA_DEFAULT;
   let soundHoldBaseMs = SOUND_HOLD_BASE_MS_DEFAULT;
   const CC_SENSITIVITY_DEFAULT = 50;
@@ -1050,8 +944,142 @@
     return MODE_STYLES[mode] || MODE_STYLES.DEFAULT;
   }
 
+  function updateNetworkLatencyDisplay(latencyMs, state = 'ok') {
+    if (!networkLatencyDisplay) return;
+
+    if (!Number.isFinite(latencyMs)) {
+      if (state === 'offline') {
+        networkLatencyDisplay.textContent = 'Offline';
+      } else if (state === 'timeout') {
+        networkLatencyDisplay.textContent = 'Timeout';
+      } else {
+        networkLatencyDisplay.textContent = 'Indisponível';
+      }
+      networkLatencyDisplay.className = 'ms-2 badge bg-danger';
+      return;
+    }
+
+    const rounded = Math.max(0, Math.round(latencyMs));
+    networkLatencyDisplay.textContent = `${rounded} ms`;
+
+    if (rounded < NETWORK_LATENCY_WARN_MS) {
+      networkLatencyDisplay.className = 'ms-2 badge bg-success';
+    } else if (rounded < NETWORK_LATENCY_BAD_MS) {
+      networkLatencyDisplay.className = 'ms-2 badge bg-warning text-dark';
+    } else {
+      networkLatencyDisplay.className = 'ms-2 badge bg-danger';
+    }
+  }
+
+  function getNetworkProbeUrl() {
+    try {
+      const probe = new URL('manifest.json', window.location.href);
+      probe.searchParams.set('_voice_net_probe', String(Date.now()));
+      return probe.toString();
+    } catch {
+      return null;
+    }
+  }
+
+  async function measureNetworkLatency() {
+    if (networkLatencyInFlight) return;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      updateNetworkLatencyDisplay(NaN, 'offline');
+      return;
+    }
+
+    const probeUrl = getNetworkProbeUrl();
+    if (!probeUrl) {
+      updateNetworkLatencyDisplay(NaN, 'error');
+      return;
+    }
+
+    networkLatencyInFlight = true;
+    const startedAt = performance.now();
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeoutId = controller
+      ? setTimeout(() => controller.abort(), NETWORK_LATENCY_TIMEOUT_MS)
+      : null;
+
+    try {
+      await fetch(probeUrl, {
+        method: 'GET',
+        cache: 'no-store',
+        credentials: 'same-origin',
+        signal: controller ? controller.signal : undefined
+      });
+      const elapsed = performance.now() - startedAt;
+      updateNetworkLatencyDisplay(elapsed, 'ok');
+    } catch (e) {
+      const isAbort = e && (e.name === 'AbortError');
+      updateNetworkLatencyDisplay(NaN, isAbort ? 'timeout' : 'error');
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      networkLatencyInFlight = false;
+    }
+  }
+
+  function stopNetworkLatencyMonitor() {
+    if (networkLatencyTimerId) {
+      clearInterval(networkLatencyTimerId);
+      networkLatencyTimerId = null;
+    }
+  }
+
+  function startNetworkLatencyMonitor() {
+    stopNetworkLatencyMonitor();
+    updateNetworkLatencyDisplay(NaN, 'error');
+    measureNetworkLatency();
+    networkLatencyTimerId = setInterval(() => {
+      measureNetworkLatency();
+    }, NETWORK_LATENCY_PROBE_INTERVAL_MS);
+  }
+
+  function clearRecognitionRestartTimer() {
+    if (!recognitionRestartTimerId) return;
+    clearTimeout(recognitionRestartTimerId);
+    recognitionRestartTimerId = null;
+  }
+
+  function resetRecognitionRestartDelay() {
+    recognitionRestartDelayMs = RECOGNITION_RESTART_BASE_DELAY_MS;
+  }
+
+  function increaseRecognitionRestartDelay() {
+    recognitionRestartDelayMs = Math.min(
+      RECOGNITION_RESTART_MAX_DELAY_MS,
+      Math.max(
+        RECOGNITION_RESTART_BASE_DELAY_MS,
+        Math.round(recognitionRestartDelayMs * RECOGNITION_RESTART_BACKOFF_MULTIPLIER)
+      )
+    );
+  }
+
+  function scheduleRecognitionRestart() {
+    if (!shouldKeepListening) return;
+
+    clearRecognitionRestartTimer();
+    const delay = recognitionRestartDelayMs;
+
+    recognitionRestartTimerId = setTimeout(() => {
+      recognitionRestartTimerId = null;
+
+      if (!recognition || isListening || !shouldKeepListening) return;
+
+      try {
+        recognition.start();
+      } catch (e) {
+        increaseRecognitionRestartDelay();
+        console.warn('[VOICE CMD] Falha ao reiniciar escuta contínua:', e, `| Próxima tentativa em ${recognitionRestartDelayMs}ms`);
+        scheduleRecognitionRestart();
+      }
+    }, delay);
+  }
+
   // Detecção de sons CC (Closed Captions)
-  function startSoundDetector() {
+  async function startSoundDetector() {
     if (!soundDetectionActive || !isListening) {
       console.log('[VOICE CMD] Não é possível iniciar detector de sons');
       return;
@@ -1068,43 +1096,39 @@
       
       // Resume audioContext (Chrome/Firefox suspendem até interação)
       if (audioContext.state === 'suspended') {
-        audioContext.resume().catch(e => console.warn('[VOICE CMD] Não pôde resumir AudioContext:', e));
+        try {
+          await audioContext.resume();
+        } catch (e) {
+          console.warn('[VOICE CMD] Não pôde resumir AudioContext:', e);
+        }
         console.log('[VOICE CMD] AudioContext retomado');
       }
       
-      // Se não houver analyser, criar e conectar ao microfone
+      // Se não houver analyser, criar
       if (!analyserNode) {
         analyserNode = audioContext.createAnalyser();
         analyserNode.fftSize = 2048;
         analyserNode.smoothingTimeConstant = 0.8;  // Suavização adicional
         console.log('[VOICE CMD] AnalyserNode criado com fftSize=2048');
-        
-        // Conectar microfone ao analyser (assincronamente, mas só inicia loop depois)
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-          navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false } })
-            .then(stream => {
-              try {
-                const source = audioContext.createMediaStreamAudioSource(stream);
-                source.connect(analyserNode);
-                console.log('[VOICE CMD] Fonte de áudio conectada ao analyser');
-                
-                // SÓ AGORA iniciar o loop de detecção após confirmar conexão
-                if (!detectorRafId && soundDetectionActive) {
-                  console.log('[VOICE CMD] Iniciando loop de análise de frequência');
-                  analyzeSoundFrame();
-                }
-              } catch (connectErr) {
-                console.error('[VOICE CMD] Erro ao conectar fonte:', connectErr);
-              }
-            })
-            .catch(e => {
-              console.warn('[VOICE CMD] Aviso ao obter microfone:', e);
-              addLog(`CC: Permissão de microfone negada ou indisponível`, 'warning');
-            });
+      }
+
+      // Conectar microfone ao analyser (apenas uma vez)
+      if (!micSourceNode) {
+        if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) {
+          addLog('CC: getUserMedia indisponível neste navegador', 'warning');
+          return;
         }
-      } else if (!detectorRafId) {
-        // Se analyser já existe e loop não está rodando, iniciar
-        console.log('[VOICE CMD] Retomando loop de análise de frequência');
+
+        micStream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+        });
+        micSourceNode = audioContext.createMediaStreamAudioSource(micStream);
+        micSourceNode.connect(analyserNode);
+        console.log('[VOICE CMD] Fonte de áudio conectada ao analyser');
+      }
+
+      if (!detectorRafId && soundDetectionActive) {
+        console.log('[VOICE CMD] Iniciando/retomando loop de análise de frequência');
         analyzeSoundFrame();
       }
     } catch (e) {
@@ -1115,13 +1139,12 @@
 
   function stopSoundDetector() {
     if (detectorRafId) {
-      // P0.1: Verificar se é setTimeout ou rAF
-      if (typeof detectorRafId === 'number' && detectorRafId > 1000000) {
-        cancelAnimationFrame(detectorRafId);  // RAF
-      } else {
-        clearTimeout(detectorRafId);  // Timeout
-      }
+      cancelAnimationFrame(detectorRafId);
       detectorRafId = null;
+    }
+    if (detectorIdleTimeoutId) {
+      clearTimeout(detectorIdleTimeoutId);
+      detectorIdleTimeoutId = null;
     }
     audioIdleCount = 0;  // P0.1: Resetar contador de idle
     monitorSoundText = '';
@@ -1130,6 +1153,7 @@
     soundRmsSmooth = 0;
     soundStableCandidate = '';
     soundCandidateSince = 0;
+    lastCcDebugRenderAt = 0;
     renderTranscriptDisplay();
     console.log('[VOICE CMD] Detector de sons parado');
   }
@@ -1157,13 +1181,148 @@
     return Math.max(0, Math.min(100, Math.round(parsed)));
   }
 
-  function getPhraseCommitDelayValue() {
-    const delayInput = document.getElementById('voice-phrase-commit-delay');
-    if (!delayInput) return PHRASE_COMMIT_DELAY_MS_DEFAULT;
-    const parsed = Number(delayInput.value);
-    if (!Number.isFinite(parsed)) return PHRASE_COMMIT_DELAY_MS_DEFAULT;
-    return Math.max(50, Math.min(1000, Math.round(parsed)));
+  function updateCcResponsivenessDisplay() {
+    const value = getCcResponsivenessValue();
+    const displayEl = document.getElementById('voice-cc-responsiveness-display');
+    if (!displayEl) return;
+    displayEl.textContent = `${value}%`;
+    if (value <= 30) {
+      displayEl.className = 'ms-2 badge bg-info';
+    } else if (value <= 70) {
+      displayEl.className = 'ms-2 badge bg-secondary';
+    } else {
+      displayEl.className = 'ms-2 badge bg-warning text-dark';
+    }
   }
+
+  function updateCcStabilityDisplay() {
+    const value = getCcStabilityValue();
+    const displayEl = document.getElementById('voice-cc-stability-display');
+    if (!displayEl) return;
+    displayEl.textContent = `${value}%`;
+    if (value <= 30) {
+      displayEl.className = 'ms-2 badge bg-success';
+    } else if (value <= 70) {
+      displayEl.className = 'ms-2 badge bg-secondary';
+    } else {
+      displayEl.className = 'ms-2 badge bg-danger';
+    }
+  }
+
+  function updateApiConfidenceDisplay() {
+    if (!apiConfidenceInput) return;
+    const sliderValue = Math.max(0, Math.min(100, parseInt(apiConfidenceInput.value) || 0));
+    const displayEl = document.getElementById('voice-api-confidence-display');
+    if (!displayEl) return;
+    displayEl.textContent = `${sliderValue}%`;
+    if (sliderValue <= 20) {
+      displayEl.className = 'ms-2 badge bg-success';
+    } else if (sliderValue <= 50) {
+      displayEl.className = 'ms-2 badge bg-info';
+    } else if (sliderValue <= 80) {
+      displayEl.className = 'ms-2 badge bg-warning text-dark';
+    } else {
+      displayEl.className = 'ms-2 badge bg-danger';
+    }
+  }
+
+  function applyPanelVisibility(panelEl, toggleBtnEl, hiddenClassName, visible) {
+    if (!panelEl || !toggleBtnEl) return;
+    panelEl.classList.toggle(hiddenClassName, !visible);
+    toggleBtnEl.classList.toggle('active', visible);
+  }
+
+  function restorePanelVisibilityState() {
+    const widget = $('voice-command-widget');
+    if (!widget) return;
+
+    const advancedSection = widget.querySelector('.voice-advanced-settings');
+    const logSection = widget.querySelector('.voice-log-section');
+
+    const isAdvancedVisible = localStorage.getItem(ADVANCED_PANEL_VISIBLE_KEY) === 'true';
+    const isLogVisible = localStorage.getItem(LOG_PANEL_VISIBLE_KEY) === 'true';
+
+    applyPanelVisibility(advancedSection, toggleAdvancedBtn, 'voice-advanced-settings-hidden', isAdvancedVisible);
+    applyPanelVisibility(logSection, toggleLogBtn, 'voice-log-section-hidden', isLogVisible);
+  }
+
+  function persistAdvancedSettingsSnapshot() {
+    try {
+      const widget = $('voice-command-widget');
+      const advancedSection = widget ? widget.querySelector('.voice-advanced-settings') : null;
+      const logSection = widget ? widget.querySelector('.voice-log-section') : null;
+      const ccResponsivenessInput = document.getElementById('voice-cc-responsiveness');
+      const ccStabilityInput = document.getElementById('voice-cc-stability');
+
+      const snapshot = {
+        language: languageSelect ? languageSelect.value : 'pt-BR',
+        soundDetectionEnabled: soundDetectionCheckbox ? !!soundDetectionCheckbox.checked : false,
+        ccSensitivity: ccSensitivityInput ? getCcSensitivityValue() : 50,
+        ccResponsiveness: ccResponsivenessInput ? getCcResponsivenessValue() : 50,
+        ccStability: ccStabilityInput ? getCcStabilityValue() : 50,
+        apiMaxAlternatives: apiMaxAlternativesInput ? Math.max(1, Math.min(10, parseInt(apiMaxAlternativesInput.value) || 1)) : 1,
+        apiConfidence: apiConfidenceInput ? Math.max(0, Math.min(100, parseInt(apiConfidenceInput.value) || 0)) : 0,
+        advancedPanelVisible: advancedSection ? !advancedSection.classList.contains('voice-advanced-settings-hidden') : false,
+        logPanelVisible: logSection ? !logSection.classList.contains('voice-log-section-hidden') : false
+      };
+
+      localStorage.setItem(ADVANCED_SETTINGS_SNAPSHOT_KEY, JSON.stringify(snapshot));
+    } catch (e) {
+      console.warn('[VOICE CMD] Falha ao persistir snapshot avançado:', e);
+    }
+  }
+
+  function restoreAdvancedSettingsSnapshot() {
+    try {
+      const raw = localStorage.getItem(ADVANCED_SETTINGS_SNAPSHOT_KEY);
+      if (!raw) return false;
+
+      const snapshot = JSON.parse(raw);
+      if (!snapshot || typeof snapshot !== 'object') return false;
+
+      if (languageSelect && typeof snapshot.language === 'string') {
+        languageSelect.value = snapshot.language;
+      }
+      if (soundDetectionCheckbox && typeof snapshot.soundDetectionEnabled === 'boolean') {
+        soundDetectionCheckbox.checked = snapshot.soundDetectionEnabled;
+        soundDetectionActive = snapshot.soundDetectionEnabled;
+      }
+      if (ccSensitivityInput && Number.isFinite(Number(snapshot.ccSensitivity))) {
+        ccSensitivityInput.value = String(Math.max(0, Math.min(100, Math.round(Number(snapshot.ccSensitivity)))));
+      }
+
+      const ccResponsivenessInput = document.getElementById('voice-cc-responsiveness');
+      if (ccResponsivenessInput && Number.isFinite(Number(snapshot.ccResponsiveness))) {
+        ccResponsivenessInput.value = String(Math.max(0, Math.min(100, Math.round(Number(snapshot.ccResponsiveness)))));
+      }
+
+      const ccStabilityInput = document.getElementById('voice-cc-stability');
+      if (ccStabilityInput && Number.isFinite(Number(snapshot.ccStability))) {
+        ccStabilityInput.value = String(Math.max(0, Math.min(100, Math.round(Number(snapshot.ccStability)))));
+      }
+
+      if (apiMaxAlternativesInput && Number.isFinite(Number(snapshot.apiMaxAlternatives))) {
+        apiMaxAlternativesInput.value = String(Math.max(1, Math.min(10, Math.round(Number(snapshot.apiMaxAlternatives)))));
+      }
+      if (apiConfidenceInput && Number.isFinite(Number(snapshot.apiConfidence))) {
+        apiConfidenceInput.value = String(Math.max(0, Math.min(100, Math.round(Number(snapshot.apiConfidence)))));
+      }
+
+      if (typeof snapshot.advancedPanelVisible === 'boolean') {
+        localStorage.setItem(ADVANCED_PANEL_VISIBLE_KEY, String(snapshot.advancedPanelVisible));
+      }
+      if (typeof snapshot.logPanelVisible === 'boolean') {
+        localStorage.setItem(LOG_PANEL_VISIBLE_KEY, String(snapshot.logPanelVisible));
+      }
+
+      return true;
+    } catch (e) {
+      console.warn('[VOICE CMD] Falha ao restaurar snapshot avançado:', e);
+      return false;
+    }
+  }
+
+
 
   function updateCcDelayParameters() {
     // Responsividade: 0-100 mapeado para 0.1 (pouco responsivo) até 0.8 (muito responsivo)
@@ -1179,71 +1338,9 @@
                 'Stability:', stability, '(ms:', soundHoldBaseMs.toFixed(0), ')');
   }
 
-  function updatePhraseCommitDelay() {
-    const delay = getPhraseCommitDelayValue();
-    phraseCommitDelayMs = delay;
-    
-    const badge = document.getElementById('voice-phrase-commit-delay-display');
-    if (badge) {
-      badge.textContent = `${delay}ms`;
-      // Cor baseada no delay: vermelho (rápido) → amarelo (meio) → azul (lento)
-      if (delay < 150) badge.className = 'ms-2 badge bg-danger';      // Muito rápido
-      else if (delay < 300) badge.className = 'ms-2 badge bg-warning'; // Balanceado
-      else badge.className = 'ms-2 badge bg-info';                     // Conservador
-    }
-    
-    localStorage.setItem('voice_phrase_commit_delay', String(delay));
-    console.log('[VOICE CMD] Phrase commit delay set to:', delay, 'ms');
-  }
 
-  function applyPreset(presetName) {
-    const presets = {
-      responsive: { responsiveness: 90, stability: 10, phraseDelay: 150 },
-      balanced: { responsiveness: 50, stability: 50, phraseDelay: 220 },
-      stable: { responsiveness: 20, stability: 80, phraseDelay: 500 }
-    };
 
-    const preset = presets[presetName];
-    if (!preset) {
-      console.warn('[VOICE CMD] Preset desconhecido:', presetName);
-      return;
-    }
 
-    // Aplicar aos inputs
-    const responsiveness = document.getElementById('voice-cc-responsiveness');
-    const stability = document.getElementById('voice-cc-stability');
-    const phraseDelay = document.getElementById('voice-phrase-commit-delay');
-
-    if (responsiveness) {
-      responsiveness.value = preset.responsiveness;
-      // Disparar evento de mudança
-      responsiveness.dispatchEvent(new Event('input', { bubbles: true }));
-      responsiveness.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-
-    if (stability) {
-      stability.value = preset.stability;
-      // Disparar evento de mudança
-      stability.dispatchEvent(new Event('input', { bubbles: true }));
-      stability.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-
-    if (phraseDelay) {
-      phraseDelay.value = preset.phraseDelay;
-      // Disparar evento de mudança
-      phraseDelay.dispatchEvent(new Event('input', { bubbles: true }));
-      phraseDelay.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-
-    // Salvar preset escolhido
-    localStorage.setItem('voice_cc_responsiveness', String(preset.responsiveness));
-    localStorage.setItem('voice_cc_stability', String(preset.stability));
-    localStorage.setItem('voice_phrase_commit_delay', String(preset.phraseDelay));
-
-    updateCcDelayParameters();
-    addLog(`Preset aplicado: ${presetName.charAt(0).toUpperCase() + presetName.slice(1)} (Confirmação: ${preset.phraseDelay}ms)`, 'success');
-    console.log('[VOICE CMD] Preset aplicado:', presetName, preset);
-  }
 
   function restoreCcSensitivityState() {
     if (!ccSensitivityInput) return;
@@ -1266,11 +1363,47 @@
     }
   }
 
+  function persistAdvancedParametersSnapshot() {
+    if (languageSelect) {
+      localStorage.setItem('voice_language', languageSelect.value || 'pt-BR');
+    }
+    if (soundDetectionCheckbox) {
+      localStorage.setItem('voice_sound_detection_enabled', String(!!soundDetectionCheckbox.checked));
+    }
+    if (ccSensitivityInput) {
+      localStorage.setItem('voice_cc_sensitivity', String(getCcSensitivityValue()));
+    }
+
+    const ccResponsivenessInput = document.getElementById('voice-cc-responsiveness');
+    if (ccResponsivenessInput) {
+      localStorage.setItem('voice_cc_responsiveness', String(getCcResponsivenessValue()));
+    }
+
+    const ccStabilityInput = document.getElementById('voice-cc-stability');
+    if (ccStabilityInput) {
+      localStorage.setItem('voice_cc_stability', String(getCcStabilityValue()));
+    }
+
+    if (apiMaxAlternativesInput) {
+      const value = Math.max(1, Math.min(10, parseInt(apiMaxAlternativesInput.value) || 1));
+      apiMaxAlternativesInput.value = String(value);
+      localStorage.setItem('voice_api_max_alternatives', String(value));
+    }
+
+    if (apiConfidenceInput) {
+      const value = Math.max(0, Math.min(100, parseInt(apiConfidenceInput.value) || 0));
+      apiConfidenceInput.value = String(value);
+      localStorage.setItem('voice_api_confidence', String(value));
+    }
+  }
+
   function restoreAdvancedParametersState() {
+    const restoredFromSnapshot = restoreAdvancedSettingsSnapshot();
+
     // Restaurar Idioma
     if (languageSelect) {
       const storedLang = localStorage.getItem('voice_language');
-      const langToUse = storedLang || 'pt-BR';  // Padrão: Português Brasil
+      const langToUse = restoredFromSnapshot ? languageSelect.value : (storedLang || 'pt-BR');  // Padrão: Português Brasil
       languageSelect.value = langToUse;
       if (recognition) {
         recognition.lang = langToUse;
@@ -1278,27 +1411,12 @@
       console.log('[VOICE CMD] Idioma restaurado/definido:', langToUse, '(salvo:', !!storedLang, ')');
     }
 
-    // Restaurar Modo Contínuo
-    if (continuousMode) {
-      const storedContinuous = localStorage.getItem('voice_continuous_mode');
-      const value = storedContinuous === null ? true : storedContinuous === 'true';
-      continuousMode.checked = value;
-      console.log('[VOICE CMD] Modo contínuo restaurado:', value);
-    }
-
-    // NOVO: Restaurar Modo Escuta Livre
-    if (freeListeningCheckbox) {
-      const storedFreeListening = localStorage.getItem('voice_free_listening_mode');
-      const value = storedFreeListening === null ? false : storedFreeListening === 'true';
-      freeListeningCheckbox.checked = value;
-      freeListeningMode = value;
-      console.log('[VOICE CMD] Modo Escuta Livre restaurado:', value);
-    }
-
     // Restaurar Detecção de Sons CC (já trata via restoreSoundDetectionState)
     if (soundDetectionCheckbox) {
       const stored = localStorage.getItem('voice_sound_detection_enabled');
-      const shouldBeEnabled = stored === null ? false : stored === 'true';
+      const shouldBeEnabled = restoredFromSnapshot
+        ? !!soundDetectionCheckbox.checked
+        : (stored === null ? false : stored === 'true');
       soundDetectionCheckbox.checked = shouldBeEnabled;
       soundDetectionActive = shouldBeEnabled;
       console.log('[VOICE CMD] CC restaurado:', shouldBeEnabled);
@@ -1310,7 +1428,7 @@
     // Restaurar Máximo de Alternativas
     if (apiMaxAlternativesInput) {
       const storedAlternatives = localStorage.getItem('voice_api_max_alternatives');
-      if (storedAlternatives) {
+      if (!restoredFromSnapshot && storedAlternatives) {
         const value = Math.max(1, Math.min(10, parseInt(storedAlternatives) || 1));
         apiMaxAlternativesInput.value = String(value);
         console.log('[VOICE CMD] Máx. alternativas restauradas:', value);
@@ -1320,7 +1438,7 @@
     // Restaurar Confiança Mínima
     if (apiConfidenceInput) {
       const storedConfidence = localStorage.getItem('voice_api_confidence');
-      if (storedConfidence) {
+      if (!restoredFromSnapshot && storedConfidence) {
         const value = Math.max(0, Math.min(100, parseInt(storedConfidence) || 0));
         apiConfidenceInput.value = String(value);
         // Atualizar display do badge
@@ -1339,62 +1457,46 @@
         }
         console.log('[VOICE CMD] Confiança mínima restaurada:', value);
       }
+      updateApiConfidenceDisplay();
     }
 
     // Restaurar Responsividade CC
     const ccResponsivenessInput = document.getElementById('voice-cc-responsiveness');
     if (ccResponsivenessInput) {
       const storedResponsiveness = localStorage.getItem('voice_cc_responsiveness');
-      if (storedResponsiveness) {
+      if (!restoredFromSnapshot && storedResponsiveness) {
         const value = Math.max(0, Math.min(100, parseInt(storedResponsiveness) || 50));
         ccResponsivenessInput.value = String(value);
         console.log('[VOICE CMD] Responsividade CC restaurada:', value);
       }
+      updateCcResponsivenessDisplay();
     }
 
     // Restaurar Estabilidade CC
     const ccStabilityInput = document.getElementById('voice-cc-stability');
     if (ccStabilityInput) {
       const storedStability = localStorage.getItem('voice_cc_stability');
-      if (storedStability) {
+      if (!restoredFromSnapshot && storedStability) {
         const value = Math.max(0, Math.min(100, parseInt(storedStability) || 50));
         ccStabilityInput.value = String(value);
         console.log('[VOICE CMD] Estabilidade CC restaurada:', value);
       }
+      updateCcStabilityDisplay();
     }
 
-    // Restaurar Velocidade de Confirmação (Phrase Commit Delay)
-    const phraseCommitDelayInput = document.getElementById('voice-phrase-commit-delay');
-    if (phraseCommitDelayInput) {
-      const storedDelay = localStorage.getItem('voice_phrase_commit_delay');
-      if (storedDelay) {
-        const value = Math.max(50, Math.min(1000, parseInt(storedDelay) || PHRASE_COMMIT_DELAY_MS_DEFAULT));
-        phraseCommitDelayInput.value = String(value);
-        phraseCommitDelayMs = value;
-        const displayEl = document.getElementById('voice-phrase-commit-delay-display');
-        if (displayEl) {
-          displayEl.textContent = `${value}ms`;
-          if (value < 150) {
-            displayEl.className = 'ms-2 badge bg-danger';
-          } else if (value < 300) {
-            displayEl.className = 'ms-2 badge bg-warning';
-          } else {
-            displayEl.className = 'ms-2 badge bg-info';
-          }
-        }
-        console.log('[VOICE CMD] Velocidade de Confirmação restaurada:', value, 'ms');
-      }
-    }
+
 
     // Aplicar parâmetros de delay após restaurar
     updateCcDelayParameters();
+    persistAdvancedParametersSnapshot();
+    persistAdvancedSettingsSnapshot();
 
     console.log('[VOICE CMD] Todos os parâmetros avançados restaurados');
   }
 
   function getSoundDescriptor(rms, highFreqAvg, lowFreqAvg, sensitivity = CC_SENSITIVITY_DEFAULT) {
     const scale = 1 + ((50 - sensitivity) / 100) * 0.9;
-    const thresholdSilence = 4 * scale;       // Reduzido de 14 para capturar sons mais baixos
+    const thresholdSilence = 1.8 * scale;     // Ajustado para não prender em silêncio
     const thresholdLow = 12 * scale;          // Reduzido de 28
     const thresholdMid = 28 * scale;          // Reduzido de 50
     const thresholdHigh = 45 * scale;         // Reduzido de 80
@@ -1483,10 +1585,15 @@
           cancelAnimationFrame(detectorRafId);
           detectorRafId = null;
         }
+        if (detectorIdleTimeoutId) {
+          clearTimeout(detectorIdleTimeoutId);
+          detectorIdleTimeoutId = null;
+        }
         
         // Agendar retomada após 2 segundos
-        detectorRafId = setTimeout(() => {
-          if (soundDetectionActive && !detectorRafId) {
+        detectorIdleTimeoutId = setTimeout(() => {
+          detectorIdleTimeoutId = null;
+          if (soundDetectionActive && analyserNode && !detectorRafId) {
             console.log('[VOICE CMD] Retomando análise de áudio após idle');
             audioIdleCount = 0;
             analyzeSoundFrame();
@@ -1511,6 +1618,13 @@
     const holdMs = Math.round(soundHoldBaseMs + ((100 - sensitivity) * 3));
     const descriptor = getSoundDescriptor(soundRmsSmooth, highFreqAvg, lowFreqAvg, sensitivity);
     const now = Date.now();
+
+    if (CC_DEBUG_TEXT_ENABLED && (now - lastCcDebugRenderAt) >= CC_DEBUG_RENDER_INTERVAL_MS) {
+      lastCcDebugRenderAt = now;
+      monitorSoundIcon = descriptor.icon;
+      monitorSoundText = `CC: ${descriptor.label} · RMS ${soundRmsSmooth.toFixed(1)}`;
+      renderTranscriptDisplay();
+    }
 
     // Debug: log a cada 60 frames (~1 segundo em 60fps)
     if (typeof window.__VOICE_DEBUG_FRAME_COUNT === 'undefined') {
@@ -1572,7 +1686,11 @@
 
     recognition.onstart = () => {
       isListening = true;
-      liveTriggeredCounts.clear();
+      lastFinalizedResultIndex = -1;
+      currentInterimText = '';
+      utteranceActive = false;
+      resetRecognitionRestartDelay();
+      clearRecognitionRestartTimer();
       listeningBtn.classList.add('listening');
       listeningBtn.setAttribute('aria-pressed', 'true');
       listeningText.textContent = 'Ouvindo...';
@@ -1592,64 +1710,62 @@
     };
 
     recognition.onresult = (event) => {
-      console.log('[VOICE CMD] onresult:', event.results.length, 'resultIndex:', event.resultIndex);
-      
-      // Obter confiança mínima configurada (converter de 0-100 para 0-1)
-      const minConfidencePercent = apiConfidenceInput ? parseInt(apiConfidenceInput.value) || 0 : 0;
-      const minConfidence = minConfidencePercent / 100;
-      
       let interim = '';
       let final = '';
+      const finalSegments = [];
+      let lastFinalConfidence = null;
 
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        const transcript = result[0]?.transcript || '';
-        const confidence = result[0]?.confidence || 0;
-        const isFinal = result.isFinal;
-        
-        console.log(`[VOICE CMD] Resultado ${i}: "${transcript}" (confiança: ${(confidence * 100).toFixed(0)}%, final: ${isFinal})`);
-        
-        // Verificar confiança mínima apenas para resultados finais
-        if (isFinal && confidence < minConfidence) {
-          console.log(`[VOICE CMD] Resultado rejeitado por baixa confiança (${(confidence * 100).toFixed(0)}% < ${(minConfidence * 100).toFixed(0)}%)`);
+      for (let i = 0; i < event.results.length; i++) {
+        if (i <= lastFinalizedResultIndex) {
           continue;
         }
+        const result = event.results[i];
+        const transcript = result[0]?.transcript || '';
+        const isFinal = result.isFinal;
         
         if (isFinal) {
-          final += transcript + ' ';
+          const finalChunk = String(transcript || '').trim();
+          if (finalChunk) {
+            final += finalChunk + ' ';
+            finalSegments.push({ index: i, text: finalChunk });
+          }
+          const confidence = Number(result[0]?.confidence);
+          if (Number.isFinite(confidence)) {
+            lastFinalConfidence = confidence;
+          }
         } else {
-          interim += transcript;
+          interim += transcript + ' ';
         }
       }
 
       final = final.trim();  // Limpar espaços extras
       interim = interim.trim();
-      currentTranscript = (final || interim);
-      
-      console.log('[VOICE CMD] onresult:', {final: final.substring(0,50), interim: interim.substring(0,50), resultIndex: event.resultIndex, totalResults: event.results.length});
-      
-      // CORRIGIDO: Só atualizar display quando houver mudança real
-      // (updateTranscriptDisplay agora faz checks mais rigorosos)
-      updateTranscriptDisplay(final, interim);
+      const hasNewFinal = finalSegments.length > 0;
 
-      const realtimeText = `${final} ${interim}`.trim();
-      if (realtimeText) {
-        processTranscript(realtimeText, { live: true });
+      if (!hasNewFinal && !interim) {
+        return;
       }
 
-      // Apenas processar confirmação se for resultado final
-      if (event.results[event.results.length - 1].isFinal && final) {
-        const lastResult = event.results[event.results.length - 1];
-        const confidence = (lastResult[0]?.confidence * 100).toFixed(0);
+      if (hasNewFinal) {
+        const newestFinalIndex = finalSegments[finalSegments.length - 1].index;
+        lastFinalizedResultIndex = Math.max(lastFinalizedResultIndex, newestFinalIndex);
+      }
+
+      currentTranscript = (final || interim || currentInterimText);
+      
+      // Atualizar display com interim (mostra em tempo real enquanto fala)
+      updateTranscriptDisplay(final, interim);
+
+      if (hasNewFinal) {
+        const confidence = (Math.max(0, Number(lastFinalConfidence || 0)) * 100).toFixed(0);
         console.log('[VOICE CMD] Confiança final:', confidence);
         confidenceLabel.textContent = `Confiança: ${confidence}%`;
 
-        // Acumular trechos finais para evitar frases muito curtas
-        queueTranscriptProcessing(final);
-
-        if (!continuousMode.checked) {
-          stopListening();
+        for (const segment of finalSegments) {
+          processTranscript(segment.text, { source: 'final' });
         }
+        utteranceActive = false;
+        renderTranscriptDisplay();
       }
     };
 
@@ -1691,73 +1807,56 @@
         console.error('[VOICE CMD] Erro ao parar sound detector:', e);
       }
 
-      if (shouldKeepListening && continuousMode.checked) {
-        setTimeout(() => {
-          if (!recognition || isListening || !shouldKeepListening) return;
-          try {
-            recognition.start();
-          } catch (e) {
-            console.warn('[VOICE CMD] Falha ao reiniciar escuta contínua:', e);
-          }
-        }, 250);
+      if (shouldKeepListening) {
+        scheduleRecognitionRestart();
       }
     };
 
     return true;
   }
 
+  let currentInterimText = '';  // Texto interim que está sendo exibido agora
+
   function updateTranscriptDisplay(final, interim) {
-    // Adicionar nova transcrição final ao histórico (se não estiver vazio)
-    const finalTrimmed = String(final || '').trim();
+    // Atualizar interim (mostrado em tempo real)
     const interimTrimmed = String(interim || '').trim();
+    const finalTrimmed = String(final || '').trim();
     
-    // Se há final novo
-    if (finalTrimmed && finalTrimmed !== monitorFinalText) {
-      transcriptHistory.push(finalTrimmed);
-      
-      // Manter limite do histórico (apenas últimas linhas)
-      if (transcriptHistory.length > MAX_TRANSCRIPT_HISTORY) {
-        transcriptHistory.shift();  // Remove o mais antigo
+    // Processar interim para detectar palavras em TEMPO REAL
+    if (interimTrimmed) {
+      if (!utteranceActive) {
+        utteranceActive = true;
       }
-      
-      console.log('[VOICE CMD] Adicionado ao histórico:', finalTrimmed, '(total:', transcriptHistory.length, ')');
-      monitorFinalText = finalTrimmed;  // Atualizar texto final anterior
-      
-      // Apenas liberar o freeze, manter interim visível
-      interimFrozen = false;
-    }
-    
-    // NOVO: Só atualizar interim se NÃO estiver congelado (pós-final)
-    if (!interimFrozen) {
-      // Apenas atualizar se interim MUDOU de verdade
-      if (interimTrimmed !== monitorInterimText) {
-        monitorInterimText = interimTrimmed;
-        console.log('[VOICE CMD] Interim atualizado:', interimTrimmed.substring(0, 60));
-        renderTranscriptDisplay();
-      }
-    } else {
-      console.log('[VOICE CMD] ⚠️ Interim congelado, ignorando atualização');
+
+      currentInterimText = interimTrimmed;
+      renderTranscriptDisplay();
+    } else if (finalTrimmed) {
+      // No fluxo final, manter a frase até uma nova atualização substituir o conteúdo
+      currentInterimText = finalTrimmed;
+      renderTranscriptDisplay();
     }
   }
 
   function renderTranscriptDisplay() {
     let html = '';
+    const now = Date.now();
+    const highlightActive = monitorHighlightWord && now < monitorHighlightUntil;
     
-    // Mostrar APENAS as 3 ÚLTIMAS transcrições finais (últimas 3 linhas)
-    if (transcriptHistory.length > 0) {
-      const startIdx = Math.max(0, transcriptHistory.length - 3);
-      for (let i = startIdx; i < transcriptHistory.length; i++) {
-        const finalText = transcriptHistory[i];
-        html += `<div class="voice-transcript-final">${buildTranscriptHtmlWithHighlight(finalText, monitorHighlightWord)}</div>`;
-      }
+    // Mostrar APENAS texto interim (enquanto fala) - nada permanente
+    if (currentInterimText) {
+      const liveMatch = findFirstTriggerMatch(currentInterimText);
+      const highlightedInterim = liveMatch
+        ? highlightDetectedWord(currentInterimText, liveMatch.word, liveMatch.index)
+        : (highlightActive
+            ? highlightDetectedWord(currentInterimText, monitorHighlightWord, monitorHighlightIndex)
+            : escapeHtml(currentInterimText));
+      html += `<div class="voice-transcript-interim" style="opacity:0.85;">${highlightedInterim}</div>`;
     }
-    
-    // NOVO: Mostrar transcrição interim - mas EVITAR flicker
-    // Só mostra interim se houver conteúdo E não esteja em "freeze" pós-final
-    const trimmedInterim = String(monitorInterimText || '').trim();
-    if (trimmedInterim) {
-      // Mostrar interim com estilo diferente (mais transparente)
-      html += `<div class="voice-transcript-interim">${buildTranscriptHtmlWithHighlight(trimmedInterim, monitorHighlightWord)}</div>`;
+
+    if (!highlightActive && monitorHighlightWord) {
+      monitorHighlightWord = '';
+      monitorHighlightUntil = 0;
+      monitorHighlightIndex = -1;
     }
     
     // Mostrar CC (Closed Captions) - APENAS se houver conteúdo
@@ -1772,78 +1871,53 @@
     
     transcriptDisplay.innerHTML = html;
     // Rolar para baixo (mostrar linhas mais novas)
-    transcriptDisplay.scrollTop = transcriptDisplay.scrollHeight;
-  }
-
-  function buildTranscriptHtmlWithHighlight(text, word) {
-    const safeText = String(text || '');
-    const target = String(word || '').trim();
-    if (!target) return escapeHtml(safeText);
-
-    const re = new RegExp(escapeRegExp(target), 'gi');
-    let lastIndex = 0;
-    let out = '';
-    let match;
-
-    while ((match = re.exec(safeText)) !== null) {
-      const start = match.index;
-      const end = start + match[0].length;
-      out += escapeHtml(safeText.slice(lastIndex, start));
-      out += `<span class="voice-transcript-hit">${escapeHtml(safeText.slice(start, end))}</span>`;
-      lastIndex = end;
+    try {
+      transcriptDisplay.scrollTo({ top: transcriptDisplay.scrollHeight, behavior: 'smooth' });
+    } catch (_) {
+      transcriptDisplay.scrollTop = transcriptDisplay.scrollHeight;
     }
-
-    out += escapeHtml(safeText.slice(lastIndex));
-    return out;
   }
 
-  function blinkWordInMonitor(word) {
-    const target = String(word || '').trim();
-    if (!target) return;
-    monitorHighlightWord = target;
-    renderTranscriptDisplay();
+  function highlightDetectedWord(text, word, preferredIndex = -1) {
+    const baseText = String(text || '');
+    const needle = String(word || '').trim();
+    if (!baseText || !needle) return escapeHtml(baseText);
 
-    clearTimeout(monitorHighlightTimer);
-    monitorHighlightTimer = setTimeout(() => {
-      monitorHighlightWord = '';
-      renderTranscriptDisplay();
-    }, 850);
-  }
+    const lowerText = baseText.toLowerCase();
+    const lowerNeedle = needle.toLowerCase();
+    let idx = Number(preferredIndex);
+    const indexValid = Number.isInteger(idx)
+      && idx >= 0
+      && lowerText.slice(idx, idx + lowerNeedle.length) === lowerNeedle;
 
-  function queueTranscriptProcessing(text) {
-    const chunk = String(text || '').trim();
-    if (!chunk) return;
-
-    // NOVO: Se está em Modo Escuta Livre, processa IMEDIATAMENTE
-    if (freeListeningMode) {
-      console.log('[VOICE CMD] Modo Escuta Livre: processando imediatamente, sem delay');
-      processTranscript(chunk, { live: true, commit: true });
-      return;
+    if (!indexValid) {
+      idx = lowerText.indexOf(lowerNeedle);
     }
+    if (idx === -1) return escapeHtml(baseText);
 
-    pendingFinalTranscript = pendingFinalTranscript
-      ? `${pendingFinalTranscript} ${chunk}`.trim()
-      : chunk;
+    const before = baseText.slice(0, idx);
+    const hit = baseText.slice(idx, idx + needle.length);
+    const after = baseText.slice(idx + needle.length);
 
-    clearTimeout(phraseCommitTimer);
-    phraseCommitTimer = setTimeout(() => {
-      const stableText = pendingFinalTranscript.trim();
-      pendingFinalTranscript = '';
-      if (!stableText) return;
-      processTranscript(stableText, { live: true, commit: true });
-    }, phraseCommitDelayMs);
+    return `${escapeHtml(before)}<span class="voice-transcript-hit">${escapeHtml(hit)}</span>${escapeHtml(after)}`;
   }
 
   function processTranscript(text, options = {}) {
     if (!text) return;
 
-    const isLive = options.live === true;
-    const isCommit = options.commit === true;
-
+    const source = options.source || 'interim';
+    const baseIndex = Number.isFinite(Number(options.baseIndex)) ? Number(options.baseIndex) : 0;
     const triggers = getTriggerWords();
     const lowerText = text.toLowerCase();
     const matches = [];
 
+    // Se não há palavras configuradas
+    if (triggers.length === 0) {
+      addLog(`Nenhuma palavra-acionadora configurada`, 'warning');
+      return;
+    }
+
+    // Encontrar todas as palavras-acionadoras no texto
     for (const trigger of triggers) {
       const needle = String(trigger.word || '').trim().toLowerCase();
       if (!needle) continue;
@@ -1860,7 +1934,7 @@
         const validBoundaryAfter = !isWordChar(after);
 
         if (validBoundaryBefore && validBoundaryAfter) {
-          matches.push({ index: idx, trigger });
+          matches.push({ index: idx + baseIndex, trigger });
         }
 
         cursor = idx + Math.max(1, needle.length);
@@ -1868,58 +1942,81 @@
     }
 
     if (matches.length === 0) {
-      if (!isLive || isCommit) {
+      if (source === 'final') {
         addLog(`Nenhuma correspondência para: "${text}"`, 'info');
-      }
-      if (isCommit) {
-        liveTriggeredCounts.clear();
       }
       return;
     }
 
+    // Ordenar por posição no texto
     matches.sort((a, b) => a.index - b.index);
 
-    let executableMatches = matches;
+    // Executar imediatamente cada ocorrência detectada
+    let executedCount = 0;
+    let lastExecutedMatch = null;
+    for (const match of matches) {
+      executedCount++;
+      lastExecutedMatch = match;
+      executeCommand(match.trigger);
+      flashTriggeredWordBalloon(match.trigger);
+    }
 
-    if (isLive) {
-      const seenPerTrigger = new Map();
-      const nextTriggeredCounts = new Map(liveTriggeredCounts);
-      executableMatches = [];
+    // Atualizar UI em lote para reduzir bloqueio e evitar atraso em cascata
+    if (lastExecutedMatch) {
+      monitorHighlightWord = String(lastExecutedMatch.trigger.word || '').trim();
+      monitorHighlightUntil = Date.now() + 900;
+      monitorHighlightIndex = Number(lastExecutedMatch.index);
+      renderTranscriptDisplay();
 
-      matches.forEach((match) => {
-        const triggerId = String(match.trigger.id || match.trigger.word || '');
-        const seenIndex = seenPerTrigger.get(triggerId) || 0;
-        const alreadyTriggered = liveTriggeredCounts.get(triggerId) || 0;
+      if (executedCount === 1) {
+        addLog(`Palavra detectada: "${lastExecutedMatch.trigger.word}"`, 'success');
+      } else {
+        addLog(`${executedCount} comandos detectados nesta frase`, 'success');
+      }
+    }
+  }
 
-        if (seenIndex >= alreadyTriggered) {
-          executableMatches.push(match);
+  function findFirstTriggerMatch(text) {
+    const raw = String(text || '');
+    if (!raw) return null;
+
+    const triggers = getTriggerWords();
+    if (!Array.isArray(triggers) || triggers.length === 0) return null;
+
+    const lowerText = raw.toLowerCase();
+    let best = null;
+
+    for (const trigger of triggers) {
+      const needle = String(trigger?.word || '').trim().toLowerCase();
+      if (!needle) continue;
+
+      let cursor = 0;
+      while (cursor < lowerText.length) {
+        const idx = lowerText.indexOf(needle, cursor);
+        if (idx === -1) break;
+
+        const before = idx > 0 ? lowerText[idx - 1] : '';
+        const afterIdx = idx + needle.length;
+        const after = afterIdx < lowerText.length ? lowerText[afterIdx] : '';
+        const validBoundaryBefore = !isWordChar(before);
+        const validBoundaryAfter = !isWordChar(after);
+
+        if (validBoundaryBefore && validBoundaryAfter) {
+          if (!best || idx < best.index) {
+            best = { index: idx, word: trigger.word };
+          }
+          break;
         }
 
-        seenPerTrigger.set(triggerId, seenIndex + 1);
-        const updatedCount = Math.max(alreadyTriggered, seenIndex + 1);
-        nextTriggeredCounts.set(triggerId, updatedCount);
-      });
-
-      liveTriggeredCounts = nextTriggeredCounts;
-    }
-
-    const EXECUTION_STEP_MS = 90;
-    executableMatches.forEach((match, position) => {
-      const run = () => {
-        executeCommand(match.trigger);
-        addLog(`Palavra detectada: "${match.trigger.word}"`, 'success');
-      };
-
-      if (position === 0) {
-        run();
-      } else {
-        setTimeout(run, position * EXECUTION_STEP_MS);
+        cursor = idx + Math.max(1, needle.length);
       }
-    });
-
-    if (isCommit) {
-      liveTriggeredCounts.clear();
     }
+
+    return best;
+  }
+
+  function resetUtteranceDetectionState() {
+    return;
   }
 
   function getTriggerWords() {
@@ -2085,9 +2182,62 @@
     }
   }
 
-  function clearAllTriggerWords() {
+  function requestClearAllConfirmation() {
+    const fallbackText = 'Tem certeza que deseja remover todas as palavras-acionadoras?';
+
+    if (!clearConfirmModalEl) {
+      clearConfirmModalEl = document.getElementById('voice-clear-confirm-modal');
+      clearConfirmModalInstance = null;
+    }
+    if (!clearConfirmAcceptBtn) {
+      clearConfirmAcceptBtn = document.getElementById('voice-clear-confirm-accept');
+    }
+
+    if (clearConfirmModalEl && clearConfirmModalEl.parentElement !== document.body) {
+      document.body.appendChild(clearConfirmModalEl);
+      clearConfirmModalInstance = null;
+    }
+
+    if (!clearConfirmModalEl || !clearConfirmAcceptBtn || !window.bootstrap || !window.bootstrap.Modal) {
+      return Promise.resolve(window.confirm(fallbackText));
+    }
+
+    if (!clearConfirmModalInstance) {
+      clearConfirmModalInstance = new window.bootstrap.Modal(clearConfirmModalEl, {
+        backdrop: true,
+        keyboard: true
+      });
+    }
+
+    return new Promise((resolve) => {
+      let confirmed = false;
+
+      const onAccept = () => {
+        confirmed = true;
+        clearConfirmModalInstance.hide();
+      };
+
+      const onHidden = () => {
+        clearConfirmAcceptBtn.removeEventListener('click', onAccept);
+        clearConfirmModalEl.removeEventListener('hidden.bs.modal', onHidden);
+        resolve(confirmed);
+      };
+
+      clearConfirmAcceptBtn.addEventListener('click', onAccept);
+      clearConfirmModalEl.addEventListener('hidden.bs.modal', onHidden);
+      clearConfirmModalInstance.show();
+    });
+  }
+
+  async function clearAllTriggerWords() {
     if (triggerWords.length === 0) {
       addLog('Nenhuma palavra para limpar', 'info');
+      return;
+    }
+
+    const confirmed = await requestClearAllConfirmation();
+    if (!confirmed) {
+      addLog('Limpeza cancelada pelo usuário', 'info');
       return;
     }
     
@@ -2100,13 +2250,10 @@
   }
 
   function clearTranscriptHistory() {
-    const count = transcriptHistory.length;
-    transcriptHistory = [];
-    monitorFinalText = '';
-    monitorInterimText = '';
+    currentInterimText = '';
     renderTranscriptDisplay();
-    console.log('[VOICE CMD] Histórico de transcrição limpo');
-    addLog(`Histórico limpo (${count} entrada(s) removida(s))`, 'success');
+    console.log('[VOICE CMD] Monitor de transcrição limpo');
+    addLog('Monitor limpo', 'success');
   }
 
   function identifyCommand(word) {
@@ -2129,22 +2276,32 @@
         channel: trigger.channel,
         advanced: normalizedAdvanced
       });
+    } else {
+      addLog('triggerCommand não disponível', 'warning');
     }
-    
-    // Feedback visual
-    highlightCommandCard(trigger.id);
-    blinkWordInMonitor(trigger.word);
   }
 
-  function highlightCommandCard(id) {
-    // Encontrar o card desta palavra e destacá-lo brevemente
-    const card = commandsList.querySelector(`[data-id="${id}"]`);
-    if (card) {
-      card.classList.add('triggered');
-      setTimeout(() => {
-        card.classList.remove('triggered');
-      }, 800);
+  function flashTriggeredWordBalloon(trigger) {
+    if (!commandsList || !trigger) return;
+    const selector = `.voice-command-item[data-id="${trigger.id}"]`;
+    const item = commandsList.querySelector(selector);
+    if (!item) return;
+
+    const existingTimer = balloonFlashTimers.get(trigger.id);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
     }
+
+    item.classList.remove('triggered');
+    requestAnimationFrame(() => {
+      item.classList.add('triggered');
+    });
+
+    const timerId = setTimeout(() => {
+      item.classList.remove('triggered');
+      balloonFlashTimers.delete(trigger.id);
+    }, 650);
+    balloonFlashTimers.set(trigger.id, timerId);
   }
 
   // P0.2: Criar elemento de card sem inline handlers
@@ -2213,14 +2370,15 @@
     }
 
     shouldKeepListening = true;
-    clearTimeout(nonContinuousTimeoutId);
+    resetRecognitionRestartDelay();
+    clearRecognitionRestartTimer();
+    utteranceActive = false;
+    resetUtteranceDetectionState();
+    localStorage.setItem(LISTENING_PERSIST_KEY, 'true');
 
     const lang = languageSelect.value;
     recognition.lang = lang;
     console.log('[VOICE CMD] Idioma:', lang);
-
-    const timeout = NON_CONTINUOUS_TIMEOUT_MS;
-    console.log('[VOICE CMD] Timeout:', timeout);
 
     // Aplicar parâmetros da Web Speech API
     applyWebSpeechAPIConfig();
@@ -2238,15 +2396,9 @@
         addLog(`Parâmetros da API${apiSummary}`, 'info');
       }
       
-      // Timeout de segurança
-      nonContinuousTimeoutId = setTimeout(() => {
-        if (isListening && shouldKeepListening && !continuousMode.checked) {
-          console.log('[VOICE CMD] Timeout acionado, parando recognition');
-          recognition.stop();
-        }
-      }, timeout);
     } catch (e) {
       console.error('[VOICE CMD] Erro ao iniciar:', e);
+      localStorage.setItem(LISTENING_PERSIST_KEY, 'false');
       addLog(`Erro ao iniciar: ${e.message}`, 'warning');
     }
   }
@@ -2281,10 +2433,10 @@
 
   function stopListening() {
     shouldKeepListening = false;
-    clearTimeout(nonContinuousTimeoutId);
-    clearTimeout(phraseCommitTimer);
-    pendingFinalTranscript = '';
-    liveTriggeredCounts.clear();
+    clearRecognitionRestartTimer();
+    utteranceActive = false;
+    resetUtteranceDetectionState();
+    localStorage.setItem(LISTENING_PERSIST_KEY, 'false');
 
     if (!recognition) {
       console.log('[VOICE CMD] stopListening: reconhecimento não existe');
@@ -2480,8 +2632,11 @@
     bindUiEventListeners();
     console.log('[VOICE CMD] ✅ Event listeners adicionados');
 
+    startNetworkLatencyMonitor();
+
     // Restaurar todos os parâmetros avançados (idioma, contínuo, CC, confiança, etc)
     restoreAdvancedParametersState();
+    restorePanelVisibilityState();
     
     // Inicializar Speech Recognition
     if (!initSpeechRecognition()) {
@@ -2493,28 +2648,42 @@
     loadTriggerWords();
     console.log('[VOICE CMD] ✅ Palavras carregadas:', triggerWords.length);
     
-    // Detectar e configurar idioma do navegador
-    const detectedLang = detectBrowserLanguage();
-    languageSelect.value = detectedLang;
+    // Definir idioma ativo sem sobrescrever persistência
+    const storedLang = localStorage.getItem('voice_language');
+    const activeLang = storedLang || detectBrowserLanguage();
+    languageSelect.value = activeLang;
     if (recognition) {
-      recognition.lang = detectedLang;
+      recognition.lang = activeLang;
     }
     
     // Requerer permissão de microfone
+    const shouldAutoListen = localStorage.getItem(LISTENING_PERSIST_KEY) === 'true';
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       requestMicrophonePermission().then(allowed => {
         if (allowed) {
           console.log('[VOICE CMD] Microfone autorizado e pronto para usar');
           addLog('Microfone pronto! Clique em Escutar.', 'success');
+
+          if (shouldAutoListen && !isListening) {
+            setTimeout(() => {
+              if (!isListening) startListening();
+            }, RECOGNITION_RESTART_BASE_DELAY_MS);
+          }
+        } else if (shouldAutoListen) {
+          localStorage.setItem(LISTENING_PERSIST_KEY, 'false');
         }
       });
+    } else if (shouldAutoListen) {
+      setTimeout(() => {
+        if (!isListening) startListening();
+      }, RECOGNITION_RESTART_BASE_DELAY_MS);
     }
     
     console.log('[VOICE CMD] Módulo Voice Command inicializado');
     console.log('[VOICE CMD] 🎉 ESTADO FINAL: triggerWords =', triggerWords.length, 'palavras');
     console.log('[VOICE CMD] 📋 Conteúdo:', triggerWords);
     addLog('Módulo Voice Command inicializado', 'info');
-    addLog(`Idioma detectado: ${detectedLang}`, 'info');
+    addLog(`Idioma ativo: ${activeLang}${storedLang ? ' (restaurado)' : ' (detectado)'}`, 'info');
   }
 
   // Expor API globalmente para callbacks
@@ -2527,17 +2696,42 @@
 
   // Encerrar reconhecimento ao descarregar
   window.addEventListener('beforeunload', () => {
+    stopNetworkLatencyMonitor();
     if (recognition && isListening) {
       recognition.stop();
     }
   });
+
+  function buildVoiceCommandLine(params) {
+    if (!params) return '';
+    if (typeof params === 'string') {
+      return params.trim();
+    }
+
+    const mode = String(params.mode || 'SHOCK').trim().toUpperCase();
+    const intensityRaw = Number(params.intensity);
+    const intensity = Number.isFinite(intensityRaw)
+      ? Math.max(0, Math.min(100, Math.round(intensityRaw)))
+      : 50;
+    const channelRaw = Number(params.channel);
+    const channel = Number.isFinite(channelRaw) && (channelRaw === 1 || channelRaw === 2)
+      ? channelRaw
+      : 1;
+
+    return `HOLDON ${mode},${intensity},${channel}`;
+  }
 
   // Expor função de comando para integração
   window.triggerCommand = window.triggerCommand || function(params) {
     console.log('[VOICE CMD] triggerCommand:', params);
     // Integração com o maincontrol: enviar comando
     if (window.sendCommand) {
-      window.sendCommand(params);
+      const line = buildVoiceCommandLine(params);
+      if (!line) {
+        console.warn('[VOICE CMD] triggerCommand fallback: payload vazio/invalido', params);
+        return;
+      }
+      window.sendCommand(line);
     }
   };
 

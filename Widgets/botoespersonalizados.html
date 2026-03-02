@@ -266,6 +266,13 @@
     padding: 8px 0;
     opacity:.9;
   }
+  .cp-modal-content {
+    background: rgba(8, 12, 20, 0.96);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #e5e7eb;
+    border-radius: 14px;
+    box-shadow: 0 18px 42px rgba(0,0,0,0.55);
+  }
 </style>
 
 <div id="customPads">
@@ -281,6 +288,26 @@
   <div>
     <div id="cpList" class="cp-grid"></div>
     <div id="cpEmpty" class="cp-empty d-none">Nenhum botão salvo. Selecione Modo/Nível/Canal no controle e clique em “Adicionar”.</div>
+  </div>
+</div>
+
+<div class="modal fade" id="cp-clear-confirm-modal" tabindex="-1" aria-hidden="true" aria-labelledby="cp-clear-confirm-title">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content cp-modal-content">
+      <div class="modal-header border-0 pb-1">
+        <h6 class="modal-title" id="cp-clear-confirm-title">
+          <i class="fa-solid fa-triangle-exclamation me-2 text-warning"></i>Confirmar limpeza
+        </h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body pt-1">
+        <p class="small mb-0 text-light">Deseja remover todos os botões personalizados?</p>
+      </div>
+      <div class="modal-footer border-0 pt-2">
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-sm btn-outline-danger" id="cp-clear-confirm-accept">Limpar tudo</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -562,6 +589,9 @@
   let addBound = false;
   const btnClear = $("#cpClear");
   const moduleRoot = $("#customPads");
+  let clearConfirmModalEl = document.getElementById("cp-clear-confirm-modal");
+  let clearConfirmAcceptBtn = document.getElementById("cp-clear-confirm-accept");
+  let clearConfirmModalInstance = null;
 
   const STORE_KEY = "cp_custom_buttons_v1";
   const MODE_STYLES = {
@@ -1017,9 +1047,58 @@
       addObserver.observe(document.body, { childList: true, subtree: true });
     }
   }
+
+  function requestClearAllConfirmation(){
+    const fallbackText = "Apagar todos os botões personalizados?";
+
+    if (!clearConfirmModalEl) {
+      clearConfirmModalEl = document.getElementById("cp-clear-confirm-modal");
+      clearConfirmModalInstance = null;
+    }
+    if (!clearConfirmAcceptBtn) {
+      clearConfirmAcceptBtn = document.getElementById("cp-clear-confirm-accept");
+    }
+
+    if (clearConfirmModalEl && clearConfirmModalEl.parentElement !== document.body) {
+      document.body.appendChild(clearConfirmModalEl);
+      clearConfirmModalInstance = null;
+    }
+
+    if (!clearConfirmModalEl || !clearConfirmAcceptBtn || !window.bootstrap || !window.bootstrap.Modal) {
+      return Promise.resolve(window.confirm(fallbackText));
+    }
+
+    if (!clearConfirmModalInstance) {
+      clearConfirmModalInstance = new window.bootstrap.Modal(clearConfirmModalEl, {
+        backdrop: true,
+        keyboard: true
+      });
+    }
+
+    return new Promise((resolve) => {
+      let confirmed = false;
+
+      const onAccept = () => {
+        confirmed = true;
+        clearConfirmModalInstance.hide();
+      };
+
+      const onHidden = () => {
+        clearConfirmAcceptBtn.removeEventListener("click", onAccept);
+        clearConfirmModalEl.removeEventListener("hidden.bs.modal", onHidden);
+        resolve(confirmed);
+      };
+
+      clearConfirmAcceptBtn.addEventListener("click", onAccept);
+      clearConfirmModalEl.addEventListener("hidden.bs.modal", onHidden);
+      clearConfirmModalInstance.show();
+    });
+  }
+
   if (btnClear) {
-    btnClear.addEventListener("click", () => {
-      if (!confirm("Apagar todos os botões personalizados?")) return;
+    btnClear.addEventListener("click", async () => {
+      const confirmed = await requestClearAllConfirmation();
+      if (!confirmed) return;
       items = [];
       save();
       render();

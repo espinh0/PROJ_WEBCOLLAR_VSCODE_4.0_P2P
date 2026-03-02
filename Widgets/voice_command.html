@@ -865,6 +865,11 @@
   let recognitionRestartTimerId = null;
   let networkLatencyTimerId = null;
   let networkLatencyInFlight = false;
+  let transcriptRenderRafId = null;
+  let transcriptRenderScheduled = false;
+  let transcriptShouldAutoScroll = false;
+  let lastCommittedTranscriptHtml = '';
+  const utteranceExecutedMatchKeys = new Set();
   const balloonFlashTimers = new Map();
   let clearConfirmModalInstance = null;
   const LISTENING_PERSIST_KEY = 'voice_listening_enabled';
@@ -1695,7 +1700,8 @@
       listeningBtn.setAttribute('aria-pressed', 'true');
       listeningText.textContent = 'Ouvindo...';
       statusLabel.textContent = 'Escutando';
-      transcriptDisplay.innerHTML = '<div class="voice-transcript-interim">Aguardando voz...</div>';
+      currentInterimText = 'Aguardando voz...';
+      requestTranscriptRender();
       console.log('[VOICE CMD] onstart: Escuta iniciada');
       addLog('Escuta iniciada', 'info');
       
@@ -1756,6 +1762,10 @@
       // Atualizar display com interim (mostra em tempo real enquanto fala)
       updateTranscriptDisplay(final, interim);
 
+      if (interim) {
+        processTranscript(interim, { source: 'interim' });
+      }
+
       if (hasNewFinal) {
         const confidence = (Math.max(0, Number(lastFinalConfidence || 0)) * 100).toFixed(0);
         console.log('[VOICE CMD] Confiança final:', confidence);
@@ -1765,6 +1775,7 @@
           processTranscript(segment.text, { source: 'final' });
         }
         utteranceActive = false;
+        resetUtteranceDetectionState();
         renderTranscriptDisplay();
       }
     };
@@ -1817,6 +1828,28 @@
 
   let currentInterimText = '';  // Texto interim que está sendo exibido agora
 
+  function requestTranscriptRender(options = {}) {
+    const shouldScroll = options.scroll !== false;
+    if (shouldScroll) {
+      transcriptShouldAutoScroll = true;
+    }
+
+    if (transcriptRenderScheduled) {
+      return;
+    }
+    transcriptRenderScheduled = true;
+
+    const schedule = (typeof requestAnimationFrame === 'function')
+      ? requestAnimationFrame
+      : (cb) => setTimeout(cb, 16);
+
+    transcriptRenderRafId = schedule(() => {
+      transcriptRenderScheduled = false;
+      transcriptRenderRafId = null;
+      performTranscriptRender();
+    });
+  }
+
   function updateTranscriptDisplay(final, interim) {
     // Atualizar interim (mostrado em tempo real)
     const interimTrimmed = String(interim || '').trim();
@@ -1829,36 +1862,36 @@
       }
 
       currentInterimText = interimTrimmed;
-      renderTranscriptDisplay();
+      requestTranscriptRender();
     } else if (finalTrimmed) {
       // No fluxo final, manter a frase até uma nova atualização substituir o conteúdo
       currentInterimText = finalTrimmed;
-      renderTranscriptDisplay();
+      requestTranscriptRender();
     }
   }
 
-  function renderTranscriptDisplay() {
+  function performTranscriptRender() {
+    if (!transcriptDisplay) return;
+
     let html = '';
     const now = Date.now();
-    const highlightActive = monitorHighlightWord && now < monitorHighlightUntil;
-    
-    // Mostrar APENAS texto interim (enquanto fala) - nada permanente
-    if (currentInterimText) {
-      const liveMatch = findFirstTriggerMatch(currentInterimText);
-      const highlightedInterim = liveMatch
-        ? highlightDetectedWord(currentInterimText, liveMatch.word, liveMatch.index)
-        : (highlightActive
-            ? highlightDetectedWord(currentInterimText, monitorHighlightWord, monitorHighlightIndex)
-            : escapeHtml(currentInterimText));
-      html += `<div class="voice-transcript-interim" style="opacity:0.85;">${highlightedInterim}</div>`;
-    }
 
-    if (!highlightActive && monitorHighlightWord) {
+    if (monitorHighlightWord && now >= monitorHighlightUntil) {
       monitorHighlightWord = '';
       monitorHighlightUntil = 0;
       monitorHighlightIndex = -1;
     }
+
+    const highlightActive = monitorHighlightWord && now < monitorHighlightUntil;
     
+    // Mostrar APENAS texto interim (enquanto fala) - nada permanente
+    if (currentInterimText) {
+      const highlightedInterim = highlightActive
+        ? highlightDetectedWordStrict(currentInterimText, monitorHighlightWord, monitorHighlightIndex)
+        : escapeHtml(currentInterimText);
+      html += `<div class="voice-transcript-interim" style="opacity:0.85;">${highlightedInterim}</div>`;
+    }
+
     // Mostrar CC (Closed Captions) - APENAS se houver conteúdo
     if (monitorSoundText && String(monitorSoundText).trim()) {
       html += `<div class="voice-transcript-cc"><i class="fa-solid ${monitorSoundIcon} me-1"></i>${escapeHtml(monitorSoundText)}</div>`;
@@ -1868,14 +1901,25 @@
     if (!html) {
       html = '<div class="voice-transcript-idle">Aguardando entrada de voz...</div>';
     }
-    
-    transcriptDisplay.innerHTML = html;
-    // Rolar para baixo (mostrar linhas mais novas)
-    try {
-      transcriptDisplay.scrollTo({ top: transcriptDisplay.scrollHeight, behavior: 'smooth' });
-    } catch (_) {
-      transcriptDisplay.scrollTop = transcriptDisplay.scrollHeight;
+
+    const htmlChanged = html !== lastCommittedTranscriptHtml;
+    if (htmlChanged) {
+      transcriptDisplay.innerHTML = html;
+      lastCommittedTranscriptHtml = html;
     }
+
+    if (htmlChanged || transcriptShouldAutoScroll) {
+      try {
+        transcriptDisplay.scrollTo({ top: transcriptDisplay.scrollHeight, behavior: 'smooth' });
+      } catch (_) {
+        transcriptDisplay.scrollTop = transcriptDisplay.scrollHeight;
+      }
+    }
+    transcriptShouldAutoScroll = false;
+  }
+
+  function renderTranscriptDisplay() {
+    requestTranscriptRender();
   }
 
   function highlightDetectedWord(text, word, preferredIndex = -1) {
@@ -1894,6 +1938,29 @@
       idx = lowerText.indexOf(lowerNeedle);
     }
     if (idx === -1) return escapeHtml(baseText);
+
+    const before = baseText.slice(0, idx);
+    const hit = baseText.slice(idx, idx + needle.length);
+    const after = baseText.slice(idx + needle.length);
+
+    return `${escapeHtml(before)}<span class="voice-transcript-hit">${escapeHtml(hit)}</span>${escapeHtml(after)}`;
+  }
+
+  function highlightDetectedWordStrict(text, word, preferredIndex = -1) {
+    const baseText = String(text || '');
+    const needle = String(word || '').trim();
+    if (!baseText || !needle) return escapeHtml(baseText);
+
+    const lowerText = baseText.toLowerCase();
+    const lowerNeedle = needle.toLowerCase();
+    const idx = Number(preferredIndex);
+    const indexValid = Number.isInteger(idx)
+      && idx >= 0
+      && lowerText.slice(idx, idx + lowerNeedle.length) === lowerNeedle;
+
+    if (!indexValid) {
+      return escapeHtml(baseText);
+    }
 
     const before = baseText.slice(0, idx);
     const hit = baseText.slice(idx, idx + needle.length);
@@ -1955,10 +2022,23 @@
     let executedCount = 0;
     let lastExecutedMatch = null;
     for (const match of matches) {
+      const triggerId = String(match.trigger?.id || '');
+      if (triggerId) {
+        const dedupeKey = `${triggerId}:${match.index}`;
+        if (utteranceExecutedMatchKeys.has(dedupeKey)) {
+          continue;
+        }
+        utteranceExecutedMatchKeys.add(dedupeKey);
+      }
+
       executedCount++;
       lastExecutedMatch = match;
       executeCommand(match.trigger);
       flashTriggeredWordBalloon(match.trigger);
+    }
+
+    if (utteranceExecutedMatchKeys.size > 500) {
+      utteranceExecutedMatchKeys.clear();
     }
 
     // Atualizar UI em lote para reduzir bloqueio e evitar atraso em cascata
@@ -2016,7 +2096,7 @@
   }
 
   function resetUtteranceDetectionState() {
-    return;
+    utteranceExecutedMatchKeys.clear();
   }
 
   function getTriggerWords() {
@@ -2086,6 +2166,10 @@
     return normalizeAdvancedConfig(snapshot);
   }
 
+  function sanitizeTriggerAdvancedConfig(raw) {
+    return null;
+  }
+
   function formatSeconds(value) {
     if (!Number.isFinite(value)) return '';
     const absVal = Math.abs(value);
@@ -2143,7 +2227,7 @@
     }
     
     const currentModeValue = window.currentMode || 'SHOCK';
-    const advancedSnapshot = readAdvancedSnapshot();
+    const advancedSnapshot = sanitizeTriggerAdvancedConfig(readAdvancedSnapshot());
     const newTrigger = {
       id: Date.now().toString(),
       word: word,
@@ -2168,7 +2252,7 @@
     
     const channelLog = newTrigger.channel ? ` Canal ${newTrigger.channel}` : '';
     const advancedLog = buildAdvancedSummaryText(newTrigger.advanced);
-    addLog(`Palavra adicionada: "${word}" (${newTrigger.mode} @ ${newTrigger.intensity}%${channelLog}${advancedLog})`, 'success');
+    addLog(`Palavra adicionada: "${word}" (${newTrigger.mode} ${newTrigger.intensity}%${channelLog}${advancedLog})`, 'success');
   }
 
   function removeTriggerWord(id) {
@@ -2264,8 +2348,8 @@
 
   function executeCommand(trigger) {
     const word = trigger.word.toLowerCase();
-    const normalizedAdvanced = normalizeAdvancedConfig(trigger.advanced);
-    console.log('[VOICE CMD] Executando comando para palavra:', word, 'com', trigger.mode, '@', trigger.intensity, 'Canal', trigger.channel, 'ADV', normalizedAdvanced);
+    const normalizedAdvanced = sanitizeTriggerAdvancedConfig(trigger.advanced);
+    console.log('[VOICE CMD] Executando comando para palavra:', word, 'com', trigger.mode, trigger.intensity, 'Canal', trigger.channel, 'ADV', normalizedAdvanced);
     
     // Enviar para maincontrol processar
     if (window.triggerCommand) {
@@ -2311,7 +2395,7 @@
     const gradientBg = `linear-gradient(120deg, ${solidTint}, #05060a)`;
     const isRoulette = trigger.mode === 'ROULETTE';
     const channelInfo = !isRoulette && trigger.channel ? ` · Canal ${trigger.channel}` : '';
-    const advancedInfo = buildAdvancedSummaryText(normalizeAdvancedConfig(trigger.advanced));
+    const advancedInfo = buildAdvancedSummaryText(sanitizeTriggerAdvancedConfig(trigger.advanced));
     
     const div = document.createElement('div');
     div.className = 'voice-command-item';
@@ -2327,7 +2411,7 @@
         </span>
         <div class="voice-command-item-details">
           <div class="voice-command-item-label">${escapeHtml(trigger.word.toUpperCase())}</div>
-          <div class="voice-command-item-action">${trigger.mode} @ ${trigger.intensity}%${channelInfo}${escapeHtml(advancedInfo)}</div>
+          <div class="voice-command-item-action">${trigger.mode} ${trigger.intensity}%${channelInfo}${escapeHtml(advancedInfo)}</div>
         </div>
       </div>
       <button class="btn btn-outline-danger" data-action="remove-trigger" data-trigger-id="${trigger.id}" aria-label="Remover palavra ${escapeHtml(trigger.word)}" title="Remover">
@@ -2543,7 +2627,7 @@
         triggerWords = Array.isArray(parsed)
           ? parsed.map(entry => ({
               ...entry,
-              advanced: normalizeAdvancedConfig(entry?.advanced)
+              advanced: sanitizeTriggerAdvancedConfig(entry?.advanced)
             }))
           : [];
         console.log('[VOICE CMD] Palavras carregadas:', triggerWords.length, triggerWords);
@@ -2697,6 +2781,11 @@
   // Encerrar reconhecimento ao descarregar
   window.addEventListener('beforeunload', () => {
     stopNetworkLatencyMonitor();
+    if (transcriptRenderRafId && typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(transcriptRenderRafId);
+      transcriptRenderRafId = null;
+      transcriptRenderScheduled = false;
+    }
     if (recognition && isListening) {
       recognition.stop();
     }
@@ -2718,20 +2807,105 @@
       ? channelRaw
       : 1;
 
-    return `HOLDON ${mode},${intensity},${channel}`;
+    return `${mode},${intensity},${channel}`;
+  }
+
+  async function dispatchVoiceCommand(payload) {
+    const line = String(payload || '').trim();
+    if (!line) return false;
+
+    // Caminho principal: aproveitar sender central, quando exposto
+    if (typeof window.sendCommand === 'function') {
+      try {
+        const maybe = window.sendCommand(line);
+        if (maybe && typeof maybe.then === 'function') {
+          await maybe;
+        }
+        return true;
+      } catch (e) {
+        console.warn('[VOICE CMD] Falha em window.sendCommand, tentando fallback:', e);
+      }
+    }
+
+    // Fallback host: envio direto para SerialBridge
+    const serialReady = !!(
+      window.SerialBridge
+      && typeof window.SerialBridge.send === 'function'
+      && (window.SerialBridge.isConnected || window.serialConnected || (window.port && window.port.writable))
+    );
+    if (serialReady) {
+      try {
+        const maybe = window.SerialBridge.send(line);
+        if (maybe && typeof maybe.then === 'function') {
+          await maybe;
+        }
+        return true;
+      } catch (e) {
+        console.warn('[VOICE CMD] Falha em SerialBridge.send, tentando Flowgate:', e);
+      }
+    }
+
+    // Fallback Flowgate room cmd
+    const room = (window.Flowgate && window.Flowgate.room) ? window.Flowgate.room : window.__TRYSTERO_ROOM__;
+    if (room && typeof room.makeAction === 'function') {
+      try {
+        const pair = room.makeAction('cmd');
+        const sendCmd = Array.isArray(pair) ? pair[0] : null;
+        if (typeof sendCmd === 'function') {
+          sendCmd({
+            text: line.slice(0, 400),
+            name: (typeof window.getUsername === 'function' ? window.getUsername() : 'voice-command'),
+            timestamp: Date.now(),
+            id: `voice:${Date.now()}:${Math.random().toString(36).slice(2)}`
+          });
+          return true;
+        }
+      } catch (e) {
+        console.warn('[VOICE CMD] Falha em Flowgate room cmd:', e);
+      }
+    }
+
+    // Fallback cmd bus
+    const cmdBus = (window.__TRYSTERO_CMD__ && typeof window.__TRYSTERO_CMD__.send === 'function') ? window.__TRYSTERO_CMD__ : null;
+    if (cmdBus && (!cmdBus.isReady || cmdBus.isReady())) {
+      try {
+        const ok = cmdBus.send(line.slice(0, 400), { via: 'voice-command' });
+        return !!ok;
+      } catch (e) {
+        console.warn('[VOICE CMD] Falha em __TRYSTERO_CMD__.send:', e);
+      }
+    }
+
+    // Fallback chat bus
+    const chatBus = (window.__TRYSTERO_CHAT__ && typeof window.__TRYSTERO_CHAT__.send === 'function') ? window.__TRYSTERO_CHAT__ : null;
+    if (chatBus && (!chatBus.isReady || chatBus.isReady())) {
+      try {
+        const maybe = chatBus.send(line.slice(0, 400), { via: 'voice-command' });
+        if (maybe && typeof maybe.then === 'function') {
+          await maybe;
+        }
+        return true;
+      } catch (e) {
+        console.warn('[VOICE CMD] Falha em __TRYSTERO_CHAT__.send:', e);
+      }
+    }
+
+    return false;
   }
 
   // Expor função de comando para integração
-  window.triggerCommand = window.triggerCommand || function(params) {
+  window.triggerCommand = window.triggerCommand || async function(params) {
     console.log('[VOICE CMD] triggerCommand:', params);
-    // Integração com o maincontrol: enviar comando
-    if (window.sendCommand) {
-      const line = buildVoiceCommandLine(params);
-      if (!line) {
-        console.warn('[VOICE CMD] triggerCommand fallback: payload vazio/invalido', params);
-        return;
-      }
-      window.sendCommand(line);
+    const line = buildVoiceCommandLine(params);
+    if (!line) {
+      console.warn('[VOICE CMD] triggerCommand: payload vazio/invalido', params);
+      return;
+    }
+
+    const sent = await dispatchVoiceCommand(line);
+    if (!sent) {
+      addLog('Falha ao enviar comando (Serial/Flowgate indisponível)', 'warning');
+      console.warn('[VOICE CMD] Nenhum transporte disponível para comando:', line);
     }
   };
 

@@ -5,7 +5,7 @@
 // @description  Sends HOLDON/HOLDOFF commands when monitored WhatsApp contacts receive unread or open-chat messages. Robust floating UI, Flowgate Firebase transport, and legacy Firebase fallback.
 // @author       voce
 // @match        https://web.whatsapp.com/*
-// @run-at       document-start
+// @run-at       document-idle
 // @grant        GM_xmlhttpRequest
 // @connect      identitytoolkit.googleapis.com
 // @connect      ptrainer-sinal-default-rtdb.firebaseio.com
@@ -41,6 +41,7 @@
     panelX: null,
     panelY: null,
     monitoredContacts: [],
+    openChatEnabled: false,
     vibTypingEnabled: false,
     vibTypingLevel: 10,
     transport: 'flowgate',
@@ -73,11 +74,11 @@
 
   let sidebarObserver = null;
   let sidebarPollTimer = null;
-  let activeObserver = null;
   let activePollTimer = null;
   let activeChatName = '';
   const seenActiveMessageIds = new Set();
   let flowgateAuthPromise = null;
+  let sidebarScanBusy = false;
 
   const CID = getCid();
 
@@ -204,7 +205,7 @@
 
   function createUI() {
     if (ui.host && document.documentElement.contains(ui.host)) return true;
-    const mount = document.body || document.documentElement;
+    const mount = document.body;
     if (!mount) return false;
 
     const host = document.createElement('div');
@@ -301,6 +302,11 @@
           </div>
 
           <div class="row">
+            <input id="openChatEnabled" type="checkbox" style="width:auto">
+            <label for="openChatEnabled" style="flex:1">Monitorar chat aberto</label>
+          </div>
+
+          <div class="row">
             <input id="typingEnabled" type="checkbox" style="width:auto">
             <label for="typingEnabled" style="flex:1">Vibrar em digitando/escrevendo</label>
             <input id="typingLevel" type="number" min="0" max="100" style="width:70px">
@@ -339,6 +345,7 @@
       gap: $('#gap'),
       pulses: $('#pulses'),
       cooldown: $('#cooldown'),
+      openChatEnabled: $('#openChatEnabled'),
       typingEnabled: $('#typingEnabled'),
       typingLevel: $('#typingLevel')
     };
@@ -401,6 +408,18 @@
     bindSettingInput(ui.cooldown, 'cooldownMs', (v) => clamp(v, 0, 600000));
     bindSettingInput(ui.typingLevel, 'vibTypingLevel', (v) => clamp(v, 0, 100));
 
+    ui.openChatEnabled.addEventListener('change', () => {
+      settings.openChatEnabled = ui.openChatEnabled.checked;
+      saveSettings();
+      if (settings.openChatEnabled) {
+        startActiveChatPolling();
+        appendLog('Monitoramento do chat aberto ativado.');
+      } else {
+        stopActiveChatPolling();
+        appendLog('Monitoramento do chat aberto desativado.');
+      }
+    });
+
     ui.typingEnabled.addEventListener('change', () => {
       settings.vibTypingEnabled = ui.typingEnabled.checked;
       saveSettings();
@@ -431,6 +450,7 @@
     ui.gap.value = settings.gapMs;
     ui.pulses.value = settings.pulses;
     ui.cooldown.value = settings.cooldownMs;
+    ui.openChatEnabled.checked = !!settings.openChatEnabled;
     ui.typingEnabled.checked = !!settings.vibTypingEnabled;
     ui.typingLevel.value = settings.vibTypingLevel;
     syncArmedUI();
@@ -505,24 +525,12 @@
   function getSidebarPane() {
     return safeQuery('#pane-side') ||
       safeQuery('[data-testid="chat-list"]') ||
-      findByAriaLabel('chat list') ||
       safeQuery('#side');
   }
 
   function safeQuery(selector, root) {
     try {
       return (root || document).querySelector(selector);
-    } catch {
-      return null;
-    }
-  }
-
-  function findByAriaLabel(needle) {
-    const wanted = textNorm(needle);
-    try {
-      return Array.from(document.querySelectorAll('[aria-label]')).find((el) => {
-        return textNorm(el.getAttribute('aria-label')).includes(wanted);
-      }) || null;
     } catch {
       return null;
     }
@@ -535,13 +543,13 @@
       '[role="listitem"]',
       '[data-testid="cell-frame-container"]'
     ];
-    const rows = new Set();
-    selectors.forEach((sel) => {
+    for (const sel of selectors) {
       try {
-        pane.querySelectorAll(sel).forEach((el) => rows.add(el));
+        const rows = Array.from(pane.querySelectorAll(sel));
+        if (rows.length) return rows.slice(0, 60);
       } catch {}
-    });
-    return Array.from(rows);
+    }
+    return [];
   }
 
   function getNameElement(row) {
@@ -565,7 +573,7 @@
 
   function getUnreadCountFromRow(row) {
     if (!row) return 0;
-    const nodes = Array.from(row.querySelectorAll('[aria-label], span, div'));
+    const nodes = Array.from(row.querySelectorAll('[aria-label]')).slice(0, 20);
     for (const node of nodes) {
       const raw = `${node.getAttribute('aria-label') || ''} ${node.textContent || ''}`.trim();
       if (!raw) continue;
@@ -693,41 +701,45 @@
   }
 
   function scanSidebarOnce() {
+    if (sidebarScanBusy) return;
     const pane = getSidebarPane();
     if (!pane) {
       setStatus('Aguardando lista do WhatsApp...');
       return;
     }
+    sidebarScanBusy = true;
     const rows = getCandidateRows(pane);
-    rows.forEach(processRow);
-    setStatus(`Lista OK: ${rows.length} linhas vistas. Chat ativo: ${activeChatName || '-'}`);
+    try {
+      rows.forEach(processRow);
+      setStatus(`Lista OK: ${rows.length} linhas vistas. Chat ativo: ${activeChatName || '-'}`);
+    } finally {
+      sidebarScanBusy = false;
+    }
   }
 
   function attachSidebarWatcher() {
-    const target = getSidebarPane() || document.body || document.documentElement;
-    if (!target) return;
+    const target = getSidebarPane();
+    if (!target) {
+      setStatus('Aguardando lista do WhatsApp...');
+      if (!sidebarPollTimer) {
+        sidebarPollTimer = setInterval(() => {
+          const pane = getSidebarPane();
+          if (!pane) return;
+          attachSidebarWatcher();
+        }, 1500);
+      }
+      return;
+    }
 
     scanSidebarOnce();
-    if (sidebarObserver) sidebarObserver.disconnect();
-    sidebarObserver = new MutationObserver((mutations) => {
-      for (const m of mutations) {
-        let node = m.target;
-        if (node && node.nodeType === Node.TEXT_NODE) node = node.parentElement;
-        if (!(node instanceof HTMLElement)) continue;
-        const row = node.closest('div[aria-selected], [role="listitem"], [data-testid="cell-frame-container"]');
-        if (row) processRow(row);
-      }
-    });
-    sidebarObserver.observe(target, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-      attributes: true
-    });
+    if (sidebarObserver) {
+      sidebarObserver.disconnect();
+      sidebarObserver = null;
+    }
 
     if (sidebarPollTimer) clearInterval(sidebarPollTimer);
-    sidebarPollTimer = setInterval(scanSidebarOnce, 2000);
-    appendLog('Watcher da lista anexado.');
+    sidebarPollTimer = setInterval(scanSidebarOnce, 3500);
+    appendLog('Polling da lista ativado.');
   }
 
   function getActiveChatName() {
@@ -776,10 +788,17 @@
     appendLog(`Chat ativo: ${activeChatName || '-'}. Baseline aplicado.`);
   }
 
-  function processActiveMutations(root) {
+  function scanActiveChatOnce() {
+    const main = document.querySelector('#main');
+    if (!main) return;
+    const name = getActiveChatName();
+    if (name !== activeChatName) {
+      baselineActiveChat(main, name);
+      return;
+    }
     if (!settings.armed || !activeChatName || !settings.monitoredContacts.includes(activeChatName)) return;
     const fresh = [];
-    collectIncomingMessageIds(root).forEach((id) => {
+    collectIncomingMessageIds(main).forEach((id) => {
       if (seenActiveMessageIds.has(id)) return;
       rememberSeenMessage(id);
       fresh.push(id);
@@ -787,44 +806,18 @@
     if (fresh.length) handleMessageEvent(activeChatName, fresh.length, 'OPEN_CHAT');
   }
 
-  function attachActiveChatWatcher() {
-    const main = document.querySelector('#main');
-    const name = getActiveChatName();
-    if (!main) return;
-
-    if (name !== activeChatName) {
-      baselineActiveChat(main, name);
-    }
-
-    if (!activeObserver || activeObserver._target !== main) {
-      if (activeObserver) activeObserver.disconnect();
-      activeObserver = new MutationObserver((mutations) => {
-        const currentName = getActiveChatName();
-        if (currentName !== activeChatName) {
-          baselineActiveChat(main, currentName);
-          return;
-        }
-        mutations.forEach((m) => {
-          m.addedNodes.forEach((node) => {
-            if (node instanceof HTMLElement) processActiveMutations(node);
-          });
-        });
-      });
-      activeObserver._target = main;
-      activeObserver.observe(main, { childList: true, subtree: true });
-      appendLog('Watcher do chat aberto anexado.');
-    }
+  function startActiveChatPolling() {
+    if (!settings.openChatEnabled) return;
+    if (activePollTimer) clearInterval(activePollTimer);
+    activePollTimer = setInterval(scanActiveChatOnce, 2500);
+    appendLog('Polling leve do chat aberto ativado.');
   }
 
-  function startActiveChatPolling() {
+  function stopActiveChatPolling() {
     if (activePollTimer) clearInterval(activePollTimer);
-    activePollTimer = setInterval(() => {
-      attachActiveChatWatcher();
-      const main = document.querySelector('#main');
-      if (main && getActiveChatName() !== activeChatName) {
-        baselineActiveChat(main, getActiveChatName());
-      }
-    }, 1000);
+    activePollTimer = null;
+    activeChatName = '';
+    seenActiveMessageIds.clear();
   }
 
   function recomputeTypingGlobal() {
@@ -1076,7 +1069,7 @@
     initialized = true;
     setupHotkey();
     attachSidebarWatcher();
-    startActiveChatPolling();
+    if (settings.openChatEnabled) startActiveChatPolling();
     setInterval(() => {
       if (!ui.host || !document.documentElement.contains(ui.host)) {
         ui = {};

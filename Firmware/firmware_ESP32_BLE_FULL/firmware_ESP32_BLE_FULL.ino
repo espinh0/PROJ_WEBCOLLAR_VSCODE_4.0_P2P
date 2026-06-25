@@ -58,6 +58,8 @@ static const uint16_t MIN_GAP_MS       = 50;
 static const uint8_t  SINGLE_SHOT_FRAMES_DEFAULT = 2;
 static const uint16_t SINGLE_SHOT_GAP_MS         = 6;
 static const uint8_t  ENGINE_ON_FRAMES_DEFAULT   = 3;
+static const uint8_t  ENGINE_ON_REPEAT_FRAMES    = 1;
+static const uint16_t ENGINE_ON_REPEAT_MS         = 50;
 
 static const char* FIXED_ID_BITS = "00110101001000100";
 
@@ -183,6 +185,7 @@ static uint8_t  stepIdx   = 0;
 static bool     engineActive = false;
 static bool     engineRepeat = false;
 static uint32_t stepEndAt_ms = 0;
+static uint32_t engineNextOnRepeatAt_ms = 0;
 
 static bool capturingSeq = false;
 static bool seqRepeatOnEnd = false;
@@ -194,8 +197,8 @@ static bool dualModeEnabled = false;
 
 static uint8_t mirrorChannel(uint8_t ch) { return (ch == 2) ? 1 : 2; }
 
-static void engineClear() { stepCount = 0; stepIdx = 0; engineActive = false; engineRepeat = false; }
-static void engineStop() { engineActive = false; }
+static void engineClear() { stepCount = 0; stepIdx = 0; engineActive = false; engineRepeat = false; engineNextOnRepeatAt_ms = 0; }
+static void engineStop() { engineActive = false; engineNextOnRepeatAt_ms = 0; }
 
 static bool engineAddOn(uint64_t frame, uint32_t ms, uint64_t frame2 = 0ULL, bool dual = false, bool dualInterleave = false){
   if (stepCount >= 64) return false;
@@ -207,27 +210,56 @@ static bool engineAddOff(uint32_t ms){
   steps[stepCount++] = Step{ STEP_OFF_MS, ms, 0ULL, 0ULL, false, false };
   return true;
 }
+
+static void engineEmitOnStep(const Step& s, uint8_t frames) {
+  if (s.kind != STEP_ON_HOLD_MS) return;
+  if (s.dual) {
+    if (s.dualInterleave) sendCommandBurstDualInterleaved(s.frame, s.frame2, frames);
+    else {
+      sendCommandBurst(s.frame, frames);
+      if (!engineActive) return;
+      sendCommandBurst(s.frame2, frames);
+    }
+  } else {
+    sendCommandBurst(s.frame, frames);
+  }
+}
+
+static void engineStartStep(uint8_t idx) {
+  const Step& s = steps[idx];
+  if (s.kind == STEP_ON_HOLD_MS) {
+    engineEmitOnStep(s, ENGINE_ON_FRAMES_DEFAULT);
+    if (!engineActive) return;
+    engineNextOnRepeatAt_ms = millis() + ENGINE_ON_REPEAT_MS;
+  } else {
+    engineNextOnRepeatAt_ms = 0;
+  }
+  stepEndAt_ms = millis() + s.ms;
+}
+
 static void engineStart(bool repeat){
   if (!stepCount) return;
   engineRepeat = repeat;
   engineActive = true;
   stepIdx = 0;
-  if (steps[0].kind == STEP_ON_HOLD_MS) {
-    if (steps[0].dual) {
-      if (steps[0].dualInterleave) sendCommandBurstDualInterleaved(steps[0].frame, steps[0].frame2, ENGINE_ON_FRAMES_DEFAULT);
-      else {
-        sendCommandBurst(steps[0].frame, ENGINE_ON_FRAMES_DEFAULT);
-        sendCommandBurst(steps[0].frame2, ENGINE_ON_FRAMES_DEFAULT);
-      }
-    } else {
-      sendCommandBurst(steps[0].frame, ENGINE_ON_FRAMES_DEFAULT);
-    }
-  }
-  stepEndAt_ms = millis() + steps[0].ms;
+  engineStartStep(0);
 }
 static void engineService(){
   if (!engineActive) return;
   unsigned long now = millis();
+
+  const Step& cur = steps[stepIdx];
+  if (cur.kind == STEP_ON_HOLD_MS &&
+      engineNextOnRepeatAt_ms &&
+      (long)(now - engineNextOnRepeatAt_ms) >= 0 &&
+      (long)(now - stepEndAt_ms) < 0) {
+    engineEmitOnStep(cur, ENGINE_ON_REPEAT_FRAMES);
+    if (!engineActive) return;
+    engineNextOnRepeatAt_ms = millis() + ENGINE_ON_REPEAT_MS;
+    return;
+  }
+
+  now = millis();
   if ((long)(now - stepEndAt_ms) < 0) return;
 
   stepIdx++;
@@ -235,19 +267,7 @@ static void engineService(){
     if (engineRepeat) stepIdx = 0;
     else { engineStop(); return; }
   }
-  const Step& s = steps[stepIdx];
-  if (s.kind == STEP_ON_HOLD_MS) {
-    if (s.dual) {
-      if (s.dualInterleave) sendCommandBurstDualInterleaved(s.frame, s.frame2, ENGINE_ON_FRAMES_DEFAULT);
-      else {
-        sendCommandBurst(s.frame, ENGINE_ON_FRAMES_DEFAULT);
-        sendCommandBurst(s.frame2, ENGINE_ON_FRAMES_DEFAULT);
-      }
-    } else {
-      sendCommandBurst(s.frame, ENGINE_ON_FRAMES_DEFAULT);
-    }
-  }
-  stepEndAt_ms = millis() + s.ms;
+  engineStartStep(stepIdx);
 }
 
 // ---------------------
@@ -704,7 +724,6 @@ static void processCommandLine_core1(const char* lineC) {
             uint64_t f2 = composeFrame(m2, l2, c2);
             engineAddOn(f2, ms, 0ULL, false, false);
           }
-          engineAddOff(MIN_GAP_MS);
           engineStart(true);
           enqueueTx("OK HOLDON DUALX");
         }
@@ -750,7 +769,6 @@ static void processCommandLine_core1(const char* lineC) {
       bool dual = forcedDual ? true : dualModeEnabled;
       uint64_t frame2 = dual ? composeFrame(mode, lvl, mirrorChannel(ch)) : 0ULL;
       engineAddOn(frame, ms, frame2, dual, false);
-      engineAddOff(MIN_GAP_MS);
       engineStart(true);
 
       char out[96];

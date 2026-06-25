@@ -59,11 +59,11 @@
       <div style="display:flex;align-items:center;gap:.5rem;">
         <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;">
           <input id="hbka-keepawake-toggle" type="checkbox" checked style="width:16px;height:16px;accent-color:#10b981;cursor:pointer;" />
-          <span><strong>Keep-awake ocioso</strong> <small style="color:#9ca3af;">(1.5 min)</small></span>
+          <span><strong>Keep-awake ocioso</strong> <small style="color:#9ca3af;">(950 ms)</small></span>
         </label>
       </div>
       <div id="hbka-keepawake-status" style="margin-top:.4rem;font-size:.8rem;color:#9ca3af;">
-        Envia CADENCE LIGHT,0,1,2,200 e CADENCE LIGHT,0,2,2,200 apenas se nenhum OK for visto por 1.5 minutos.
+        Envia DUAL CADENCE LIGHT,0,1,2,400 se nenhum OK for visto por 950 ms.
       </div>
       <div style="margin-top:.35rem;font-size:.78rem;color:#6b7280;line-height:1.35;">
         Observa RX para OK/ERR; ERR nao adia ping. Ignora eco de OK do proprio keep-awake por 500 ms.
@@ -92,6 +92,8 @@
     return;
   }
   window.__HBKA_WIDGET_READY__ = true;
+
+  const $ = (id) => document.getElementById(id);
 
     // Persistência dos toggles
     function getPersistedToggle(key, def) {
@@ -122,7 +124,6 @@
     if (hbToggle) hbToggle.checked = getPersistedToggle('hbka-heartbeat-toggle', false); // heartbeat desativado por padrão
     if (kaToggle) kaToggle.checked = getPersistedToggle('hbka-keepawake-toggle', true);
     if (browserWakeLockToggle) browserWakeLockToggle.checked = getPersistedToggle('hbka-browser-wakelock-toggle', true);
-  const $ = (id) => document.getElementById(id);
 
   // ...as variáveis já foram declaradas acima com persistência...
 
@@ -130,9 +131,10 @@
   const HB_MAX_MS = 60000;
   const HB_DEFAULT_MS = 500;
 
-  const KA_INTERVAL_MS = 90000;        // 1.5 min
+  const KA_INTERVAL_MS = 950;
+  const KA_DURATION_MS = 400;
   const KA_CHANNELS = [1, 2];
-  const getKeepAwakeCommand = (ch) => `CADENCE LIGHT,0,${ch},2,200`;
+  const getKeepAwakeCommand = () => `DUAL CADENCE LIGHT,0,1,2,${KA_DURATION_MS}`;
   const KA_OK_WINDOW_MS = 500;
   const HOST_REQUIRED_MSG = 'Somente host pode manter ativo (tag host).';
 
@@ -426,14 +428,16 @@
   }
 
   // ======== Escrita interna do KeepAwake ========
-  function writeSerialKeepAwake(line, ch) {
+  function writeSerialKeepAwake(line, channels) {
     if (!(window.SerialBridge && typeof window.SerialBridge.send === 'function')) {
       console.log('[HB+KA] SerialBridge indisponivel (conecte a porta primeiro).');
       return;
     }
 
     try {
-      if (ch) lastKeepAwakeSendByCh[ch] = Date.now();
+      const now = Date.now();
+      const sentChannels = Array.isArray(channels) ? channels : [channels].filter(Boolean);
+      sentChannels.forEach((ch) => { lastKeepAwakeSendByCh[ch] = now; });
       window.SerialBridge.send(String(line || ''));
       console.log('[HB+KA] Enviado (keep-awake):', line);
     } catch (err) {
@@ -450,23 +454,21 @@
       return;
     }
     const now = Date.now();
-    KA_CHANNELS.forEach((ch) => {
-      if (!lastActivityByCh[ch]) {
-        lastActivityByCh[ch] = now;
-        console.log('[HB+KA] Inicializando keep-awake canal ' + ch + ': aguardando o primeiro ciclo completo.');
-        return;
-      }
+    const missingActivity = KA_CHANNELS.filter((ch) => !lastActivityByCh[ch]);
+    if (missingActivity.length) {
+      missingActivity.forEach((ch) => { lastActivityByCh[ch] = now; });
+      console.log('[HB+KA] Inicializando keep-awake: aguardando o primeiro ciclo completo.');
+      return;
+    }
 
-      const diff = now - lastActivityByCh[ch];
+    const dueChannels = KA_CHANNELS.filter((ch) => (now - lastActivityByCh[ch]) >= KA_INTERVAL_MS);
+    if (dueChannels.length) {
+      writeSerialKeepAwake(getKeepAwakeCommand(), KA_CHANNELS);
+      return;
+    }
 
-      if (diff >= KA_INTERVAL_MS) {
-        const cmd = getKeepAwakeCommand(ch);
-        writeSerialKeepAwake(cmd, ch);
-      } else {
-        const restante = Math.round((KA_INTERVAL_MS - diff) / 1000);
-        console.log('[HB+KA] Uso recente (OK) canal ' + ch + '. Ping adiado. Faltam ~' + restante + 's.');
-      }
-    });
+    const remainingMs = Math.max(0, Math.min(...KA_CHANNELS.map((ch) => KA_INTERVAL_MS - (now - lastActivityByCh[ch]))));
+    console.log('[HB+KA] Uso recente (OK). Ping adiado. Faltam ~' + Math.round(remainingMs) + 'ms.');
   }
 
   function startKeepAwakeLoop() {
@@ -476,13 +478,13 @@
       sendKeepAwakeIfIdle();
     }, KA_INTERVAL_MS);
 
-    // Ao ativar, so manda se ja estiver ocioso ha 1.5 min
+    // Ao ativar, so manda se ja estiver ocioso pelo intervalo configurado.
     sendKeepAwakeIfIdle();
 
-    const kaSummary = KA_CHANNELS.map((ch) => getKeepAwakeCommand(ch)).join(' | ');
+    const kaSummary = getKeepAwakeCommand();
     setKeepAwakeStatus(
       'Envia ' + kaSummary +
-      ' se nenhum OK chegar por 1.5 minutos.'
+      ' se nenhum OK chegar por ' + KA_INTERVAL_MS + ' ms.'
     );
     console.log('[HB+KA] Keep-awake ativado (baseado em OK/ERR de RX).');
   }

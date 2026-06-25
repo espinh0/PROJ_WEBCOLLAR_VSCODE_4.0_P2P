@@ -1051,9 +1051,17 @@
     appendLine(`[${ts}] HOLDOFF latency: ${d.elapsedMs} ms (tx#${id}, ${transport})`, "in");
   });
 
+  let writeRawInFlightCount = 0;
   async function writeRaw(raw) {
+    raw = String(raw || "").trim();
     if (!raw.length) return;
+    const priority = /^HOLDOFF\b/i.test(raw);
+    if (writeRawInFlightCount > 0 && !priority) {
+      appendLine(`IGNORADO: envio anterior ainda em andamento (${raw})`, "out");
+      return;
+    }
     try {
+      writeRawInFlightCount += 1;
       if (window.SerialBridge?.send) {
         window[SERIAL_TX_SUPPRESS_KEY] = true;
         await window.SerialBridge.send(raw);
@@ -1066,6 +1074,8 @@
       window[SERIAL_TX_SUPPRESS_KEY] = false;
       appendLine(`ERRO: ${e?.message || e}`, "out");
       log(`Falha no envio: ${e?.message}`, "error");
+    } finally {
+      writeRawInFlightCount = Math.max(0, writeRawInFlightCount - 1);
     }
   }
 

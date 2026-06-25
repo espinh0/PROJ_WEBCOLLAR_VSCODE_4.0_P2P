@@ -2665,6 +2665,10 @@
         return sendCommandNow(payload);
       });
   }
+  function sendLatestCommand(text, opts = {}){
+    flushPendingCommandQueue();
+    return sendCommand(text, opts);
+  }
 
   // ===== Helpers UI =====
   function initTooltips(){
@@ -4228,7 +4232,7 @@
     }
     if (!advActive) {
       stopAdvCountdown(false);
-      sendCommand(buildCmdLine());
+      sendLatestCommand(buildCmdLine());
       return;
     }
     if (!shouldUseAdvancedBurst(liveCfg)) {
@@ -4237,7 +4241,7 @@
       if (useHold) {
         pulseForDuration(liveCfg.durationMs, true);
       } else {
-        sendCommand(buildCmdLine());
+        sendLatestCommand(buildCmdLine());
       }
       return;
     }

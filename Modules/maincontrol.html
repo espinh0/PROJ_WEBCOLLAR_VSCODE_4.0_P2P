@@ -4267,7 +4267,7 @@
       return;
     }
     beginHoldLed();
-    sendCommand(`HOLDON ${buildCmdLine()}`);
+    sendLatestCommand(`HOLDON ${buildCmdLine()}`);
   }
   function holdOff(){
     if (btnSend) btnSend.classList.remove("holding");

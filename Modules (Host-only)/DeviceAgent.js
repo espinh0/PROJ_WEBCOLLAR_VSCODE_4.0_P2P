@@ -126,6 +126,12 @@
   var processed = new Set();
   var MAX = 500;
   var lastHoldSeqByOrigin = {};
+  var latchedHold = {
+    active: false,
+    command: '',
+    origin: '',
+    since: 0
+  };
 
   function mark(id){
     processed.add(id);
@@ -173,6 +179,57 @@
     return base && base !== '||' ? base : `noid:${Date.now()}:${Math.random().toString(36).slice(2)}`;
   }
 
+  function normalizedCommand(text){
+    return String(text || '').trim().replace(/\s+/g, ' ');
+  }
+
+  function isHoldOnCommand(text){
+    return /^HOLDON\b/i.test(normalizedCommand(text));
+  }
+
+  function isHoldOffCommand(text){
+    return /^HOLDOFF\b/i.test(normalizedCommand(text));
+  }
+
+  function isAutoHoldOff(msg, origin){
+    var raw = msg && msg.raw && typeof msg.raw === 'object' ? msg.raw : null;
+    var meta = (msg && msg.meta) || (raw && raw.meta) || {};
+    var via = String(meta.via || msg.via || origin || '').toLowerCase();
+    var reason = String(meta.reason || msg.reason || '').toLowerCase();
+    return /watchdog|timeout|failsafe|hard-limit|auto/.test(via) || /watchdog|timeout|failsafe|hard-limit|auto/.test(reason);
+  }
+
+  function prepareLatchedChatCommand(text, msg, origin){
+    var cmd = normalizedCommand(text);
+    if (!cmd) return { send: false, cmd: '' };
+
+    if (isHoldOnCommand(cmd)) {
+      if (latchedHold.active && latchedHold.command.toUpperCase() === cmd.toUpperCase()) {
+        executorLog('ignored', cmd, origin, { reason: 'latched-duplicate-holdon' });
+        return { send: false, cmd: cmd };
+      }
+      latchedHold.active = true;
+      latchedHold.command = cmd;
+      latchedHold.origin = origin || '';
+      latchedHold.since = Date.now();
+      return { send: true, cmd: cmd };
+    }
+
+    if (isHoldOffCommand(cmd)) {
+      if (isAutoHoldOff(msg, origin)) {
+        executorLog('ignored', cmd, origin, { reason: 'latched-auto-holdoff', active: latchedHold.active });
+        return { send: false, cmd: cmd };
+      }
+      latchedHold.active = false;
+      latchedHold.command = '';
+      latchedHold.origin = origin || '';
+      latchedHold.since = 0;
+      return { send: true, cmd: cmd };
+    }
+
+    return { send: true, cmd: cmd };
+  }
+
   function onChatMessage(e){
     var msg = normalizeChatMessage(e);
     if (!msg) return;
@@ -186,13 +243,20 @@
 
     executorLog('received', text, origin, {peerId: msg.peerId, username: msg.username});
 
+    var prepared = prepareLatchedChatCommand(text, msg, origin);
+    if (!prepared.send) {
+      mark(id);
+      return;
+    }
+    text = prepared.cmd;
+
     var SERIAL = getSerialAdapter();
     try {
       SERIAL.send(text);
-      logLine(`ÔåÆ chat ÔûÂ collar (${SERIAL.name}): ${text}`);
+      logLine(`→ chat ▶ collar (${SERIAL.name}): ${text}`);
       executorLog('sent', text, SERIAL.name, {serialAdapter: SERIAL.name});
     } catch(err){
-      logLine(`ÔÜá´©Å falha ao enviar via ${SERIAL.name}: ${err && err.message || err}`);
+      logLine(`⚠️ falha ao enviar via ${SERIAL.name}: ${err && err.message || err}`);
       executorLog('error', text, SERIAL.name, {error: String(err && err.message || err)});
       return;
     }
@@ -234,6 +298,10 @@
 
     var seq = Number(state.seq || 0);
     if (shouldSkipHoldSeq(origin, seq)) return;
+    if (!state.on && meta.via === 'holdSync.watchdog') {
+      executorLog('ignored', 'HOLDOFF', origin, { seq: seq, via: meta.via, reason: 'latched-watchdog-holdoff' });
+      return;
+    }
 
     var level = clamp(Number(state.level || 0), 0, 100);
     var ch = normalizeChannel(state.ch);
@@ -247,6 +315,23 @@
     }
 
     executorLog('received', cmd, origin, { seq: seq, via: meta.via || '' });
+    if (state.on) {
+      var normalized = normalizedCommand(cmd);
+      if (latchedHold.active && latchedHold.command.toUpperCase() === normalized.toUpperCase()) {
+        executorLog('ignored', normalized, origin, { seq: seq, reason: 'latched-duplicate-holdstate' });
+        return;
+      }
+      latchedHold.active = true;
+      latchedHold.command = normalized;
+      latchedHold.origin = origin || '';
+      latchedHold.since = Date.now();
+      cmd = normalized;
+    } else {
+      latchedHold.active = false;
+      latchedHold.command = '';
+      latchedHold.origin = origin || '';
+      latchedHold.since = 0;
+    }
 
     var SERIAL = getSerialAdapter();
     try {

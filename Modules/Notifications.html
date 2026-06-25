@@ -149,12 +149,12 @@
     showNotification({ text: msg, type: "leave", ttl: 3200 });
   });
 
-  // holdSync watchdog (HOLDOFF autom+�tico)
+  // holdSync watchdog (HOLDOFF automático)
   window.addEventListener("holdsync:watchdog", () => {
     showNotification({ text: "HoldSync: watchdog soltou HOLDOFF", type: "leave", ttl: 3000 });
   });
 
-  // Logs cr+�ticos (warn/error) via CustomEvent('app-log', {detail:{msg, level}})
+  // Logs críticos (warn/error) via CustomEvent('app-log', {detail:{msg, level}})
   window.addEventListener("app-log", (ev) => {
     const d = ev?.detail || {};
     const level = (d.level || "info").toLowerCase();

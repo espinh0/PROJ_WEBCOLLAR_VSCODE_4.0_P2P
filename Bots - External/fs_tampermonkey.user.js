@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         Flashscore -> Collar (PeerJS bridge)
+// @name         Flashscore -> Collar (Flowgate bridge)
 // @namespace    collar3
-// @version      4.0
-// @description  Monitora Flashscore e envia snapshots do placar via PeerJS (Flowgate).
-// @note         4.0 - migrate flowgate/nostr to peerjs public server
+// @version      4.1
+// @description  Monitora Flashscore e envia snapshots do placar via Flowgate.
+// @note         4.1 - align with current Flowgate firebase/peerjs connection patterns
 // @match        https://www.flashscore.com/*
 // @match        https://www.flashscore.com.br/*
 // @match        https://www.flashscore.*/*
@@ -23,7 +23,8 @@
   const PEERJS_SERVER_PORT = 443;
   const PEERJS_SERVER_PATH = '/';
   const PEERJS_SERVER_KEY = 'peerjs';
-  const SIGNALING_DEFAULT = 'peerjs'; // firebase | peerjs
+  const SIGNALING_DEFAULT = 'firebase'; // firebase | peerjs
+  const SIGNALING_ALLOWED = new Set(['firebase', 'peerjs']);
   const FIREBASE_CONFIG = {
     apiKey: "AIzaSyCwlgt8N4S6iFL_w0_-YFiB2T94vvOguOQ",
     authDomain: "ptrainer-sinal.firebaseapp.com",
@@ -36,18 +37,41 @@
   function resolveSignalingMode(){
     const url = new URL(window.location.href);
     const signal = (url.searchParams.get('signal') || '').trim().toLowerCase();
-    if (signal && signal !== 'peerjs') {
+    if (SIGNALING_ALLOWED.has(signal)) return signal;
+    if (signal) {
       console.warn(`Sinalizador ignorado: ${signal}`);
     }
-    return 'peerjs';
+    const stored = S && S.signalingMode ? String(S.signalingMode).trim().toLowerCase() : '';
+    return SIGNALING_ALLOWED.has(stored) ? stored : SIGNALING_DEFAULT;
   }
   const DEFAULT_ROOM = 'PET998DR';
   const DEFAULT_PASS = 'flowgate-pass-2f1b6d0f9c21419a92f2c0d4';
-  const STABLE_ID_STORAGE = 'flowgate_nostr_priv_hex';
+  const STABLE_ID_STORAGE = 'trystero_nostr_priv_hex';
+  const FLOWGATE_ID_FALLBACK = 'flowgate_nostr_priv_hex';
+  const TRYSTERO_ID_FALLBACK = 'trystero_nostr_priv_hex';
   const TURN_STORE_KEY = 'flowgate_turn_servers';
   const PRESENCE_INTERVAL_MS = 5000;
   const SCORE_HEARTBEAT_MS = 15000;
+  const FIREBASE_ROOM_ROOT = 'flowgate/rooms';
+  const FIREBASE_SESSION_GRACE_MS = 2000;
+  const FIREBASE_MESSAGE_TTL_MS = 45000;
+  const FIREBASE_PRESENCE_TTL_MS = 45000;
+  const FIREBASE_SEEN_MAX = 1200;
+  const HOST_ID_SUFFIXES = ['', 'h2', 'h3'];
   const TURN_DEFAULTS = [
+    {
+      username: 'esp1n',
+      credential: '159753456852',
+      urls: [
+        'turn:34.95.255.8:3478',
+        'turn:34.95.255.8:3478?transport=tcp',
+        'turns:34.95.255.8:3478?transport=tcp',
+        'turn:34.95.255.8:443?transport=tcp',
+        'turns:34.95.255.8:443?transport=tcp',
+        'turn:34.95.255.8:5349?transport=tcp',
+        'turns:34.95.255.8:5349?transport=tcp'
+      ]
+    },
     {
       username: 'c30cf48123b0ca5f06ed610c',
       credential: 's9mJQSaRMVSTa9zy',
@@ -122,7 +146,8 @@
     trPass: DEFAULT_PASS,
     username: 'bot-flashscore',
     autoConnect: true,
-    noSleep: true
+    noSleep: true,
+    signalingMode: SIGNALING_DEFAULT
   };
 
   // ---------- Consentimento em iframe (evita banner recorrente) ----------
@@ -234,12 +259,24 @@
   let peer = null;
   let hostConn = null;
   let roomHostId = '';
+  let activeHostId = '';
+  let hostIdIndex = 0;
   let roomSignalKey = '';
   let signalingMode = resolveSignalingMode();
-  let firebaseRoomRef = null;
-  let firebaseHostUnsub = null;
   let firebaseApi = null;
   let firebaseDb = null;
+  let firebaseInitPromise = null;
+  let firebaseRoomKey = '';
+  let firebaseSessionStart = 0;
+  let firebaseConnected = false;
+  let firebaseActionUnsubs = new Map();
+  let firebasePresenceUnsubs = [];
+  let firebasePresenceSelfRef = null;
+  let firebasePresenceOnDisconnect = null;
+  let firebaseCleanupTimers = new Set();
+  let firebaseSeenMessages = new Set();
+  let firebaseSeenQueue = [];
+  let activeTransport = '';
   let trRoom = null;
   let trScoreSend = null;
   let trPresenceSend = null;
@@ -282,11 +319,39 @@
 
   function save(){ try { localStorage.setItem(LSKEY, JSON.stringify(S)); } catch(_){ } }
 
+  function sanitizeSignalingMode(raw){
+    const val = String(raw || '').trim().toLowerCase();
+    return SIGNALING_ALLOWED.has(val) ? val : '';
+  }
+
+  function readConnectionUrlParams(){
+    try {
+      const p = new URL(window.location.href).searchParams;
+      return {
+        room: (p.get('room') || '').trim(),
+        pass: p.get('pass') || '',
+        name: (p.get('name') || '').trim(),
+        signal: sanitizeSignalingMode(p.get('signal') || ''),
+        autojoin: (p.get('autojoin') || '').trim()
+      };
+    } catch(_) {
+      return {};
+    }
+  }
+
   function loadSettings(){
     try{
       const rawStored = localStorage.getItem(LSKEY) || localStorage.getItem('fs2arduino.settings.v12') || '{}';
       const raw = JSON.parse(rawStored || '{}');
-      return Object.assign({}, DEFAULTS, raw);
+      const next = Object.assign({}, DEFAULTS, raw);
+      const qp = readConnectionUrlParams();
+      if (qp.room) next.trRoom = qp.room;
+      if (qp.pass) next.trPass = qp.pass;
+      if (qp.name) next.username = qp.name;
+      if (qp.signal) next.signalingMode = qp.signal;
+      if (qp.autojoin === '1' || qp.autojoin === 'true') next.autoConnect = true;
+      next.signalingMode = sanitizeSignalingMode(next.signalingMode) || SIGNALING_DEFAULT;
+      return next;
     }catch(_){
       return Object.assign({}, DEFAULTS);
     }
@@ -642,7 +707,9 @@
 
   function ensureStableId(){
     try {
-      const stored = localStorage.getItem(STABLE_ID_STORAGE) || localStorage.getItem(TRYSTERO_ID_FALLBACK);
+      const stored = localStorage.getItem(STABLE_ID_STORAGE)
+        || localStorage.getItem(FLOWGATE_ID_FALLBACK)
+        || localStorage.getItem(TRYSTERO_ID_FALLBACK);
       if (stored && /^[0-9a-f]{16,128}$/i.test(stored)) return stored.toLowerCase();
     } catch(_){}
     const hex = generateId(16);
@@ -681,64 +748,274 @@
     if (hostId.length > 50) hostId = hostId.slice(0, 50);
     return hostId;
   }
+
+  function buildHostIdWithSuffix(baseId, suffix){
+    const cleanSuffix = suffix ? `-${suffix}` : '';
+    const maxLen = 50;
+    const base = String(baseId || '');
+    if (!cleanSuffix) return base.slice(0, maxLen);
+    const parts = base.split('-');
+    if (parts.length >= 3) {
+      const tail = parts.pop();
+      const head = parts.join('-');
+      const withSuffix = `${head}${cleanSuffix}-${tail}`;
+      if (withSuffix.length <= maxLen) return withSuffix;
+      const keep = Math.max(1, maxLen - cleanSuffix.length - 1 - tail.length);
+      return `${head.slice(0, keep)}${cleanSuffix}-${tail}`;
+    }
+    const keep = Math.max(1, maxLen - cleanSuffix.length);
+    return `${base.slice(0, keep)}${cleanSuffix}`;
+  }
+
+  function resolveHostIdByIndex(idx){
+    const suffix = HOST_ID_SUFFIXES[idx] ?? HOST_ID_SUFFIXES[0];
+    return buildHostIdWithSuffix(roomHostId, suffix);
+  }
+
+  function advanceHostId(reason){
+    if (HOST_ID_SUFFIXES.length < 2) return false;
+    const nextIndex = (hostIdIndex + 1) % HOST_ID_SUFFIXES.length;
+    const nextId = resolveHostIdByIndex(nextIndex);
+    if (!nextId || nextId === activeHostId) return false;
+    hostIdIndex = nextIndex;
+    activeHostId = nextId;
+    uiApi?.log?.(`Host PeerJS alternado: ${activeHostId.slice(0, 12)} (${reason || 'retry'})`);
+    return true;
+  }
+
   function buildRoomKey(roomId, password){
     return buildRoomHostId(roomId, password);
   }
 
   function firebaseRoomPath(roomKey){
-    return `flowgate/rooms/${roomKey}`;
+    return `${FIREBASE_ROOM_ROOT}/${roomKey}`;
   }
 
   async function ensureFirebase(){
     if (firebaseApi && firebaseDb) return firebaseApi;
-    try {
-      const appMod = await import('https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js');
-      const authMod = await import('https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js');
-      const dbMod = await import('https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js');
-      const app = appMod.initializeApp(FIREBASE_CONFIG);
+    if (firebaseInitPromise) return firebaseInitPromise;
+    firebaseInitPromise = (async ()=>{
       try {
+        const [appMod, authMod, dbMod] = await Promise.all([
+          import('https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js'),
+          import('https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js'),
+          import('https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js')
+        ]);
+        const apps = (typeof appMod.getApps === 'function') ? appMod.getApps() : [];
+        const app = apps && apps.length ? appMod.getApp() : appMod.initializeApp(FIREBASE_CONFIG);
         const auth = authMod.getAuth(app);
-        await authMod.signInAnonymously(auth);
+        if (!auth.currentUser) await authMod.signInAnonymously(auth);
+        const db = dbMod.getDatabase(app);
+        firebaseDb = db;
+        firebaseApi = {
+          ref: dbMod.ref,
+          set: dbMod.set,
+          push: dbMod.push,
+          remove: dbMod.remove,
+          onChildAdded: dbMod.onChildAdded,
+          onChildChanged: dbMod.onChildChanged,
+          onChildRemoved: dbMod.onChildRemoved,
+          onDisconnect: dbMod.onDisconnect,
+          query: dbMod.query,
+          orderByChild: dbMod.orderByChild,
+          startAt: dbMod.startAt,
+          limitToLast: dbMod.limitToLast,
+          db
+        };
+        return firebaseApi;
       } catch (e) {
-        signalingMode = 'peerjs';
+        firebaseInitPromise = null;
+        uiApi?.log?.(`Firebase indisponivel: ${e?.message || e}`);
         return null;
       }
-      const db = dbMod.getDatabase(app);
-      firebaseDb = db;
-      firebaseApi = {
-        ref: dbMod.ref,
-        onValue: dbMod.onValue,
-        off: dbMod.off,
-        db
-      };
-      return firebaseApi;
-    } catch (e) {
-      signalingMode = 'peerjs';
-      return null;
-    }
+    })();
+    return firebaseInitPromise;
   }
 
-  function stopFirebaseHostListener(){
-    if (firebaseHostUnsub) {
-      try { firebaseHostUnsub(); } catch(_){}
-      firebaseHostUnsub = null;
-    }
+  function isFirebasePresenceStale(val, now = Date.now()){
+    const t = Number(val?.t || 0);
+    return !!(t && (now - t) > FIREBASE_PRESENCE_TTL_MS);
   }
 
-  async function startFirebaseHostListener(roomKey){
-    const api = await ensureFirebase();
-    if (!api) return false;
-    stopFirebaseHostListener();
-    const hostRef = api.ref(api.db, `${firebaseRoomPath(roomKey)}/host`);
-    firebaseRoomRef = hostRef;
-    firebaseHostUnsub = api.onValue(hostRef, (snap)=>{
-      const val = snap.val() || null;
-      const hostPeerId = val && val.peerId ? String(val.peerId) : '';
-      if (!hostPeerId) return;
-      if (hostPeerId === roomHostId) return;
-      roomHostId = hostPeerId;
-      connectToHost();
+  function rememberFirebaseMessage(id){
+    if (!id) return false;
+    if (firebaseSeenMessages.has(id)) return false;
+    firebaseSeenMessages.add(id);
+    firebaseSeenQueue.push(id);
+    if (firebaseSeenQueue.length > FIREBASE_SEEN_MAX) {
+      const old = firebaseSeenQueue.shift();
+      if (old) firebaseSeenMessages.delete(old);
+    }
+    return true;
+  }
+
+  function resetFirebaseSeen(){
+    firebaseSeenMessages = new Set();
+    firebaseSeenQueue = [];
+  }
+
+  function clearFirebaseCleanupTimers(){
+    for (const timer of firebaseCleanupTimers) clearTimeout(timer);
+    firebaseCleanupTimers.clear();
+  }
+
+  function stopFirebaseActionListeners(){
+    for (const unsub of firebaseActionUnsubs.values()) {
+      try { unsub(); } catch(_){}
+    }
+    firebaseActionUnsubs = new Map();
+  }
+
+  function stopFirebasePresenceListeners(){
+    for (const unsub of firebasePresenceUnsubs) {
+      try { unsub(); } catch(_){}
+    }
+    firebasePresenceUnsubs = [];
+  }
+
+  function teardownFirebase(){
+    firebaseConnected = false;
+    stopFirebaseActionListeners();
+    stopFirebasePresenceListeners();
+    clearFirebaseCleanupTimers();
+    try { firebasePresenceOnDisconnect?.cancel?.(); } catch(_){}
+    firebasePresenceOnDisconnect = null;
+    if (firebasePresenceSelfRef && firebaseApi?.remove) {
+      try { firebaseApi.remove(firebasePresenceSelfRef); } catch(_){}
+    }
+    firebasePresenceSelfRef = null;
+    firebaseRoomKey = '';
+    firebaseSessionStart = 0;
+    resetFirebaseSeen();
+  }
+
+  function scheduleFirebaseCleanup(action, key){
+    if (!firebaseApi || !firebaseRoomKey || !key) return;
+    const api = firebaseApi;
+    const ref = api.ref(api.db, `${firebaseRoomPath(firebaseRoomKey)}/actions/${action}/${key}`);
+    const timer = setTimeout(()=>{
+      try {
+        const remove = api.remove(ref);
+        if (remove && typeof remove.catch === 'function') remove.catch(()=>{});
+      } catch(_){}
+    }, FIREBASE_MESSAGE_TTL_MS);
+    firebaseCleanupTimers.add(timer);
+  }
+
+  function markFirebasePeerOffline(peerId){
+    if (!peerId) return;
+    const raw = String(peerId);
+    const cur = peers.get(raw);
+    if (!cur) return;
+    peers.set(raw, { ...cur, online:false, lastSeen: Date.now() });
+    peerSeen.delete(raw);
+    peerReplayTs.delete(raw);
+    uiApi?.renderPeers?.();
+    notifyPeerLeave(raw);
+  }
+
+  function ensureFirebaseActionListener(action){
+    if (!firebaseConnected || !firebaseApi || !firebaseRoomKey) return;
+    if (firebaseActionUnsubs.has(action)) return;
+    const api = firebaseApi;
+    const baseRef = api.ref(api.db, `${firebaseRoomPath(firebaseRoomKey)}/actions/${action}`);
+    const startAtTs = (firebaseSessionStart || Date.now()) - FIREBASE_SESSION_GRACE_MS;
+    const queryRef = api.query(baseRef, api.orderByChild('ts'), api.startAt(startAtTs), api.limitToLast(100));
+    const unsub = api.onChildAdded(queryRef, (snap)=>{
+      const data = snap.val();
+      if (!data || data.__flowgate !== FLOWGATE_PROTO) return;
+      const id = snap.key || data.id || '';
+      if (!rememberFirebaseMessage(id)) return;
+      const from = String(data.from || '');
+      if (from && from === selfPeerId()) return;
+      const target = data.target ? String(data.target) : '';
+      const sid = stableSelfId();
+      if (target && target !== String(selfPeerId()) && target !== sid) return;
+      handleEnvelope(data);
     });
+    firebaseActionUnsubs.set(action, unsub);
+  }
+
+  function ensureFirebasePresenceListener(){
+    if (!firebaseConnected || !firebaseApi || !firebaseRoomKey) return;
+    if (firebasePresenceUnsubs.length) return;
+    const api = firebaseApi;
+    const baseRef = api.ref(api.db, `${firebaseRoomPath(firebaseRoomKey)}/presence`);
+    const handleUpsert = (snap)=>{
+      const val = snap.val();
+      if (!val) return;
+      const peerId = String(val.peerId || snap.key || '');
+      if (!peerId) return;
+      const sid = String(val.sid || peerId || '');
+      if (peerId === selfPeerId() || sid === stableSelfId()) return;
+      if (isFirebasePresenceStale(val)) {
+        markFirebasePeerOffline(sid || peerId);
+        try {
+          const staleRef = api.ref(api.db, `${firebaseRoomPath(firebaseRoomKey)}/presence/${snap.key}`);
+          const remove = api.remove(staleRef);
+          if (remove && typeof remove.catch === 'function') remove.catch(()=>{});
+        } catch(_){}
+        return;
+      }
+      dispatchAction('presence', { ...val, peerId }, peerId);
+    };
+    const handleRemove = (snap)=>{
+      const peerId = String(snap.key || '');
+      if (peerId && peerId !== selfPeerId()) markFirebasePeerOffline(peerId);
+    };
+    firebasePresenceUnsubs = [
+      api.onChildAdded(baseRef, handleUpsert),
+      api.onChildChanged(baseRef, handleUpsert),
+      api.onChildRemoved(baseRef, handleRemove)
+    ];
+  }
+
+  function firebaseSendPresence(payload){
+    if (!firebaseConnected || !firebaseApi || !firebaseRoomKey) return false;
+    const api = firebaseApi;
+    const key = String(selfPeerId() || stableSelfId());
+    const ref = api.ref(api.db, `${firebaseRoomPath(firebaseRoomKey)}/presence/${key}`);
+    firebasePresenceSelfRef = ref;
+    if (!firebasePresenceOnDisconnect) {
+      try {
+        firebasePresenceOnDisconnect = api.onDisconnect(ref);
+        firebasePresenceOnDisconnect.remove();
+      } catch(_){}
+    }
+    const data = { ...(payload || {}) };
+    data.peerId = key;
+    data.sid = data.sid || stableSelfId();
+    data.t = Date.now();
+    try {
+      const write = api.set(ref, data);
+      if (write && typeof write.catch === 'function') {
+        write.catch((err)=> uiApi?.log?.(`Firebase presence falhou: ${err?.message || err}`));
+      }
+    } catch(err) {
+      uiApi?.log?.(`Firebase presence falhou: ${err?.message || err}`);
+      return false;
+    }
+    return true;
+  }
+
+  function firebaseSendAction(action, payload, targetPeerId){
+    if (!firebaseConnected || !firebaseApi || !firebaseRoomKey) return false;
+    const api = firebaseApi;
+    const envelope = buildEnvelope(action, payload, targetPeerId);
+    const baseRef = api.ref(api.db, `${firebaseRoomPath(firebaseRoomKey)}/actions/${action}`);
+    const msgRef = api.push(baseRef);
+    const msgKey = msgRef?.key || '';
+    if (msgKey) envelope.id = msgKey;
+    try {
+      const write = api.set(msgRef, envelope);
+      if (write && typeof write.catch === 'function') {
+        write.catch((err)=> uiApi?.log?.(`Firebase send falhou: ${err?.message || err}`));
+      }
+    } catch(err) {
+      uiApi?.log?.(`Firebase send falhou: ${err?.message || err}`);
+      return false;
+    }
+    if (msgKey) scheduleFirebaseCleanup(action, msgKey);
     return true;
   }
 
@@ -818,8 +1095,12 @@
   const SYS_PEER_LEAVE = '__sys:peer-leave';
   const OUTBOUND_QUEUE_MAX = 120;
 
+  function selfPeerId(){
+    return (peer && peer.id) ? String(peer.id) : stableSelfId();
+  }
+
   function buildEnvelope(action, payload, targetPeerId){
-    const fromId = (peer && peer.id) ? String(peer.id) : (trSelfId || stableSelfId());
+    const fromId = selfPeerId();
     return {
       __flowgate: FLOWGATE_PROTO,
       action,
@@ -844,7 +1125,7 @@
     }
   }
 
-  function makeAction(action){
+  function makeActionPeer(action){
     let handlers = actionHandlers.get(action);
     if (!handlers) {
       handlers = new Set();
@@ -859,6 +1140,26 @@
     };
     const get = (cb)=> { if (typeof cb === 'function') handlers.add(cb); };
     return [send, get];
+  }
+
+  function makeActionFirebase(action){
+    let handlers = actionHandlers.get(action);
+    if (!handlers) {
+      handlers = new Set();
+      actionHandlers.set(action, handlers);
+    }
+    if (action === 'presence') ensureFirebasePresenceListener();
+    else ensureFirebaseActionListener(action);
+    const send = (payload, targetPeerId)=> {
+      if (action === 'presence') return firebaseSendPresence(payload);
+      return firebaseSendAction(action, payload, targetPeerId);
+    };
+    const get = (cb)=> { if (typeof cb === 'function') handlers.add(cb); };
+    return [send, get];
+  }
+
+  function makeAction(action){
+    return activeTransport === 'firebase' ? makeActionFirebase(action) : makeActionPeer(action);
   }
 
   function flushOutbound(){
@@ -899,6 +1200,7 @@
   }
 
   function scheduleReconnect(){
+    if (activeTransport !== 'peerjs') return;
     if (reconnectTimer) return;
     reconnectTimer = setTimeout(()=> {
       reconnectTimer = null;
@@ -915,7 +1217,7 @@
       trConnected = true;
       reconnectDelay = 1500;
       uiApi?.setStatus?.(`sala ${S.trRoom} (PeerJS)`);
-      uiApi?.log?.(`PeerJS conectado ao host ${roomHostId}.`);
+      uiApi?.log?.(`PeerJS conectado ao host ${activeHostId || roomHostId}.`);
       flushOutbound();
       if (lastSnap) broadcastScore(lastSnap, 'connect');
       else {
@@ -928,19 +1230,22 @@
       trConnected = false;
       uiApi?.setStatus?.('reconectando...');
       uiApi?.log?.('host desconectado, tentando reconectar.');
+      advanceHostId('close');
       scheduleReconnect();
     });
     conn.on('error', (err)=> {
       uiApi?.log?.(`erro conexao peerjs: ${err?.type || err?.message || err}`);
+      advanceHostId(err?.type || 'error');
       scheduleReconnect();
     });
   }
 
   function connectToHost(){
-    if (!peer || !peer.open || !roomHostId) return;
+    if (activeTransport !== 'peerjs') return;
+    if (!peer || !peer.open || !activeHostId) return;
     if (hostConn && hostConn.open) return;
     try {
-      const conn = peer.connect(roomHostId, {
+      const conn = peer.connect(activeHostId, {
         reliable: true,
         serialization: 'json',
         metadata: { room: S.trRoom, sid: stableSelfId() }
@@ -948,6 +1253,7 @@
       attachPeerConnectionDebug(conn, 'client->host');
       registerHostConn(conn);
     } catch {
+      advanceHostId('connect-exception');
       scheduleReconnect();
     }
   }
@@ -1030,7 +1336,8 @@
       name: name || (S.username||'').trim() || 'bot-flashscore',
       tags: ['flashscore'],
       t: Date.now(),
-      sid: stableSelfId()
+      sid: stableSelfId(),
+      peerId: selfPeerId()
     });
 
     const announce = (target)=> {
@@ -1110,28 +1417,41 @@
     if (trConnected || trConnecting) return;
     trConnecting = true;
     pendingTurnFallback = false;
+    signalingMode = resolveSignalingMode();
+    S.signalingMode = signalingMode;
+    save();
+    const useFirebase = signalingMode === 'firebase';
     iceMode = String(trigger || '').startsWith('turn-fallback:') ? 'turn' : 'stun';
-    uiApi?.setStatus?.('conectando peerjs...');
+    uiApi?.setStatus?.(useFirebase ? 'conectando firebase...' : 'conectando peerjs...');
     try{
-      if (!peerModule) peerModule = await import('https://esm.run/peerjs');
-      PeerCtor = peerModule.Peer || peerModule.default || peerModule;
-      if (typeof PeerCtor !== 'function') throw new Error('PeerJS import invalido');
-
-      if (peer) teardownPeer();
+      if (peer || activeTransport === 'firebase') await disconnectFlowgate();
 
       const roomPass = (S.trPass || '').trim();
       roomSignalKey = buildRoomKey(S.trRoom || DEFAULT_ROOM, roomPass);
-      if (signalingMode === 'firebase') {
+
+      if (useFirebase) {
         const api = await ensureFirebase();
         if (!api) {
-          roomHostId = buildRoomHostId(S.trRoom || DEFAULT_ROOM, roomPass);
-        } else {
-          roomHostId = '';
-          await startFirebaseHostListener(roomSignalKey);
+          uiApi?.setStatus?.('erro firebase');
+          return;
         }
+        teardownFirebase();
+        activeTransport = 'firebase';
+        firebaseConnected = true;
+        firebaseRoomKey = roomSignalKey;
+        firebaseSessionStart = Date.now();
+        resetFirebaseSeen();
       } else {
+        if (!peerModule) peerModule = await import('https://esm.run/peerjs');
+        PeerCtor = peerModule.Peer || peerModule.default || peerModule;
+        if (typeof PeerCtor !== 'function') throw new Error('PeerJS import invalido');
+        if (peer) teardownPeer();
+        activeTransport = 'peerjs';
         roomHostId = buildRoomHostId(S.trRoom || DEFAULT_ROOM, roomPass);
+        hostIdIndex = 0;
+        activeHostId = resolveHostIdByIndex(hostIdIndex);
       }
+
       trRoom = createRoomAdapter();
 
       const [sendScore] = trRoom.makeAction('fs-score');
@@ -1171,6 +1491,18 @@
 
       try { lastSnap = snapshot(); } catch(_){}
 
+      if (useFirebase) {
+        trConnected = true;
+        trSelfId = stableSelfId();
+        uiApi?.setStatus?.(`sala ${S.trRoom} (Firebase)`);
+        uiApi?.log?.(`Firebase conectado na sala ${S.trRoom}.`);
+        if (lastSnap) broadcastScore(lastSnap, 'connect');
+        else {
+          try { lastSnap = snapshot(); broadcastScore(lastSnap, 'connect'); } catch(_){}
+        }
+        return;
+      }
+
       peer = new PeerCtor({
         host: PEERJS_SERVER_HOST,
         port: PEERJS_SERVER_PORT,
@@ -1186,7 +1518,7 @@
         connectToHost();
       });
       peer.on('connection', (conn)=> {
-        if (conn && conn.peer === roomHostId) registerHostConn(conn);
+        if (conn && conn.peer === activeHostId) registerHostConn(conn);
         else conn?.close?.();
       });
       peer.on('disconnected', ()=> { try { peer.reconnect(); } catch(_){ } });
@@ -1196,8 +1528,8 @@
         if (!trConnected) uiApi?.setStatus?.('erro peerjs');
       });
     }catch(e){
-      uiApi?.setStatus?.('erro peerjs');
-      uiApi?.log?.('Falha ao conectar no PeerJS: '+(e?.message||e));
+      uiApi?.setStatus?.(useFirebase ? 'erro firebase' : 'erro peerjs');
+      uiApi?.log?.(`Falha ao conectar no ${useFirebase ? 'Firebase' : 'PeerJS'}: `+(e?.message||e));
     }finally{
       trConnecting = false;
     }
@@ -1205,9 +1537,13 @@
 
   async function disconnectFlowgate(){
     try { trRoom?.leave?.(); } catch(_){}
+    if (activeTransport === 'firebase') teardownFirebase();
     trRoom = null;
     roomHostId = '';
+    activeHostId = '';
+    hostIdIndex = 0;
     roomSignalKey = '';
+    activeTransport = '';
     trScoreSend = null;
     trPresenceSend = null;
     trConnected = false;
@@ -1217,9 +1553,8 @@
     lastScoreHash = '';
     peers.clear(); peerSeen.clear(); peerReplayTs.clear();
     uiApi?.renderPeers?.();
-    if (signalingMode === 'firebase') stopFirebaseHostListener();
     uiApi?.setStatus?.('desconectado');
-    uiApi?.log?.('PeerJS desconectado.');
+    uiApi?.log?.('Flowgate desconectado.');
   }
 
   /**********************
@@ -1366,7 +1701,7 @@
     wrap.className = 'card fs2a-card shadow-lg mono';
     wrap.innerHTML = `
       <div class="card-header d-flex align-items-center gap-3 drag">
-        <div class="fw-bold">Flashscore -> PeerJS (monitor)</div>
+        <div class="fw-bold">Flashscore -> Flowgate (monitor)</div>
         <div class="ms-2 small" id="fs-status">desconectado</div>
 
         <div class="ms-auto d-flex align-items-center flex-wrap gap-3">
@@ -1391,13 +1726,13 @@
         </div>
 
         <div class="row g-2 align-items-center mb-3">
-          <div class="col-12 col-lg-5">
+          <div class="col-12 col-lg-4">
             <div class="input-group input-group-sm">
               <span class="input-group-text bg-dark text-light border-secondary">Sala</span>
               <input class="form-control" id="fs-room" placeholder="ex.: PET998DR">
             </div>
           </div>
-          <div class="col-12 col-lg-4">
+          <div class="col-12 col-lg-3">
             <div class="input-group input-group-sm">
               <span class="input-group-text bg-dark text-light border-secondary">Senha</span>
               <input class="form-control" id="fs-pass" type="password" placeholder="opcional">
@@ -1408,6 +1743,12 @@
               <span class="input-group-text bg-dark text-light border-secondary">Nome</span>
               <input class="form-control" id="fs-username" placeholder="apelido">
             </div>
+          </div>
+          <div class="col-12 col-lg-2">
+            <select class="form-select form-select-sm bg-dark text-light border-secondary" id="fs-signal" title="Transporte Flowgate">
+              <option value="firebase">Firebase</option>
+              <option value="peerjs">PeerJS</option>
+            </select>
           </div>
         </div>
 
@@ -1505,6 +1846,7 @@
         el('#fs-room').value = data.trRoom || '';
         el('#fs-pass').value = data.trPass || '';
         el('#fs-username').value = data.username || '';
+        el('#fs-signal').value = sanitizeSignalingMode(data.signalingMode) || SIGNALING_DEFAULT;
         el('#fs-autoconnect').checked = !!data.autoConnect;
         el('#fs-nosleep-toggle').checked = !!data.noSleep;
       }
@@ -1514,6 +1856,7 @@
     el('#fs-room').value = S.trRoom;
     el('#fs-pass').value = S.trPass;
     el('#fs-username').value = S.username;
+    el('#fs-signal').value = sanitizeSignalingMode(S.signalingMode) || SIGNALING_DEFAULT;
     el('#fs-autoconnect').checked = !!S.autoConnect;
 
     el('#fs-open').addEventListener('click', connectFlowgate);
@@ -1542,6 +1885,11 @@
     el('#fs-username').addEventListener('change', (e)=>{
       S.username = e.target.value.trim(); save();
       startPresenceLoop(S.username);
+    });
+    el('#fs-signal').addEventListener('change', (e)=>{
+      S.signalingMode = sanitizeSignalingMode(e.target.value) || SIGNALING_DEFAULT;
+      signalingMode = S.signalingMode;
+      save();
     });
     el('#fs-autoconnect').addEventListener('change', (e)=>{ S.autoConnect = !!e.target.checked; save(); });
 

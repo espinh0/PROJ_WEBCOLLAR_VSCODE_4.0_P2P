@@ -155,11 +155,9 @@
   }
   .score-home {
     color: var(--fs-home-color);
-    text-shadow: 0 0 20px rgba(168,85,247,0.45);
   }
   .score-away {
     color: var(--fs-away-color);
-    text-shadow: 0 0 18px rgba(250,204,21,0.4);
   }
   .score-blink { animation: scoreBlink 0.9s ease; }
   @keyframes scoreBlink {
@@ -818,37 +816,36 @@
     const body = document.getElementById('fsr-body');
     if (body) body.classList.remove('d-none');
   }
-  function moveFsConfigIntoModal(){
-    const modalBody = document.getElementById('fscore-config-modal-body');
-    const panel = document.getElementById('fs-remote-card');
-    if (!modalBody || !panel) return false;
-    if (!modalBody.contains(panel)) {
-      modalBody.appendChild(panel);
+  function setFsConfigButtonOpen(open){
+    const btn = document.getElementById('fsr-toggle');
+    if (!btn) return;
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    btn.setAttribute('aria-label', open ? 'Ocultar painel' : 'Abrir FS Config');
+    btn.setAttribute('title', open ? 'Ocultar painel' : 'Abrir FS Config');
+  }
+  function isFsConfigPanelOpen(){
+    const body = document.getElementById('fsr-body');
+    return !!body && !body.classList.contains('d-none');
+  }
+  function setFsConfigPanelOpen(open, opts = {}){
+    const body = document.getElementById('fsr-body');
+    if (!body) return false;
+    body.classList.toggle('d-none', !open);
+    setFsConfigButtonOpen(!!open);
+    if (open && opts.scroll !== false) {
+      const card = document.getElementById('fs-remote-card');
+      if (card) {
+        try { card.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch(_){ card.scrollIntoView(); }
+      }
     }
-    try { modalBody.dataset.bound = 'true'; } catch(_){ }
     return true;
   }
-  function revealFsConfigModal(modal){
-    if (!modal) return false;
-    if (window.bootstrap && typeof window.bootstrap.Modal === 'function') {
-      window.bootstrap.Modal.getOrCreateInstance(modal).show();
-      return true;
-    }
-    modal.classList.add('show');
-    modal.style.display = 'block';
-    modal.removeAttribute('aria-hidden');
-    return true;
+  function openFsConfigPanel(opts = {}){
+    return setFsConfigPanelOpen(true, opts);
   }
-  function openFsConfigModal(){
-    ensureFsConfigPanelVisible();
-    moveFsConfigIntoModal();
-    const modal = document.getElementById('fscore-config-modal');
-    if (modal && revealFsConfigModal(modal)) return true;
-    const card = document.getElementById('fs-remote-card');
-    if (card) {
-      try { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch(_){ card.scrollIntoView(); }
-    }
-    return false;
+  function toggleFsConfigPanel(){
+    try { window.__fsConfigToggleHandledAt = Date.now(); } catch(_){ }
+    return setFsConfigPanelOpen(!isFsConfigPanelOpen());
   }
   function bindFsConfigButton(){
     const btn = document.getElementById('fsr-toggle');
@@ -858,14 +855,16 @@
     btn.setAttribute('title', 'Abrir FS Config');
     btn.addEventListener('click', (ev)=>{
       ev.preventDefault();
-      openFsConfigModal();
+      toggleFsConfigPanel();
     });
     btn.__fs_cfg_attached = true;
   }
-  moveFsConfigIntoModal();
   bindFsConfigButton();
   window.__bindFsConfigButton = bindFsConfigButton;
-  window.__openFsConfigModal = openFsConfigModal;
+  window.__openFsConfigPanel = openFsConfigPanel;
+  window.__toggleFsConfigPanel = toggleFsConfigPanel;
+  window.__openFsConfigModal = openFsConfigPanel;
+  window.__toggleFsConfigModal = toggleFsConfigPanel;
   try {
   // lightweight cross-document bus (BroadcastChannel + postMessage + storage fallback)
   if (!window.__FS_BUS__) {

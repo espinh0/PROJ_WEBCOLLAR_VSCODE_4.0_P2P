@@ -163,22 +163,6 @@
   </div>
 </div>
 
-<div class="modal fade" id="fscore-config-modal" tabindex="-1" aria-labelledby="fscore-config-modal-label" aria-hidden="true">
-  <div class="modal-dialog modal-xl modal-dialog-scrollable">
-    <div class="modal-content" style="background:#111;border:1px solid #333;color:#e5e7eb;">
-      <div class="modal-header" style="border-bottom:1px solid #2a2a2a;">
-        <h5 class="modal-title" id="fscore-config-modal-label">
-          <i class="fa-solid fa-sliders me-2"></i>Config Placar
-        </h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
-      </div>
-      <div class="modal-body">
-        <div id="fscore-config-modal-body"></div>
-      </div>
-    </div>
-  </div>
-</div>
-
 <script>
 (() => {
   const targets = {
@@ -343,14 +327,9 @@
     return true;
   }
 
-  function moveFscoreConfigIntoModal() {
-    const modalBody = document.getElementById("fscore-config-modal-body");
-    if (!modalBody || modalBody.dataset.bound === "true") return false;
+  function hasFscoreConfigPanel() {
     const panel = document.getElementById("fs-remote-card");
-    if (!panel) return false;
-    modalBody.appendChild(panel);
-    modalBody.dataset.bound = "true";
-    return true;
+    return !!panel;
   }
 
   function ensureFscoreConfigVisible() {
@@ -366,21 +345,43 @@
     }
   }
 
+  function setFscoreConfigButtonOpen(open) {
+    const toggleBtn = document.getElementById("fsr-toggle");
+    if (!toggleBtn) return;
+    toggleBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    toggleBtn.setAttribute("title", open ? "Ocultar painel" : "Abrir FS Config");
+    toggleBtn.setAttribute("aria-label", open ? "Ocultar painel" : "Abrir FS Config");
+  }
+
+  function isFscoreConfigOpen() {
+    const body = document.getElementById("fsr-body");
+    return !!body && !body.classList.contains("d-none");
+  }
+
+  function hideFscoreConfig() {
+    const body = document.getElementById("fsr-body");
+    if (!body) return false;
+    body.classList.add("d-none");
+    setFscoreConfigButtonOpen(false);
+    return true;
+  }
+
   function showFscoreConfigModal() {
-    const modalEl = document.getElementById("fscore-config-modal");
-    if (!modalEl) {
-      scrollFallback("fs-remote-card");
-      return;
-    }
-    moveFscoreConfigIntoModal();
     ensureFscoreConfigVisible();
-    if (window.bootstrap && typeof window.bootstrap.Modal === "function") {
-      window.bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    setFscoreConfigButtonOpen(true);
+    scrollFallback("fs-remote-card");
+  }
+
+  function toggleFscoreConfigModal() {
+    if (typeof window.__toggleFsConfigPanel === "function") {
+      window.__toggleFsConfigPanel();
       return;
     }
-    modalEl.classList.add("show");
-    modalEl.style.display = "block";
-    modalEl.removeAttribute("aria-hidden");
+    if (isFscoreConfigOpen()) {
+      hideFscoreConfig();
+      return;
+    }
+    showFscoreConfigModal();
   }
 
   function showKeepawakeModal() {
@@ -407,7 +408,7 @@
 
   document.getElementById("mod-serial")?.addEventListener("click", showSerialModal);
   document.getElementById("mod-flowgate")?.addEventListener("click", showFlowgateModal);
-  document.getElementById("mod-fscore-config")?.addEventListener("click", showFscoreConfigModal);
+  document.getElementById("mod-fscore-config")?.addEventListener("click", toggleFscoreConfigModal);
   document.getElementById("mod-keepawake")?.addEventListener("click", showKeepawakeModal);
 
   let serialMoveTries = 0;
@@ -431,15 +432,16 @@
   let fscoreMoveTries = 0;
   const fscoreMoveTimer = setInterval(() => {
     fscoreMoveTries += 1;
-    if (moveFscoreConfigIntoModal() || fscoreMoveTries > 15) clearInterval(fscoreMoveTimer);
+    if (hasFscoreConfigPanel() || fscoreMoveTries > 15) clearInterval(fscoreMoveTimer);
   }, 200);
 
   const fsToggleBtn = document.getElementById("fsr-toggle");
   if (fsToggleBtn) {
     fsToggleBtn.addEventListener("click", () => {
+      const clickStartedAt = Date.now();
       setTimeout(() => {
-        showFscoreConfigModal();
-        ensureFscoreConfigVisible();
+        if (window.__fsConfigToggleHandledAt && window.__fsConfigToggleHandledAt >= clickStartedAt - 50) return;
+        toggleFscoreConfigModal();
       }, 0);
     });
   }

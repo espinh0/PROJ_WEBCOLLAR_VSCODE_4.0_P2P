@@ -20,12 +20,13 @@
   - Arduino-ESP32 2.x (recomendado).
   - NimBLE-Arduino instalado.
 
-  Versao: 1.1.8 (2026-02-25)
+  Versao: 1.1.9 (2026-06-25)
   - Prefixo DUAL por comando (nao altera DUALON/OFF global).
   - Mantem DUALON/DUALOFF e desativa DUAL ao desconectar BLE.
   - Novo comando DUALX para dois canais com comandos distintos.
   - HOLDOFF limpa fila de comandos para evitar restart por fila.
   - HOLDOFF prioritario interrompe bursts RF rapidamente.
+  - Fila de comandos ampliada para reduzir perdas em comandos rapidos.
   - Niveis 0 sao sempre anulados (sem RF).
 */
 
@@ -39,8 +40,6 @@
 // Forward decls for priority HOLDOFF handling in RF bursts.
 static void safetyHoldOff_core1();
 static bool tryImmediateHoldoff();
-extern volatile bool safetyStopRequested;
-extern volatile bool holdoffRequested;
 
 // ---------------------
 // Pinos / Constantes
@@ -410,6 +409,14 @@ static NimBLECharacteristic* pTxCharacteristic = nullptr;
 static volatile bool deviceConnected = false;
 static volatile bool bleBonded = false;
 static volatile bool bleEncrypted = false;
+static volatile bool bleAdvertising = false;
+static volatile bool restartAdvertisingRequested = false;
+static unsigned long restartAdvertisingAt = 0;
+
+static void bootLog(const char* msg) {
+  Serial.println(msg);
+  Serial.flush();
+}
 
 // ---------------------
 // Dual-core queues
@@ -418,8 +425,8 @@ static QueueHandle_t qCmd = nullptr;   // BLE RX -> Core1
 static QueueHandle_t qTx  = nullptr;   // Core1 -> Core0 notify
 
 static TaskHandle_t rfTaskHandle = nullptr;
-volatile bool safetyStopRequested = false;
-volatile bool holdoffRequested = false;
+static volatile bool safetyStopRequested = false;
+static volatile bool holdoffRequested = false;
 
 struct CmdMsg {
   char line[96];
@@ -879,6 +886,8 @@ public:
   void onConnect(NimBLEServer* s) {
     (void)s;
     deviceConnected = true;
+    bleAdvertising = false;
+    restartAdvertisingRequested = false;
     uiLogLine("BLE conectado");
     // não faz RF aqui
   }
@@ -886,6 +895,8 @@ public:
   void onConnect(NimBLEServer* s, NimBLEConnInfo& ci) {
     (void)s;
     deviceConnected = true;
+    bleAdvertising = false;
+    restartAdvertisingRequested = false;
     bleEncrypted = ci.isEncrypted();
     bleBonded = ci.isBonded();
     // solicita intervalo menor para reduzir latencia
@@ -905,10 +916,10 @@ public:
 
     // solicita safety holdoff no Core1
     safetyStopRequested = true;
+    restartAdvertisingAt = millis() + 500;
+    restartAdvertisingRequested = true;
 
     uiLogLine("BLE desconectou");
-
-    NimBLEDevice::getAdvertising()->start();
   }
 
   void onDisconnect(NimBLEServer* s, NimBLEConnInfo& ci, int reason) {
@@ -920,9 +931,9 @@ public:
     uiSetDual(false);
 
     safetyStopRequested = true;
+    restartAdvertisingAt = millis() + 500;
+    restartAdvertisingRequested = true;
     uiLogLine("BLE desconectou");
-
-    NimBLEDevice::getAdvertising()->start();
   }
 
   void onAuthenticationComplete(NimBLEConnInfo& ci) {
@@ -979,12 +990,15 @@ private:
     up.toUpperCase();
     if (up.startsWith("HOLDOFF")) {
       holdoffRequested = true;
+      if (qCmd) xQueueReset(qCmd);
     }
 
     char buf[CMD_LINE_BUF];
     memset(buf, 0, sizeof(buf));
     pendingLine.toCharArray(buf, sizeof(buf));
-    enqueueCmdFromISRorCB(buf);
+    if (!enqueueCmdFromISRorCB(buf)) {
+      enqueueTx("ERR CMD QUEUE");
+    }
     pendingLine = "";
   }
 };
@@ -993,11 +1007,18 @@ private:
 // BLE advertising helper
 // ---------------------
 static void bleStartAdvertising() {
+  if (deviceConnected) return;
+
   NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
+  if (adv->isAdvertising()) {
+    bleAdvertising = true;
+    restartAdvertisingRequested = false;
+    return;
+  }
+
   NimBLEAdvertisementData advData;
   NimBLEAdvertisementData scanData;
 
-  adv->stop();
   adv->setMinInterval(80);
   adv->setMaxInterval(160);
 
@@ -1010,6 +1031,8 @@ static void bleStartAdvertising() {
   adv->setAdvertisementData(advData);
   adv->setScanResponseData(scanData);
   adv->start();
+  bleAdvertising = true;
+  restartAdvertisingRequested = false;
 }
 
 // ---------------------
@@ -1018,6 +1041,7 @@ static void bleStartAdvertising() {
 void setup() {
   Serial.begin(115200);
   delay(200);
+  bootLog("[BOOT] SCOLLAR BLE FIX 2026-04-29");
 
   pinMode(TX_PIN, OUTPUT); digitalWrite(TX_PIN, LOW);
   pinMode(LED_BUILTIN, OUTPUT); rfLed(false);
@@ -1039,7 +1063,7 @@ void setup() {
   uiLogLine("Aguardando BLE...");
 
   // Queues
-  qCmd = xQueueCreate(16, sizeof(CmdMsg));
+  qCmd = xQueueCreate(32, sizeof(CmdMsg));
   qTx  = xQueueCreate(16, sizeof(TxMsg));
 
   // Core1 RF task (alta prioridade)
@@ -1054,17 +1078,28 @@ void setup() {
   );
 
   // BLE init (Core0)
-  NimBLEDevice::init("SCOLLAR-CONTROL-BLE");
+  bootLog("[BLE] init");
+  if (!NimBLEDevice::init("SCOLLAR-CONTROL-BLE")) {
+    bootLog("[BLE] init FAIL");
+    for (;;) delay(1000);
+  }
+  bootLog("[BLE] init OK");
+  bootLog("[BLE] setMTU");
   NimBLEDevice::setMTU(185); // menor overhead por comando
-  NimBLEDevice::setPower(ESP_PWR_LVL_P9);
+  bootLog("[BLE] setPower skipped");
+  // Avoid early HCI power command on some Arduino-ESP32/NimBLE combinations.
+  // NimBLEDevice::setPower(ESP_PWR_LVL_P9);
 
   // Just Works + bonding (reconexão silenciosa após parear, quando SO permitir)
+  bootLog("[BLE] security");
   NimBLEDevice::setSecurityAuth(true, false, true);
   NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
 
+  bootLog("[BLE] createServer");
   NimBLEServer* server = NimBLEDevice::createServer();
   server->setCallbacks(new ServerCallbacks());
 
+  bootLog("[BLE] createService");
   NimBLEService* svc = server->createService(NUS_SERVICE_UUID);
 
   pTxCharacteristic = svc->createCharacteristic(
@@ -1078,10 +1113,12 @@ void setup() {
   );
   rxChar->setCallbacks(new RxCallbacks());
 
+  bootLog("[BLE] serviceStart");
   svc->start();
+  bootLog("[BLE] advertisingStart");
   bleStartAdvertising();
 
-  Serial.println("[BOOT] ready");
+  bootLog("[BOOT] ready BLE FIX 2026-04-29");
 }
 
 void loop() {
@@ -1115,8 +1152,13 @@ void loop() {
 
   // 3) Watchdog de advertising
   static unsigned long lastKick = 0;
-  if (!deviceConnected && (millis() - lastKick) > 15000) {
-    NimBLEDevice::getAdvertising()->start();
+  if (restartAdvertisingRequested && !deviceConnected && millis() >= restartAdvertisingAt) {
+    bleStartAdvertising();
+    lastKick = millis();
+  }
+
+  if (!deviceConnected && !bleAdvertising && (millis() - lastKick) > 15000) {
+    bleStartAdvertising();
     lastKick = millis();
   }
 

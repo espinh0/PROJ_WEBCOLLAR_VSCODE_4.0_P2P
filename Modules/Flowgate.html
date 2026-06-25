@@ -35,8 +35,8 @@
         <div class="d-flex flex-column">
           <label class="form-label small text-muted mb-1">Transporte</label>
           <select id="tr-signal-select" class="form-select form-select-sm" style="min-width: 220px;">
-            <option value="peerjs">PeerJS (P2P)</option>
             <option value="firebase">Firebase (RTDB)</option>
+            <option value="peerjs">PeerJS (P2P)</option>
           </select>
         </div>
         <div class="d-flex flex-column">
@@ -182,7 +182,8 @@
     const logEl = $('tr-log');
     const copyLogBtn = $('tr-copy-log-btn');
 
-    const STORAGE_KEY = 'trystero_widget_state_v5';
+    const STORAGE_KEY = 'flowgate_widget_state_v5';
+    const LEGACY_STORAGE_KEY = 'trystero_widget_state_v5';
     const DEFAULT_ROOM = 'PET998DR';
     const DEFAULT_PASS = 'flowgate-pass-2f1b6d0f9c21419a92f2c0d4';
     const STABLE_ID_STORAGE = 'trystero_nostr_priv_hex'; // reuse legacy key for stable id
@@ -190,8 +191,10 @@
     const PEERJS_SERVER_PORT = 443;
     const PEERJS_SERVER_PATH = '/';
     const PEERJS_SERVER_KEY = 'peerjs';
-    const SIGNALING_DEFAULT = 'peerjs';
+    const SIGNALING_DEFAULT = 'firebase';
+    const SIGNALING_DEFAULT_VERSION = 2;
     const SIGNALING_ALLOWED = new Set(['peerjs', 'firebase']);
+    const AUTO_TURN_FALLBACK_ENABLED = false;
     const FIREBASE_CONFIG = {
       apiKey: "AIzaSyCwlgt8N4S6iFL_w0_-YFiB2T94vvOguOQ",
       authDomain: "ptrainer-sinal.firebaseapp.com",
@@ -499,7 +502,10 @@
       }
     }
     function loadState() {
-      try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') || {}; }
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY) || '{}';
+        return JSON.parse(raw) || {};
+      }
       catch { return {}; }
     }
     function getHostIdMemory() {
@@ -561,14 +567,14 @@
       if (!val) return '';
       return SIGNALING_ALLOWED.has(val) ? val : '';
     }
-    function resolveSignalingMode(stored) {
+    function resolveSignalingMode(stored, state = {}) {
       const url = new URL(window.location.href);
       const signal = (url.searchParams.get('signal') || '').trim().toLowerCase();
       const fromUrl = sanitizeSignalingMode(signal);
       if (fromUrl) return fromUrl;
       if (signal) log(`Sinalizador ignorado: ${signal}`);
       const fromStored = sanitizeSignalingMode(stored);
-      if (fromStored) return fromStored;
+      if (fromStored && Number(state.signalDefaultVersion || 0) >= SIGNALING_DEFAULT_VERSION) return fromStored;
       return SIGNALING_DEFAULT;
     }
 
@@ -717,6 +723,7 @@
     }
     function handleNetworkChange() {
       if (activeTransport === 'firebase') return;
+      if (!AUTO_TURN_FALLBACK_ENABLED) return;
       if (preferredIceMode !== 'auto') return;
       const nextMode = resolveAutoIceMode('change');
       if (!room) return;
@@ -819,7 +826,7 @@
           log(`TURN probe fail: no relay candidates (${label}, ${done}, cands=${candCount})`);
           const wantsTurn = sanitizeIceMode(preferredIceMode) !== 'stun';
           const hostConnecting = !!hostConnectTimer;
-          const allowSwitch = shouldForceTurnFallback('turn-probe');
+          const allowSwitch = AUTO_TURN_FALLBACK_ENABLED && shouldForceTurnFallback('turn-probe');
           const shouldSwitch = allowSwitch && wantsTurn && !connectInProgress && !hostConnecting && (!room || !isConnectionAlive() || !(hostConn && hostConn.open));
           if (shouldSwitch) {
             if (iceMode === 'turn') requestTurnFailover('turn-probe');
@@ -871,6 +878,10 @@
     }
 
     function requestTurnFailover(reason) {
+      if (!AUTO_TURN_FALLBACK_ENABLED) {
+        log(`TURN failover automatico desativado (${reason || 'falha'}).`);
+        return false;
+      }
       if (turnFailoverPending) return false;
       if (TURN_PRESETS.length < 2) return false;
       if (connectInProgress) return false;
@@ -911,13 +922,16 @@
     const PEERJS_UMD_FALLBACK = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js';
     const PEER_OPEN_TIMEOUT_MS = 12000;
     const FIREBASE_ROOM_ROOT = 'flowgate/rooms';
-    const FIREBASE_SESSION_GRACE_MS = 10000;
+    const FIREBASE_SESSION_GRACE_MS = 2000;
     const FIREBASE_MESSAGE_TTL_MS = 45000;
+    const FIREBASE_PRESENCE_TTL_MS = 45000;
+    const FIREBASE_PRESENCE_INTERVAL_MS = 15000;
     const FIREBASE_SEEN_MAX = 1200;
 
     let firebaseApp = null;
     let firebaseDb = null;
     let firebaseApi = null;
+    let firebaseInitPromise = null;
     let firebaseRoomKey = '';
     let firebaseSessionStart = 0;
     let firebaseConnected = false;
@@ -956,6 +970,11 @@
 
     function firebaseRoomPath(roomKey) {
       return `${FIREBASE_ROOM_ROOT}/${roomKey}`;
+    }
+
+    function isFirebasePresenceStale(val, now = Date.now()) {
+      const t = Number(val?.t || 0);
+      return !!(t && (now - t) > FIREBASE_PRESENCE_TTL_MS);
     }
 
     function rememberFirebaseMessage(id) {
@@ -1014,38 +1033,45 @@
 
     async function ensureFirebase() {
       if (firebaseApi && firebaseDb) return firebaseApi;
-      try {
-        const appMod = await import('https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js');
-        const authMod = await import('https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js');
-        const dbMod = await import('https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js');
-        const apps = (typeof appMod.getApps === 'function') ? appMod.getApps() : [];
-        const app = apps && apps.length ? appMod.getApp() : appMod.initializeApp(FIREBASE_CONFIG);
-        const auth = authMod.getAuth(app);
-        await authMod.signInAnonymously(auth);
-        const db = dbMod.getDatabase(app);
-        firebaseApp = app;
-        firebaseDb = db;
-        firebaseApi = {
-          ref: dbMod.ref,
-          set: dbMod.set,
-          push: dbMod.push,
-          remove: dbMod.remove,
-          onValue: dbMod.onValue,
-          onChildAdded: dbMod.onChildAdded,
-          onChildChanged: dbMod.onChildChanged,
-          onChildRemoved: dbMod.onChildRemoved,
-          onDisconnect: dbMod.onDisconnect,
-          query: dbMod.query,
-          orderByChild: dbMod.orderByChild,
-          startAt: dbMod.startAt,
-          limitToLast: dbMod.limitToLast,
-          db
-        };
-        return firebaseApi;
-      } catch (e) {
-        log(`Firebase indisponivel: ${e?.message || e}`);
-        return null;
-      }
+      if (firebaseInitPromise) return firebaseInitPromise;
+      firebaseInitPromise = (async () => {
+        try {
+          const [appMod, authMod, dbMod] = await Promise.all([
+            import('https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js'),
+            import('https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js'),
+            import('https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js')
+          ]);
+          const apps = (typeof appMod.getApps === 'function') ? appMod.getApps() : [];
+          const app = apps && apps.length ? appMod.getApp() : appMod.initializeApp(FIREBASE_CONFIG);
+          const auth = authMod.getAuth(app);
+          if (!auth.currentUser) await authMod.signInAnonymously(auth);
+          const db = dbMod.getDatabase(app);
+          firebaseApp = app;
+          firebaseDb = db;
+          firebaseApi = {
+            ref: dbMod.ref,
+            set: dbMod.set,
+            push: dbMod.push,
+            remove: dbMod.remove,
+            onValue: dbMod.onValue,
+            onChildAdded: dbMod.onChildAdded,
+            onChildChanged: dbMod.onChildChanged,
+            onChildRemoved: dbMod.onChildRemoved,
+            onDisconnect: dbMod.onDisconnect,
+            query: dbMod.query,
+            orderByChild: dbMod.orderByChild,
+            startAt: dbMod.startAt,
+            limitToLast: dbMod.limitToLast,
+            db
+          };
+          return firebaseApi;
+        } catch (e) {
+          log(`Firebase indisponivel: ${e?.message || e}`);
+          firebaseInitPromise = null;
+          return null;
+        }
+      })();
+      return firebaseInitPromise;
     }
 
     function scheduleFirebaseCleanup(action, key) {
@@ -1067,7 +1093,7 @@
       const api = firebaseApi;
       const baseRef = api.ref(api.db, `${firebaseRoomPath(firebaseRoomKey)}/actions/${action}`);
       const startAtTs = (firebaseSessionStart || Date.now()) - FIREBASE_SESSION_GRACE_MS;
-      const queryRef = api.query(baseRef, api.orderByChild('ts'), api.startAt(startAtTs));
+      const queryRef = api.query(baseRef, api.orderByChild('ts'), api.startAt(startAtTs), api.limitToLast(100));
       const unsub = api.onChildAdded(queryRef, (snap) => {
         const data = snap.val();
         if (!data || data.__flowgate !== FLOWGATE_PROTO) return;
@@ -1084,14 +1110,22 @@
 
     function markFirebasePeerOffline(peerId) {
       if (!peerId) return;
-      const key = String(peerId);
-      const cur = peers.get(key);
-      if (!cur || cur.online === false) return;
-      cur.online = false;
-      cur.lastSeen = Date.now();
-      peers.set(key, cur);
-      if (key !== STABLE_SELF_ID) emitPeerEvent('peer-leave', key, cur);
-      if (activeTransport === 'firebase') notifyPeerLeave(key, false);
+      const raw = String(peerId);
+      let key = raw;
+      let cur = peers.get(key);
+      if (!cur) {
+        for (const [candidateKey, meta] of peers.entries()) {
+          if (candidateKey === raw || meta?.sid === raw || meta?.peerId === raw) {
+            key = candidateKey;
+            cur = meta;
+            break;
+          }
+        }
+      }
+      if (!cur) return;
+      peers.delete(key);
+      if (key !== STABLE_SELF_ID && cur.sid !== STABLE_SELF_ID) emitPeerEvent('peer-leave', cur.sid || key, cur);
+      if (activeTransport === 'firebase') notifyPeerLeave(cur.sid || key, false);
       renderPeerList();
       updateStatusDetails();
     }
@@ -1106,7 +1140,17 @@
         if (!val) return;
         const peerId = String(val.peerId || snap.key || '');
         if (!peerId) return;
-        if (peerId === selfIdFn()) return;
+        const sid = String(val.sid || peerId || '');
+        if (peerId === selfIdFn() || sid === STABLE_SELF_ID) return;
+        if (isFirebasePresenceStale(val)) {
+          markFirebasePeerOffline(sid || peerId);
+          try {
+            const staleRef = api.ref(api.db, `${firebaseRoomPath(firebaseRoomKey)}/presence/${snap.key}`);
+            const remove = api.remove(staleRef);
+            if (remove && typeof remove.catch === 'function') remove.catch(() => {});
+          } catch {}
+          return;
+        }
         const payload = { ...val, peerId };
         trackRecv(payload);
         dispatchAction('presence', payload, peerId);
@@ -1443,7 +1487,7 @@
         const next = sanitizeSignalingMode(signalSelectEl.value) || SIGNALING_DEFAULT;
         if (next === signalingMode) return;
         signalingMode = next;
-        saveState({ signalingMode });
+        saveState({ signalingMode, signalDefaultVersion: SIGNALING_DEFAULT_VERSION });
         generateInviteLink();
         refreshRelayUi();
         if (room) {
@@ -1693,14 +1737,31 @@
       emitFlowgateEvent(flowgateName, detail);
     }
 
+    function normalizePeerKey(peerId, sid) {
+      return String(sid || peerId || '').trim();
+    }
+
     function upsertPeer(peerId, meta = {}) {
       if (!peerId && !meta.sid) return;
       const now = Date.now();
-      const key = meta.sid || peerId;
+      const sid = String(meta.sid || '').trim();
+      const pid = String(peerId || meta.peerId || '').trim();
+      const key = normalizePeerKey(pid, sid);
       let cur = peers.get(key);
-      if (!cur && meta.sid && peerId && peers.has(peerId)) {
-        cur = peers.get(peerId);
-        peers.delete(peerId);
+      let wasOnline = cur ? cur.online !== false : false;
+      for (const [aliasKey, aliasMeta] of Array.from(peers.entries())) {
+        if (aliasKey === key) continue;
+        const sameSid = !!sid && (aliasKey === sid || aliasMeta?.sid === sid);
+        const samePeerId = !!pid && (aliasKey === pid || aliasMeta?.peerId === pid);
+        if (!sameSid && !samePeerId) continue;
+        if (aliasMeta?.online !== false) wasOnline = true;
+        if (!cur) cur = aliasMeta;
+        else {
+          if (!cur.name && aliasMeta?.name) cur.name = aliasMeta.name;
+          if ((!cur.tags || !cur.tags.size) && aliasMeta?.tags) cur.tags = aliasMeta.tags;
+          cur.lastSeen = Math.max(Number(cur.lastSeen || 0), Number(aliasMeta?.lastSeen || 0), now);
+        }
+        peers.delete(aliasKey);
       }
       if (!cur) cur = { tags: new Set(['visitante']), lastSeen: now, online: false };
       if (typeof meta.name === 'string' && meta.name.trim()) cur.name = meta.name.trim();
@@ -1715,9 +1776,8 @@
       }
       cur.lastSeen = now;
       cur.online = meta.online === false ? false : true;
-      cur.peerId = peerId;
-      cur.sid = meta.sid || cur.sid;
-      const wasOnline = peers.has(key) ? peers.get(key).online !== false : false;
+      cur.peerId = pid || cur.peerId || key;
+      cur.sid = sid || cur.sid || key;
       peers.set(key, cur);
       if (!wasOnline && cur.online !== false && key !== STABLE_SELF_ID) {
         emitPeerEvent('peer-join', key, cur);
@@ -1862,6 +1922,7 @@
       });
 
       for (const [key, meta] of entries) {
+        if (meta?.online === false) continue;
         if (meta.tags.has('host')) {
           hosts.push([key, meta]);
         } else if (meta.name && meta.name.toLowerCase().startsWith('bot-')) {
@@ -1899,15 +1960,16 @@
     function sweepPeers(timeoutMs) {
       const effectiveTimeout = (Number.isFinite(timeoutMs) && timeoutMs > 0)
         ? timeoutMs
-        : (activeTransport === 'firebase' ? 180000 : 9000);
+        : (activeTransport === 'firebase' ? FIREBASE_PRESENCE_TTL_MS : 9000);
       const now = Date.now();
       let changed = false;
       for (const [key, meta] of peers.entries()) {
+        if (key === STABLE_SELF_ID || meta?.sid === STABLE_SELF_ID) continue;
         if (!meta?.lastSeen) continue;
         const isStale = (now - meta.lastSeen) > effectiveTimeout;
-        if (isStale && meta.online !== false) {
-          meta.online = false;
-          if (key !== STABLE_SELF_ID) emitPeerEvent('peer-leave', key, meta);
+        if (isStale) {
+          peers.delete(key);
+          if (key !== STABLE_SELF_ID && meta.sid !== STABLE_SELF_ID) emitPeerEvent('peer-leave', meta.sid || key, meta);
           if (activeTransport === 'firebase') notifyPeerLeave(key, false);
           changed = true;
         }
@@ -2381,8 +2443,7 @@
         if (!room || connectInProgress) return;
         if (!conn.open) return;
         if (pc.iceConnectionState !== 'disconnected') return;
-        log(`ICE ${label}: desconectado > ${ICE_DISCONNECT_GRACE_MS}ms, tentando relay`);
-        requestTurnFallback('ice-disconnected');
+        log(`ICE ${label}: desconectado > ${ICE_DISCONNECT_GRACE_MS}ms; fallback automatico desativado.`);
       }, ICE_DISCONNECT_GRACE_MS);
     }
 
@@ -2400,7 +2461,7 @@
         log(`${prefix} iceState=${pc.iceConnectionState}`);
         if (pc.iceConnectionState === 'failed') {
           clearIceDisconnectTimer(conn);
-          requestTurnFallback('ice-failed');
+          log(`ICE ${label}: failed; fallback automatico desativado.`);
           return;
         }
         if (pc.iceConnectionState === 'disconnected') {
@@ -2704,6 +2765,10 @@
 
     function requestTurnFallback(reason) {
       if (activeTransport === 'firebase') return;
+      if (!AUTO_TURN_FALLBACK_ENABLED) {
+        log(`Fallback TURN automatico desativado (${reason || 'host'}).`);
+        return;
+      }
       if (iceMode === 'turn') {
         requestTurnFailover(reason || 'ice-failed');
         return;
@@ -2986,7 +3051,7 @@
         const name = (userInput.value || '').trim();
         const autojoin = true;
 
-        saveState({ room: roomId, pass: password, name, autojoin, signalingMode });
+        saveState({ room: roomId, pass: password, name, autojoin, signalingMode, signalDefaultVersion: SIGNALING_DEFAULT_VERSION });
         generateInviteLink();
         const useFirebase = signalingMode === 'firebase';
 
@@ -3183,6 +3248,11 @@
         if (data?.hostId) setActiveHostId(String(data.hostId), 'presence');
         const pid = String(data?.peerId || peerId || '');
         const sid = data?.sid || pid;
+        if (sid === STABLE_SELF_ID || pid === selfPeerId()) return;
+        if (activeTransport === 'firebase' && isFirebasePresenceStale(data)) {
+          markFirebasePeerOffline(sid || pid);
+          return;
+        }
         upsertPeer(pid || sid, { name: data?.name, tags: data?.tags, online: true, sid });
         renderPeerList();
         forwardPresenceToPeers(data, pid);
@@ -3211,7 +3281,7 @@
         }, burstEveryMs);
       }
 
-      const presenceInterval = (activeTransport === 'firebase') ? 60000 : 1000;
+      const presenceInterval = (activeTransport === 'firebase') ? FIREBASE_PRESENCE_INTERVAL_MS : 1000;
       presenceTimer = setInterval(() => announcePresence(), presenceInterval);
       const sweepInterval = (activeTransport === 'firebase') ? 6000 : 1500;
       presenceSweepTimer = setInterval(() => sweepPeers(), sweepInterval);
@@ -3306,7 +3376,7 @@
       startBandwidthTimer();
       const stored = loadState();
       const qp = readUrlParams();
-      signalingMode = resolveSignalingMode(stored.signalingMode || stored.signal);
+      signalingMode = resolveSignalingMode(stored.signalingMode || stored.signal, stored);
       if (signalSelectEl) signalSelectEl.value = signalingMode;
       const storedTurnId = stored.turnPresetId || TURN_DEFAULT_ID;
       preferredIceMode = sanitizeIceMode(qp.ice || stored.iceMode || ICE_MODE_DEFAULT);
@@ -3328,7 +3398,7 @@
       cbIncPass.checked = (typeof stored.includePass === 'boolean') ? stored.includePass : true;
       cbIncName.checked = (typeof stored.includeName === 'boolean') ? stored.includeName : false;
       cbIncSignal.checked = (typeof stored.includeSignal === 'boolean') ? stored.includeSignal : true;
-      const hostStored = (typeof stored.localHost === 'boolean') ? stored.localHost : true;
+      const hostStored = (typeof stored.localHost === 'boolean') ? stored.localHost : false;
       hostBtn.classList.toggle('active', hostStored);
       if (hostStored) window.__TRYSTERO_PEER__.addLocalTag('host');
 
@@ -3343,7 +3413,8 @@
         localHost: hostStored,
         iceMode: preferredIceMode,
         turnPresetId: storedTurnId,
-        signalingMode
+        signalingMode,
+        signalDefaultVersion: SIGNALING_DEFAULT_VERSION
       });
 
       setUiExpanded(true);

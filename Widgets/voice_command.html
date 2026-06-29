@@ -2814,83 +2814,20 @@
     const line = String(payload || '').trim();
     if (!line) return false;
 
-    // Caminho principal: aproveitar sender central, quando exposto
-    if (typeof window.sendCommand === 'function') {
-      try {
-        const maybe = window.sendCommand(line);
-        if (maybe && typeof maybe.then === 'function') {
-          await maybe;
-        }
-        return true;
-      } catch (e) {
-        console.warn('[VOICE CMD] Falha em window.sendCommand, tentando fallback:', e);
-      }
-    }
+    const central = window.__COLLAR_COMMAND_API__;
+    const send = central && typeof central.send === 'function'
+      ? central.send.bind(central)
+      : (typeof window.sendCommand === 'function' ? window.sendCommand.bind(window) : null);
+    if (!send) return false;
 
-    // Fallback host: envio direto para SerialBridge
-    const serialReady = !!(
-      window.SerialBridge
-      && typeof window.SerialBridge.send === 'function'
-      && (window.SerialBridge.isConnected || window.serialConnected || (window.port && window.port.writable))
-    );
-    if (serialReady) {
-      try {
-        const maybe = window.SerialBridge.send(line);
-        if (maybe && typeof maybe.then === 'function') {
-          await maybe;
-        }
-        return true;
-      } catch (e) {
-        console.warn('[VOICE CMD] Falha em SerialBridge.send, tentando Flowgate:', e);
-      }
+    try {
+      const maybe = send(line, { source: 'voice-command' });
+      if (maybe && typeof maybe.then === 'function') await maybe;
+      return true;
+    } catch (e) {
+      console.warn('[VOICE CMD] Falha na Command API:', e);
+      return false;
     }
-
-    // Fallback Flowgate room cmd
-    const room = (window.Flowgate && window.Flowgate.room) ? window.Flowgate.room : window.__TRYSTERO_ROOM__;
-    if (room && typeof room.makeAction === 'function') {
-      try {
-        const pair = room.makeAction('cmd');
-        const sendCmd = Array.isArray(pair) ? pair[0] : null;
-        if (typeof sendCmd === 'function') {
-          sendCmd({
-            text: line.slice(0, 400),
-            name: (typeof window.getUsername === 'function' ? window.getUsername() : 'voice-command'),
-            timestamp: Date.now(),
-            id: `voice:${Date.now()}:${Math.random().toString(36).slice(2)}`
-          });
-          return true;
-        }
-      } catch (e) {
-        console.warn('[VOICE CMD] Falha em Flowgate room cmd:', e);
-      }
-    }
-
-    // Fallback cmd bus
-    const cmdBus = (window.__TRYSTERO_CMD__ && typeof window.__TRYSTERO_CMD__.send === 'function') ? window.__TRYSTERO_CMD__ : null;
-    if (cmdBus && (!cmdBus.isReady || cmdBus.isReady())) {
-      try {
-        const ok = cmdBus.send(line.slice(0, 400), { via: 'voice-command' });
-        return !!ok;
-      } catch (e) {
-        console.warn('[VOICE CMD] Falha em __TRYSTERO_CMD__.send:', e);
-      }
-    }
-
-    // Fallback chat bus
-    const chatBus = (window.__TRYSTERO_CHAT__ && typeof window.__TRYSTERO_CHAT__.send === 'function') ? window.__TRYSTERO_CHAT__ : null;
-    if (chatBus && (!chatBus.isReady || chatBus.isReady())) {
-      try {
-        const maybe = chatBus.send(line.slice(0, 400), { via: 'voice-command' });
-        if (maybe && typeof maybe.then === 'function') {
-          await maybe;
-        }
-        return true;
-      } catch (e) {
-        console.warn('[VOICE CMD] Falha em __TRYSTERO_CHAT__.send:', e);
-      }
-    }
-
-    return false;
   }
 
   // Expor função de comando para integração

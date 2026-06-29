@@ -1416,6 +1416,7 @@
   }
   .led-off { background: #6b7280; }
   .led-on  { background: #33ff77; box-shadow: 0 0 150px 60px rgba(51, 255, 119, 1); }
+  .led-warn { background: #facc15; box-shadow: 0 0 110px 45px rgba(250, 204, 21, 0.9); }
   .led-gap { background: #ff6666; box-shadow: 0 0 150px 60px rgba(255, 102, 102, 1); }
   .pill-idle { background: #1f2937; color: #e5e7eb; }
   .pill-run { background: #2563eb; color: #ffffff; }
@@ -1968,6 +1969,7 @@
   const CONTROL_LED_SOURCE_CMD = "maincontrol-cmd";
   const CONTROL_LED_SOURCE_HOLD = "maincontrol-hold";
   const controlLedCommands = new Map();
+  const controlLedWarnings = new Map();
   const controlLedGapSources = new Set();
   let holdCommandToken = null;
   let commandSendQueue = Promise.resolve();
@@ -2083,6 +2085,9 @@
       rampDownExponent: ramp.downExponent,
       reason: reason || "ramp-config"
     };
+  }
+  function getEffectiveAdvancedState(){
+    return normalizeAdvancedState(isAdvancedValuesActive() ? { ...advanced } : { ...ADV_DEFAULTS });
   }
   function persistState(){
     try {
@@ -2508,6 +2513,7 @@
   let boundControlRoom = null;
 
   function buildControlSnapshot(reason){
+    const effectiveAdvanced = getEffectiveAdvancedState();
     return {
       mode: currentMode,
       level,
@@ -2523,10 +2529,10 @@
       videoOpen,
       chartOpen,
       voiceOpen,
-      pulses: advanced.pulses,
-      gapMs: advanced.delayMs,
-      baseMs: advanced.durationMs,
-      preDelayMs: advanced.preDelayMs,
+      pulses: effectiveAdvanced.pulses,
+      gapMs: effectiveAdvanced.delayMs,
+      baseMs: effectiveAdvanced.durationMs,
+      preDelayMs: effectiveAdvanced.preDelayMs,
       ...buildRampPatch(reason || "snapshot"),
       reason: reason || "snapshot"
     };
@@ -2577,6 +2583,41 @@
     }
     return { type: "other", level: null };
   }
+  function updateGlobalHoldLatch(payload){
+    const raw = String(payload || "").trim();
+    const upper = raw.toUpperCase();
+    let next = null;
+    if (upper.startsWith("HOLDON ")) next = true;
+    else if (upper.startsWith("HOLDOFF")) next = false;
+    if (next === null) return;
+    window.__COLLAR_HOLD_ACTIVE__ = next;
+    try {
+      window.dispatchEvent(new CustomEvent("collar:hold_latch", {
+        detail: { active: next, command: raw, ts: Date.now() }
+      }));
+    } catch(_){}
+  }
+  function getCommandExecutionLatchMs(payload){
+    const raw = String(payload || "").trim();
+    const upper = raw.toUpperCase();
+    if (!raw) return 0;
+    if (upper.startsWith("HOLDON ")) return 250;
+    if (upper.startsWith("HOLDOFF")) return 250;
+    const parts = raw.split(",");
+    if (parts.length >= 4) {
+      const dur = Number(parts[parts.length - 1]);
+      if (Number.isFinite(dur) && dur > 0) return clampNum(Math.round(dur), 150, 60000);
+    }
+    return 250;
+  }
+  function applyControlSendResult(payload, result, silentLed){
+    if (silentLed) return;
+    if (result && result.serialConfirmed) {
+      beginControlCommand(CONTROL_LED_SOURCE_CMD, getCommandExecutionLatchMs(payload));
+      return;
+    }
+    beginControlWarning(CONTROL_LED_SOURCE_CMD, 700);
+  }
   function emitCommandFeedback(payload, transport){
     const parsed = parseCommandFeedback(payload);
     const detail = {
@@ -2595,12 +2636,14 @@
   async function sendCommandNow(payload){
     const serialReady = !!(window.SerialBridge && typeof window.SerialBridge.send === 'function' &&
       (window.SerialBridge.isConnected || window.serialConnected || (window.port && window.port.writable)));
+    let serialError = null;
     if (serialReady) {
       try {
         await window.SerialBridge.send(payload);
         emitCommandFeedback(payload, "serial");
-        return true;
+        return { ok: true, transport: "serial", serialConfirmed: true };
       } catch(e){
+        serialError = e;
         log(`Falha SerialBridge: ${e && e.message || e}`, "warn");
       }
     }
@@ -2619,7 +2662,7 @@
           };
           sendCmd(msg);
           emitCommandFeedback(payload, "room-cmd");
-          return true;
+          return { ok: true, transport: "room-cmd", serialConfirmed: false, serialError };
         } catch(e) {
           log(`Falha Flowgate (room cmd): ${e && e.message || e}`, "warn");
         }
@@ -2631,7 +2674,7 @@
       const ok = cmdBus.send(payload.slice(0, 400), { via: 'maincontrol' });
       if (!ok) log('Falha Flowgate (cmd): comando nao enviado.', "warn");
       if (ok) emitCommandFeedback(payload, "cmd-bus");
-      return !!ok;
+      return { ok: !!ok, transport: "cmd-bus", serialConfirmed: false, serialError };
     }
 
     const chatBus = (window.__TRYSTERO_CHAT__ && typeof window.__TRYSTERO_CHAT__.send === 'function') ? window.__TRYSTERO_CHAT__ : null;
@@ -2640,35 +2683,59 @@
         const maybe = chatBus.send(payload.slice(0, 400), { via: 'maincontrol' });
         if (maybe && typeof maybe.then === 'function') await maybe;
         emitCommandFeedback(payload, "chat-bus");
-        return true;
+        return { ok: true, transport: "chat-bus", serialConfirmed: false, serialError };
       } catch(e) {
         log(`Falha Flowgate (chat): ${e && e.message || e}`, "warn");
-        return false;
+        return { ok: false, transport: "chat-bus", serialConfirmed: false, serialError: e };
       }
     }
 
     log('Flowgate/SerialBridge indisponivel: comando nao enviado.', "warn");
-    return false;
+    return { ok: false, transport: "none", serialConfirmed: false, serialError };
   }
   function sendCommand(text, opts = {}){
     const payload = String(text || '').trim();
-    if (!payload) return;
+    if (!payload) return Promise.resolve(false);
     const guard = (opts && typeof opts.guard === "function") ? opts.guard : null;
     const force = !!opts.force;
+    const silentLed = !!opts.silentLed;
     const generation = Number.isFinite(opts.generation) ? Number(opts.generation) : commandQueueGeneration;
-    pulseControlLed(CONTROL_LED_SOURCE_CMD, 220);
     commandSendQueue = commandSendQueue
       .catch(() => {})
       .then(() => {
         if (!force && generation !== commandQueueGeneration) return false;
         if (guard && !guard()) return false;
-        return sendCommandNow(payload);
+        return Promise.resolve(sendCommandNow(payload))
+          .then((result) => {
+            applyControlSendResult(payload, result, silentLed);
+            if (result && result.serialConfirmed) updateGlobalHoldLatch(payload);
+            return !!(result && result.ok);
+          });
       });
+    return commandSendQueue;
   }
   function sendLatestCommand(text, opts = {}){
     flushPendingCommandQueue();
     return sendCommand(text, opts);
   }
+
+  function installCentralCommandApi(){
+    const api = {
+      send(text, opts = {}) {
+        return sendCommand(text, opts);
+      },
+      sendLatest(text, opts = {}) {
+        return sendLatestCommand(text, opts);
+      },
+      isReady: isSerialReady,
+      getTransportReady: isSerialReady
+    };
+    window.__COLLAR_COMMAND_API__ = api;
+    window.sendCommand = function(text, opts = {}) {
+      return api.send(text, opts);
+    };
+  }
+  installCentralCommandApi();
 
   // ===== Helpers UI =====
   function initTooltips(){
@@ -2719,16 +2786,17 @@
   }
 
   function broadcastBasics(reason){
+    const effectiveAdvanced = getEffectiveAdvancedState();
     emitControlPatch({
       mode: currentMode,
       level,
       channel,
       dualOn,
       advancedEnabled,
-      pulses: advanced.pulses,
-      gapMs: advanced.delayMs,
-      baseMs: advanced.durationMs,
-      preDelayMs: advanced.preDelayMs,
+      pulses: effectiveAdvanced.pulses,
+      gapMs: effectiveAdvanced.delayMs,
+      baseMs: effectiveAdvanced.durationMs,
+      preDelayMs: effectiveAdvanced.preDelayMs,
       ...buildRampPatch(reason || "remote-basic"),
       reason: reason || "remote-basic"
     });
@@ -2816,7 +2884,17 @@
       requestAdvStop();
     }
     if (opts.persist !== false) persistState();
-    if (opts.broadcast !== false) emitControlPatch({ advancedEnabled, reason: opts.reason || "advanced-values-toggle" });
+    if (opts.broadcast !== false) {
+      const effectiveAdvanced = getEffectiveAdvancedState();
+      emitControlPatch({
+        advancedEnabled,
+        pulses: effectiveAdvanced.pulses,
+        gapMs: effectiveAdvanced.delayMs,
+        baseMs: effectiveAdvanced.durationMs,
+        preDelayMs: effectiveAdvanced.preDelayMs,
+        reason: opts.reason || "advanced-values-toggle"
+      });
+    }
   }
   function syncAdvancedReadouts(){
     const active = isAdvancedValuesActive();
@@ -2930,19 +3008,42 @@
 
   function applyControlLedPhase(phase){
     if (!controlExecLedEl) return;
-    controlExecLedEl.classList.remove("led-on", "led-off", "led-gap");
-    const cls = phase === "on" ? "led-on" : (phase === "gap" ? "led-gap" : "led-off");
+    controlExecLedEl.classList.remove("led-on", "led-off", "led-gap", "led-warn");
+    const cls = phase === "on" ? "led-on" : (phase === "warn" ? "led-warn" : (phase === "gap" ? "led-gap" : "led-off"));
     controlExecLedEl.classList.add(cls);
   }
 
   function resolveControlLedPhase(){
     if (controlLedCommands.size > 0) return "on";
+    if (controlLedWarnings.size > 0) return "warn";
     if (controlLedGapSources.size > 0) return "gap";
     return "off";
   }
 
+  function isControlExecBusy(){
+    return resolveControlLedPhase() !== "off";
+  }
+
+  function emitControlExecState(){
+    const phase = resolveControlLedPhase();
+    window.__CONTROL_EXEC_ACTIVE__ = phase !== "off";
+    try {
+      window.dispatchEvent(new CustomEvent("control:exec_state", {
+        detail: {
+          active: phase !== "off",
+          phase,
+          commandCount: controlLedCommands.size,
+          warningCount: controlLedWarnings.size,
+          gapCount: controlLedGapSources.size,
+          ts: Date.now()
+        }
+      }));
+    } catch(_){}
+  }
+
   function updateControlLed(){
     applyControlLedPhase(resolveControlLedPhase());
+    emitControlExecState();
   }
 
   function beginControlCommand(source, ttlMs=200){
@@ -2965,6 +3066,26 @@
     updateControlLed();
   }
 
+  function beginControlWarning(source, ttlMs=700){
+    const token = Symbol(String(source || "warn"));
+    const ms = Number(ttlMs) || 0;
+    let timer = null;
+    if (ms > 0) {
+      timer = setTimeout(() => endControlWarning(token), Math.max(80, ms));
+    }
+    controlLedWarnings.set(token, timer);
+    updateControlLed();
+    return token;
+  }
+
+  function endControlWarning(token){
+    if (!controlLedWarnings.has(token)) return;
+    const timer = controlLedWarnings.get(token);
+    if (timer) clearTimeout(timer);
+    controlLedWarnings.delete(token);
+    updateControlLed();
+  }
+
   function setControlLedGap(source){
     const key = String(source || "gap");
     controlLedGapSources.add(key);
@@ -2984,9 +3105,20 @@
   window.__CONTROL_LED_API__ = {
     beginCommand: beginControlCommand,
     endCommand: endControlCommand,
+    beginWarning: beginControlWarning,
+    endWarning: endControlWarning,
     setGap: setControlLedGap,
     clearGap: clearControlLedGap,
-    pulse: pulseControlLed
+    pulse: pulseControlLed,
+    isBusy: isControlExecBusy,
+    getPhase: resolveControlLedPhase
+  };
+  window.__CONTROL_EXEC_API__ = {
+    isBusy: isControlExecBusy,
+    getPhase: resolveControlLedPhase,
+    getCommandCount: () => controlLedCommands.size,
+    getWarningCount: () => controlLedWarnings.size,
+    getGapCount: () => controlLedGapSources.size
   };
 
   // Led control via __CONTROL_LED_API__ only (avoid double sources).
@@ -3484,6 +3616,7 @@
 
   function applyAdvancedPatch(payload, opts = {}){
     if (!payload || typeof payload !== "object") return;
+    if (payload.advancedEnabled === false) return;
     const next = { ...advanced };
     let changed = false;
     if (payload.pulses != null && Number.isFinite(Number(payload.pulses))) {

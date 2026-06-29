@@ -36,7 +36,7 @@
       </div>
 
       <div style="margin-top:.35rem;font-size:.78rem;color:#9ca3af;line-height:1.3;">
-        Envia "PING" periodicamente (silencioso). Usa SerialBridge.send; nao chama ensureSerial().
+        Envia "PING" periodicamente (silencioso). Usa Command API; nao chama ensureSerial().
       </div>
       </div>
 
@@ -212,9 +212,10 @@
 
   async function writePingLine() {
     if (!isHost()) return false;
-    if (window.SerialBridge && typeof window.SerialBridge.send === 'function') {
+    const central = window.__COLLAR_COMMAND_API__;
+    if (central && typeof central.send === 'function') {
       try {
-        await window.SerialBridge.send('PING');
+        await central.send('PING', { source: 'heartbeat', force: true, silentLed: true });
         return true;
       } catch (_) {
         return false;
@@ -265,6 +266,36 @@
 
   function setKeepAwakeStatus(text) {
     if (kaStatusEl) kaStatusEl.textContent = text;
+  }
+
+  function setHoldActiveFromSignal(active, source, command) {
+    const next = !!active;
+    if (holdActive === next && window.__COLLAR_HOLD_ACTIVE__ === next) return;
+    holdActive = next;
+    window.__COLLAR_HOLD_ACTIVE__ = next;
+    if (next) {
+      holdActiveSince = Date.now();
+      console.log('[HB+KA] HOLD ativo por sinal global' + (source ? ' (' + source + ')' : '') + ':', command || '');
+      return;
+    }
+    const now = Date.now();
+    holdActiveChannel = 0;
+    holdActiveSince = 0;
+    KA_CHANNELS.forEach((ch) => { lastActivityByCh[ch] = now; });
+    console.log('[HB+KA] HOLD inativo por sinal global' + (source ? ' (' + source + ')' : '') + ':', command || '');
+  }
+
+  function onGlobalHoldLatch(ev) {
+    const detail = ev && ev.detail ? ev.detail : {};
+    if (typeof detail.active !== 'boolean') return;
+    setHoldActiveFromSignal(detail.active, 'collar:hold_latch', detail.command);
+  }
+
+  function onHoldState(ev) {
+    const detail = ev && ev.detail ? ev.detail : {};
+    const state = detail.state || {};
+    if (typeof state.on !== 'boolean') return;
+    setHoldActiveFromSignal(state.on, detail.meta && detail.meta.via || 'hold:state', state.cmd || '');
   }
 
   function markHoldFromCommandLine(line, source) {
@@ -487,8 +518,9 @@
 
   // ======== Escrita interna do KeepAwake ========
   function writeSerialKeepAwake(line, channels) {
-    if (!(window.SerialBridge && typeof window.SerialBridge.send === 'function')) {
-      console.log('[HB+KA] SerialBridge indisponivel (conecte a porta primeiro).');
+    const central = window.__COLLAR_COMMAND_API__;
+    if (!(central && typeof central.send === 'function')) {
+      console.log('[HB+KA] Command API indisponivel (conecte a porta primeiro).');
       return;
     }
 
@@ -496,7 +528,7 @@
       const now = Date.now();
       const sentChannels = Array.isArray(channels) ? channels : [channels].filter(Boolean);
       sentChannels.forEach((ch) => { lastKeepAwakeSendByCh[ch] = now; });
-      window.SerialBridge.send(String(line || ''));
+      central.send(String(line || ''), { source: 'keep-awake', force: true, silentLed: true });
       console.log('[HB+KA] Enviado (keep-awake):', line);
     } catch (err) {
       console.log('[HB+KA] Erro ao enviar (keep-awake):', err);
@@ -505,7 +537,15 @@
 
   function sendKeepAwakeIfIdle() {
     if (!keepAwakeEnabled || !isHost()) return;
-    if (holdActive) {
+    const execApi = window.__CONTROL_EXEC_API__;
+    const commandBusy = !!(execApi && typeof execApi.isBusy === 'function' && execApi.isBusy());
+    if (commandBusy) {
+      const phase = execApi && typeof execApi.getPhase === 'function' ? execApi.getPhase() : 'busy';
+      console.log('[HB+KA] Execucao ativa (' + phase + '), keep-awake adiado.');
+      return;
+    }
+    const globalHoldActive = window.__COLLAR_HOLD_ACTIVE__ === true;
+    if (holdActive || globalHoldActive) {
       const ageSec = holdActiveSince ? Math.round((Date.now() - holdActiveSince) / 1000) : 0;
       const ageInfo = ageSec ? ` (${ageSec}s)` : '';
       console.log('[HB+KA] Hold ativo' + ageInfo + ', keep-awake adiado.');
@@ -710,6 +750,8 @@
 
   window.addEventListener('flowgate:local_tags_changed', () => syncAll());
   window.addEventListener('trystero:localTags', () => syncAll());
+  window.addEventListener('collar:hold_latch', onGlobalHoldLatch);
+  window.addEventListener('hold:state', onHoldState);
 
   document.addEventListener('visibilitychange', handleVisibilityChange);
 

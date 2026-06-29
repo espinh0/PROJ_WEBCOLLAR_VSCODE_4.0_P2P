@@ -1803,11 +1803,12 @@
   async function sendCollarCommand(line) {
     const txt = String(line || "").trim();
     if (!txt) return;
-    if (window.SerialBridge && typeof window.SerialBridge.send === "function") {
-      await window.SerialBridge.send(txt);
+    const central = window.__COLLAR_COMMAND_API__;
+    if (central && typeof central.send === "function") {
+      await central.send(txt, { source: "naval" });
       return;
     }
-    console.warn("[battleship] SerialBridge.send indisponivel:", txt);
+    console.warn("[battleship] Command API indisponivel:", txt);
   }
 
   function getInheritedControl() {

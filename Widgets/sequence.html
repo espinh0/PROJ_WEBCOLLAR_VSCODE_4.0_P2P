@@ -313,8 +313,7 @@
 
 <script>
 (() => {
-  // ====== Config / Firebase compat (igual ao seu chat) ======
-  const PATH_MESSAGES = "livechat_v1/messages";
+  // ====== Config / Command API ======
   const $  = s => document.querySelector(s);
   const $$ = s => document.querySelectorAll(s);
   const log = (m, l = "info") => {
@@ -324,28 +323,21 @@
       };
 
   function getRoomRef() {
+        return null;
         if (!window.firebase || !firebase.apps || !firebase.apps.length) {
           throw new Error("Firebase não inicializado (carregue o chat antes).");
         }
         return firebase.database().ref(PATH_MESSAGES);
       }
-  const CID_KEY = "lc_cid";
-  const cid = sessionStorage.getItem(CID_KEY) || ("c_" + Math.random().toString(36).slice(2));
-  sessionStorage.setItem(CID_KEY, cid);
 
   async function pushToChat(text) {
         if (!text || !text.trim()) return;
-        const roomRef = getRoomRef();
-        const msgRef = roomRef.push();
-        try {
-          msgRef.onDisconnect().remove();
-        } catch (_) {}
-        await msgRef.set({
-          text: text.slice(0, 400),
-          ts: firebase.database.ServerValue.TIMESTAMP,
-          cid: cid
-        });
-        log(`CHAT ⇢ ${text}`);
+        const central = window.__COLLAR_COMMAND_API__;
+        if (!central || typeof central.send !== "function") {
+          throw new Error("Command API indisponivel.");
+        }
+        await central.send(text.slice(0, 400), { source: "sequence" });
+        log(`CMD => ${text}`);
       }
 
   // ====== Integração com o controle (valores default) ======

@@ -1113,14 +1113,15 @@
     const emitEcho = () => {
       try { window.dispatchEvent(new CustomEvent('collar:echo', { detail: { line: txt, source: 'fscore' } })); } catch(_){ }
     };
-    if (window.SerialBridge && typeof window.SerialBridge.send === 'function') {
+    const central = window.__COLLAR_COMMAND_API__;
+    if (central && typeof central.send === 'function') {
       try {
-        await window.SerialBridge.send(txt);
+        await central.send(txt, { source: 'fscore' });
         emitEcho();
         return;
-      } catch(e){ console.warn('falha SerialBridge', e); }
+      } catch(e){ console.warn('falha command API', e); }
     }
-    console.warn('SerialBridge.send indisponivel');
+    console.warn('Command API indisponivel');
   }
 
 
@@ -1554,9 +1555,15 @@ function mountProfileRows(){
     if (cfg.mode && ts > fieldTs.mode) { S.mode = String(cfg.mode); fieldTs.mode = ts; }
     if (cfg.level != null && ts > fieldTs.level) { S.level = clamp(parseInt(cfg.level,10)||0,0,100); fieldTs.level = ts; }
     if (cfg.channel != null && ts > fieldTs.channel) { S.channel = clamp(parseInt(cfg.channel,10)||1,1,99); fieldTs.channel = ts; }
-    if (cfg.gapMs != null && ts > fieldTs.gapMs) { S.gapMs = Math.max(10, parseInt(cfg.gapMs,10)||200); fieldTs.gapMs = ts; }
-    if (cfg.baseMs != null && ts > fieldTs.baseMs) { S.baseMs = Math.max(10, parseInt(cfg.baseMs,10)||300); fieldTs.baseMs = ts; }
-    if (cfg.preDelayMs != null && ts > fieldTs.preDelayMs) { S.preDelayMs = Math.max(0, parseInt(cfg.preDelayMs,10)||0); fieldTs.preDelayMs = ts; }
+    if (cfg.advancedEnabled === false) {
+      if (ts > fieldTs.gapMs) { S.gapMs = DEFAULTS.gapMs; fieldTs.gapMs = ts; }
+      if (ts > fieldTs.baseMs) { S.baseMs = DEFAULTS.baseMs; fieldTs.baseMs = ts; }
+      if (ts > fieldTs.preDelayMs) { S.preDelayMs = DEFAULTS.preDelayMs; fieldTs.preDelayMs = ts; }
+    } else {
+      if (cfg.gapMs != null && ts > fieldTs.gapMs) { S.gapMs = Math.max(10, parseInt(cfg.gapMs,10)||200); fieldTs.gapMs = ts; }
+      if (cfg.baseMs != null && ts > fieldTs.baseMs) { S.baseMs = Math.max(10, parseInt(cfg.baseMs,10)||300); fieldTs.baseMs = ts; }
+      if (cfg.preDelayMs != null && ts > fieldTs.preDelayMs) { S.preDelayMs = Math.max(0, parseInt(cfg.preDelayMs,10)||0); fieldTs.preDelayMs = ts; }
+    }
     if (cfg.profiles && typeof cfg.profiles === 'object'){
       for (const k of [1,2,3]){
         if (!cfg.profiles[k]) continue;

@@ -136,7 +136,7 @@ static uint64_t composeFrame(const char* mode, uint8_t level, uint8_t channel) {
 }
 
 static void sendFrame_once(uint64_t frame) {
-  rfFrameCount++;
+  rfFrameCount = rfFrameCount + 1;
   rfLed(true);
   sendPreamble_body();
   for (int i=0;i<41;i++){
@@ -211,7 +211,8 @@ static bool engineAddOff(uint32_t ms){
   return true;
 }
 
-static void engineEmitOnStep(const Step& s, uint8_t frames) {
+static void engineEmitOnStep(uint8_t idx, uint8_t frames) {
+  const Step& s = steps[idx];
   if (s.kind != STEP_ON_HOLD_MS) return;
   if (s.dual) {
     if (s.dualInterleave) sendCommandBurstDualInterleaved(s.frame, s.frame2, frames);
@@ -228,7 +229,7 @@ static void engineEmitOnStep(const Step& s, uint8_t frames) {
 static void engineStartStep(uint8_t idx) {
   const Step& s = steps[idx];
   if (s.kind == STEP_ON_HOLD_MS) {
-    engineEmitOnStep(s, ENGINE_ON_FRAMES_DEFAULT);
+    engineEmitOnStep(idx, ENGINE_ON_FRAMES_DEFAULT);
     if (!engineActive) return;
     engineNextOnRepeatAt_ms = millis() + ENGINE_ON_REPEAT_MS;
   } else {
@@ -253,7 +254,7 @@ static void engineService(){
       engineNextOnRepeatAt_ms &&
       (long)(now - engineNextOnRepeatAt_ms) >= 0 &&
       (long)(now - stepEndAt_ms) < 0) {
-    engineEmitOnStep(cur, ENGINE_ON_REPEAT_FRAMES);
+    engineEmitOnStep(stepIdx, ENGINE_ON_REPEAT_FRAMES);
     if (!engineActive) return;
     engineNextOnRepeatAt_ms = millis() + ENGINE_ON_REPEAT_MS;
     return;
@@ -544,10 +545,9 @@ static void oledService(){
   if ((long)(now - oledNextMs) < 0) return;
   oledNextMs = now + OLED_PERIOD_MS;
 
-  char mode[12]; uint8_t lvl; uint8_t ch; char line[48]; bool dual;
+  char mode[12]; char line[48]; bool dual;
   portENTER_CRITICAL(&uiMux);
   strncpy(mode, uiMode, sizeof(mode));
-  lvl = uiLvl; ch = uiCh;
   strncpy(line, uiLine, sizeof(line));
   dual = uiDual;
   portEXIT_CRITICAL(&uiMux);

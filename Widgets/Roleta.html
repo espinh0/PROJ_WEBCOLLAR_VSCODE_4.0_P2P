@@ -332,6 +332,7 @@
       const raw = localStorage.getItem("remote_control_state_v1");
       if (!raw) return 0;
       const parsed = JSON.parse(raw);
+      if (parsed?.advancedEnabled === false) return 0;
       const adv = parsed?.advanced;
       // prefer atraso inicial (preDelayMs), sem usar o intervalo entre pulsos
       const preMs = Number(adv?.preDelayMs);
@@ -470,6 +471,10 @@
   }
   // atualiza delay via bus (fs-control)
   function handleControlPatch(payload){
+    if (payload?.advancedEnabled === false) {
+      controlDelayMs = 0;
+      return;
+    }
     const preMs = Number(payload?.preDelayMs);
     if (Number.isFinite(preMs) && preMs >= 0) {
       controlDelayMs = preMs;
@@ -1066,11 +1071,12 @@
   async function pushToChat(text){
     const t = String(text || '').trim();
     if (!t) return;
-    if (window.SerialBridge && typeof window.SerialBridge.send === 'function') {
-      await window.SerialBridge.send(t);
+    const central = window.__COLLAR_COMMAND_API__;
+    if (central && typeof central.send === 'function') {
+      await central.send(t, { source: 'roulette' });
       return;
     }
-    setStatus('SerialBridge indisponivel.');
+    setStatus('Command API indisponivel.');
   }
   function buildCmd(modeKey, intensity, channelValue){
     const lvl = (modeKey==='SHOCK'||modeKey==='VIBRATION') ? intensity : 0;

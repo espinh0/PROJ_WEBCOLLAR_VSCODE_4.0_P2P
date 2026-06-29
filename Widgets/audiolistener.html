@@ -708,11 +708,12 @@
   function emitChatMessage(text, origin, extra){
     const t = String(text || '').trim();
     if (!t) return;
-    if (window.SerialBridge && typeof window.SerialBridge.send === 'function') {
-      try { window.SerialBridge.send(t); } catch(_){}
+    const central = window.__COLLAR_COMMAND_API__;
+    if (central && typeof central.send === 'function') {
+      try { central.send(t, { source: origin || 'audio-collar', meta: extra || {} }); } catch(_){}
       return;
     }
-    try { console.warn('[audio-collar] SerialBridge.send indisponivel.'); } catch(_){}
+    try { console.warn('[audio-collar] Command API indisponivel.'); } catch(_){}
   }
 
   function forwardRoulettePointer(type, srcEvt){
@@ -1767,9 +1768,10 @@
       cmd = `HOLDON ${modeKey},${Math.round(dominantLvl)},${ch}`;
     }
 
-    if (!(window.SerialBridge && typeof window.SerialBridge.send === 'function')) {
+    const central = window.__COLLAR_COMMAND_API__;
+    if (!(central && typeof central.send === 'function')) {
       if (!warnedNoSerial) {
-        appendLog('WARN: SerialBridge indisponivel (modo host).');
+        appendLog('WARN: Command API indisponivel (modo host).');
         warnedNoSerial = true;
       }
       return;
@@ -1777,7 +1779,7 @@
     warnedNoSerial = false;
 
     try {
-      window.SerialBridge.send(cmd);
+      central.send(cmd, { source: 'audio-collar', meta: meta || {} });
     } catch (e) {
       appendLog('ERRO ao enviar comando local: ' + (e?.message || e));
     }

@@ -132,6 +132,7 @@
     origin: '',
     since: 0
   };
+  var remoteHoldLedToken = null;
 
   function mark(id){
     processed.add(id);
@@ -191,6 +192,103 @@
     return /^HOLDOFF\b/i.test(normalizedCommand(text));
   }
 
+  function getControlLedApi(){
+    try {
+      var api = window.__CONTROL_LED_API__;
+      return api && typeof api.beginCommand === 'function' ? api : null;
+    } catch(_) {
+      return null;
+    }
+  }
+
+  function getCommandExecutionLatchMs(text){
+    var cmd = normalizedCommand(text);
+    if (!cmd) return 0;
+    if (isHoldOnCommand(cmd) || isHoldOffCommand(cmd)) return 250;
+
+    var parts = cmd.split(',');
+    if (parts.length >= 4) {
+      var duration = Number(parts[parts.length - 1]);
+      if (Number.isFinite(duration) && duration > 0) {
+        return Math.max(150, Math.min(60000, Math.round(duration)));
+      }
+    }
+    return 250;
+  }
+
+  function beginRemoteExecLed(text, source){
+    if (isHoldOnCommand(text) || isHoldOffCommand(text)) return null;
+    var api = getControlLedApi();
+    if (!api) return null;
+    return api.beginCommand(source || 'remote-command', getCommandExecutionLatchMs(text));
+  }
+
+  function endRemoteExecLed(token, text){
+    if (!token || getCommandExecutionLatchMs(text) > 250) return;
+    var api = getControlLedApi();
+    if (api && typeof api.endCommand === 'function') api.endCommand(token);
+  }
+
+  function cancelRemoteExecLed(token){
+    if (!token) return;
+    var api = getControlLedApi();
+    if (api && typeof api.endCommand === 'function') api.endCommand(token);
+  }
+
+  function warnRemoteExecLed(source){
+    var api = getControlLedApi();
+    if (api && typeof api.beginWarning === 'function') {
+      api.beginWarning(source || 'remote-command', 700);
+    }
+  }
+
+  function clearRemoteHoldLed(){
+    var api = getControlLedApi();
+    if (remoteHoldLedToken && api && typeof api.endCommand === 'function') {
+      api.endCommand(remoteHoldLedToken);
+    }
+    remoteHoldLedToken = null;
+  }
+
+  function syncRemoteHoldLed(text, source){
+    var api = getControlLedApi();
+    if (!api) return;
+
+    if (isHoldOnCommand(text)) {
+      clearRemoteHoldLed();
+      remoteHoldLedToken = api.beginCommand(source || 'remote-hold', 0);
+      return;
+    }
+
+    if (isHoldOffCommand(text)) {
+      clearRemoteHoldLed();
+      api.beginCommand(source || 'remote-holdoff', 250);
+    }
+  }
+
+  function emitRemoteHoldLatch(text, source){
+    var cmd = normalizedCommand(text);
+    var active = isHoldOnCommand(cmd) ? true : (isHoldOffCommand(cmd) ? false : null);
+    if (active === null) return;
+
+    window.__COLLAR_HOLD_ACTIVE__ = active;
+    try {
+      window.dispatchEvent(new CustomEvent('collar:hold_latch', {
+        detail: {
+          active: active,
+          command: cmd,
+          source: source || 'remote-executor',
+          ts: Date.now()
+        }
+      }));
+    } catch(_){}
+  }
+
+  function noteRemoteCommandSent(text, source){
+    syncRemoteHoldLed(text, source);
+    emitRemoteHoldLatch(text, source);
+  }
+
   function isAutoHoldOff(msg, origin){
     var raw = msg && msg.raw && typeof msg.raw === 'object' ? msg.raw : null;
     var meta = (msg && msg.meta) || (raw && raw.meta) || {};
@@ -230,7 +328,7 @@
     return { send: true, cmd: cmd };
   }
 
-  function onChatMessage(e){
+  async function onChatMessage(e){
     var msg = normalizeChatMessage(e);
     if (!msg) return;
     var text = extractText(msg).trim();
@@ -243,6 +341,12 @@
 
     executorLog('received', text, origin, {peerId: msg.peerId, username: msg.username});
 
+    var previousHold = {
+      active: latchedHold.active,
+      command: latchedHold.command,
+      origin: latchedHold.origin,
+      since: latchedHold.since
+    };
     var prepared = prepareLatchedChatCommand(text, msg, origin);
     if (!prepared.send) {
       mark(id);
@@ -252,10 +356,17 @@
 
     var SERIAL = getSerialAdapter();
     try {
-      SERIAL.send(text);
+      await SERIAL.send(text);
+      beginRemoteExecLed(text, 'remote-executor');
+      noteRemoteCommandSent(text, 'remote-executor');
       logLine(`→ chat ▶ collar (${SERIAL.name}): ${text}`);
       executorLog('sent', text, SERIAL.name, {serialAdapter: SERIAL.name});
     } catch(err){
+      latchedHold.active = previousHold.active;
+      latchedHold.command = previousHold.command;
+      latchedHold.origin = previousHold.origin;
+      latchedHold.since = previousHold.since;
+      warnRemoteExecLed('remote-executor');
       logLine(`⚠️ falha ao enviar via ${SERIAL.name}: ${err && err.message || err}`);
       executorLog('error', text, SERIAL.name, {error: String(err && err.message || err)});
       return;
@@ -285,7 +396,7 @@
     return false;
   }
 
-  function onHoldState(e){
+  async function onHoldState(e){
     var detail = extractHoldDetail(e);
     if (!detail || !detail.state) return;
     var state = detail.state;
@@ -315,6 +426,12 @@
     }
 
     executorLog('received', cmd, origin, { seq: seq, via: meta.via || '' });
+    var previousHold = {
+      active: latchedHold.active,
+      command: latchedHold.command,
+      origin: latchedHold.origin,
+      since: latchedHold.since
+    };
     if (state.on) {
       var normalized = normalizedCommand(cmd);
       if (latchedHold.active && latchedHold.command.toUpperCase() === normalized.toUpperCase()) {
@@ -335,10 +452,17 @@
 
     var SERIAL = getSerialAdapter();
     try {
-      SERIAL.send(cmd);
+      await SERIAL.send(cmd);
+      beginRemoteExecLed(cmd, 'remote-holdsync');
+      noteRemoteCommandSent(cmd, 'remote-holdsync');
       logLine(`holdSync -> collar (${SERIAL.name}): ${cmd}`);
       executorLog('sent', cmd, SERIAL.name, { serialAdapter: SERIAL.name });
     } catch(err){
+      latchedHold.active = previousHold.active;
+      latchedHold.command = previousHold.command;
+      latchedHold.origin = previousHold.origin;
+      latchedHold.since = previousHold.since;
+      warnRemoteExecLed('remote-holdsync');
       logLine(`falha ao enviar via ${SERIAL.name}: ${err && err.message || err}`);
       executorLog('error', cmd, SERIAL.name, { error: String(err && err.message || err) });
     }

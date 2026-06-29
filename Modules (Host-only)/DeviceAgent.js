@@ -216,6 +216,47 @@
     return 250;
   }
 
+  function modeSupportsLevel(mode){
+    return mode === 'SHOCK' || mode === 'VIBRATION';
+  }
+
+  function isValidCommandSegment(segment, opts){
+    var raw = normalizedCommand(segment);
+    if (!raw) return false;
+    var parts = raw.split(',').map(function(part){ return String(part || '').trim(); });
+    if (parts.length < 3) return false;
+    var mode = String(parts[0] || '').toUpperCase();
+    if (['SHOCK', 'VIBRATION', 'LIGHT', 'BEEP'].indexOf(mode) < 0) return false;
+    var level = Number(parts[1]);
+    var channel = Number(parts[2]);
+    if (!Number.isFinite(level) || !Number.isFinite(channel)) return false;
+    var levelInt = Math.round(level);
+    var channelInt = Math.round(channel);
+    if (levelInt < 0 || levelInt > 100) return false;
+    if (channelInt !== 1 && channelInt !== 2) return false;
+    if (modeSupportsLevel(mode) && levelInt <= 0 && !(opts && opts.allowZeroLevel)) return false;
+    if (!modeSupportsLevel(mode) && levelInt !== 0) return false;
+    if (parts.length >= 4) {
+      var duration = Number(parts[3]);
+      if (!Number.isFinite(duration) || duration <= 0) return false;
+    }
+    return true;
+  }
+
+  function isValidHoldCommand(text){
+    var cmd = normalizedCommand(text);
+    if (isHoldOffCommand(cmd)) return true;
+    var match = cmd.match(/^HOLDON\s+(.+)$/i);
+    if (!match) return false;
+    var body = match[1].trim();
+    if (/^DUALX\s+/i.test(body)) {
+      var dualBody = body.replace(/^DUALX\s+/i, '').trim();
+      var segments = dualBody.split('+').map(function(s){ return s.trim(); }).filter(Boolean);
+      return segments.length === 2 && segments.every(function(segment){ return isValidCommandSegment(segment); });
+    }
+    return isValidCommandSegment(body);
+  }
+
   function beginRemoteExecLed(text, source){
     if (isHoldOnCommand(text) || isHoldOffCommand(text)) return null;
     var api = getControlLedApi();
@@ -285,6 +326,10 @@
   }
 
   function noteRemoteCommandSent(text, source){
+    if (!isValidHoldCommand(text) && (isHoldOnCommand(text) || isHoldOffCommand(text))) {
+      warnRemoteExecLed(source);
+      return;
+    }
     syncRemoteHoldLed(text, source);
     emitRemoteHoldLatch(text, source);
   }

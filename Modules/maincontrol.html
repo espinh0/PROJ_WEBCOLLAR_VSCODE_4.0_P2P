@@ -2610,9 +2610,64 @@
     }
     return 250;
   }
+  function isValidCommandSegment(segment, opts = {}){
+    const raw = String(segment || "").trim();
+    if (!raw) return false;
+    const parts = raw.split(",").map(part => part.trim());
+    if (parts.length < 3) return false;
+    const mode = String(parts[0] || "").toUpperCase();
+    if (!MODES.includes(mode) || mode === "ROULETTE") return false;
+    const levelNum = Number(parts[1]);
+    const channelNum = Number(parts[2]);
+    if (!Number.isFinite(levelNum) || !Number.isFinite(channelNum)) return false;
+    const levelInt = Math.round(levelNum);
+    const channelInt = Math.round(channelNum);
+    if (levelInt < 0 || levelInt > 100) return false;
+    if (channelInt !== 1 && channelInt !== 2) return false;
+    if (modeSupportsLevel(mode) && levelInt <= 0 && !opts.allowZeroLevel) return false;
+    if (!modeSupportsLevel(mode) && levelInt !== 0) return false;
+    if (parts.length >= 4) {
+      const duration = Number(parts[3]);
+      if (!Number.isFinite(duration) || duration <= 0) return false;
+    }
+    return true;
+  }
+  function isValidHoldCommand(payload){
+    const raw = String(payload || "").trim();
+    if (/^HOLDOFF\b/i.test(raw)) return true;
+    const match = raw.match(/^HOLDON\s+(.+)$/i);
+    if (!match) return false;
+    const body = match[1].trim();
+    if (/^DUALX\s+/i.test(body)) {
+      const dualBody = body.replace(/^DUALX\s+/i, "").trim();
+      const segments = dualBody.split("+").map(s => s.trim()).filter(Boolean);
+      return segments.length === 2 && segments.every(segment => isValidCommandSegment(segment));
+    }
+    return isValidCommandSegment(body);
+  }
+  function isCommandEligibleForGreen(payload){
+    const raw = String(payload || "").trim();
+    if (!raw) return false;
+    const upper = raw.toUpperCase();
+    if (upper.startsWith("HOLDON ") || upper.startsWith("HOLDOFF")) return isValidHoldCommand(raw);
+    if (upper === "DUALON" || upper === "DUALOFF" || upper === "PING") return true;
+    if (upper === "DUAL CADENCE LIGHT") return true;
+    if (raw.includes(",")) return isValidCommandSegment(raw, { allowZeroLevel: true });
+    return true;
+  }
   function applyControlSendResult(payload, result, silentLed){
     if (silentLed) return;
-    if (result && result.serialConfirmed) {
+    if (result && result.serialConfirmed && isCommandEligibleForGreen(payload)) {
+      const upper = String(payload || "").trim().toUpperCase();
+      if (upper.startsWith("HOLDON ")) {
+        beginHoldLed();
+        return;
+      }
+      if (upper.startsWith("HOLDOFF")) {
+        endHoldLed();
+        beginControlCommand(CONTROL_LED_SOURCE_CMD, getCommandExecutionLatchMs(payload));
+        return;
+      }
       beginControlCommand(CONTROL_LED_SOURCE_CMD, getCommandExecutionLatchMs(payload));
       return;
     }
@@ -2708,7 +2763,7 @@
         return Promise.resolve(sendCommandNow(payload))
           .then((result) => {
             applyControlSendResult(payload, result, silentLed);
-            if (result && result.serialConfirmed) updateGlobalHoldLatch(payload);
+            if (result && result.serialConfirmed && isValidHoldCommand(payload)) updateGlobalHoldLatch(payload);
             return !!(result && result.ok);
           });
       });
@@ -4051,7 +4106,6 @@
       }
       sendRampFinalStop(session);
     }
-    endHoldLed();
     emitRampRuntime("session-finalized");
   }
   function abortRampSession(opts = {}){
@@ -4157,7 +4211,6 @@
       hardStopTimer: null
     };
     rampSession = session;
-    beginHoldLed();
     if (targetLevel > 0) {
       const firstLevel = clampNum(Math.max(initialLevel, Math.min(targetLevel, session.config.step)), 0, targetLevel);
       sendRampHoldLevel(session, firstLevel);
@@ -4189,7 +4242,6 @@
       const tickMs = Math.max(RAMP_LIMITS.tickMs.min, session.config.tickMs);
       session.timer = setInterval(() => tickRampSession(session.id), tickMs);
     }
-    beginHoldLed();
     emitRampRuntime("session-resume");
     return true;
   }
@@ -4221,11 +4273,9 @@
       advStopSignal = { stop: false, holdActive: false };
     }
     advStopSignal.holdActive = true;
-    beginHoldLed();
     sendCommand(`HOLDON ${buildCmdLine()}`);
     await waitWithStop(dur);
     ensureAdvHoldOff();
-    endHoldLed();
   }
 
   // ===== Envio =====
@@ -4399,7 +4449,6 @@
     if (startRampSession()) {
       return;
     }
-    beginHoldLed();
     sendLatestCommand(`HOLDON ${buildCmdLine()}`);
   }
   function holdOff(){
@@ -4416,7 +4465,6 @@
       return;
     }
     sendCommand("HOLDOFF", { force: true });
-    endHoldLed();
   }
 
   // ===== Botao: clique unico vs segurar =====
@@ -4502,7 +4550,6 @@
         releaseRoulettePointer();
       } else {
         sendCommand("HOLDOFF", { force: true });
-        endHoldLed();
       }
       holdStarted = false;
       sendOnce();

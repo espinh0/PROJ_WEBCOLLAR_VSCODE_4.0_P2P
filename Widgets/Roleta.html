@@ -397,16 +397,6 @@
         if (!pendingLedGap && typeof api.clearGap === "function") api.clearGap(CONTROL_LED_GAP_SOURCE);
         pendingLedGap = null;
       }
-      if (pendingLedHoldId) {
-        if (activeHoldToken && typeof api.endCommand === "function") {
-          api.endCommand(activeHoldToken);
-        }
-        activeHoldId = pendingLedHoldId;
-        activeHoldToken = (typeof api.beginCommand === "function")
-          ? api.beginCommand(CONTROL_LED_SOURCE, 0)
-          : null;
-        pendingLedHoldId = 0;
-      }
       if (pendingLedGap === null && !pendingLedHoldId) {
         clearInterval(pendingLedTimer);
         pendingLedTimer = null;
@@ -415,15 +405,6 @@
   }
 
   function pulseControlLed(ms=220){
-    const api = window.__CONTROL_LED_API__;
-    if (!api) return;
-    if (typeof api.beginCommand === "function") {
-      api.beginCommand(CONTROL_LED_SOURCE, ms);
-      return;
-    }
-    if (typeof api.pulse === "function") {
-      api.pulse(CONTROL_LED_SOURCE, ms);
-    }
   }
 
   function setControlLedGap(on){
@@ -438,35 +419,16 @@
   }
 
   function beginHoldCommandFor(id){
-    const api = window.__CONTROL_LED_API__;
-    if (!api || typeof api.beginCommand !== "function") {
-      pendingLedHoldId = id;
-      activeHoldId = id;
-      activeHoldToken = null;
-      scheduleLedRetry();
-      return null;
-    }
-    if (activeHoldToken && typeof api.endCommand === "function") {
-      api.endCommand(activeHoldToken);
-    }
     activeHoldId = id;
-    activeHoldToken = api.beginCommand(CONTROL_LED_SOURCE, 0);
-    return activeHoldToken;
+    activeHoldToken = null;
+    return null;
   }
 
   function endHoldCommandFor(id){
     const api = window.__CONTROL_LED_API__;
     if (id !== activeHoldId) return;
-    if (!api || typeof api.endCommand !== "function") {
-      if (pendingLedHoldId === id) pendingLedHoldId = 0;
-      activeHoldId = 0;
-      activeHoldToken = null;
-      return;
-    }
-    if (activeHoldToken) {
-      api.endCommand(activeHoldToken);
-      activeHoldToken = null;
-    }
+    if (pendingLedHoldId === id) pendingLedHoldId = 0;
+    activeHoldToken = null;
     activeHoldId = 0;
   }
   // atualiza delay via bus (fs-control)
@@ -1084,17 +1046,7 @@
     return `${modeKey},${lvl},${chan}`;
   }
   async function sendOnce(modeKey, intensity, channelValue){
-    const api = window.__CONTROL_LED_API__;
-    let cmdToken = null;
-    if (api && typeof api.beginCommand === "function") {
-      cmdToken = api.beginCommand(CONTROL_LED_SOURCE, 0);
-    } else {
-      pulseControlLed();
-    }
     await pushToChat(buildCmd(modeKey, intensity, channelValue));
-    if (api && typeof api.endCommand === "function" && cmdToken) {
-      api.endCommand(cmdToken);
-    }
     setStatus(`Enviado: ${modeKey} - ${intensity}`);
   }
 

@@ -1854,6 +1854,7 @@
     }
   })();
   const lastControlTs = new Map(); // origin -> ts
+  let lastLocalControlTs = 0;
   let levelDebounce = null;
   let lastLevelCommitAt = 0;
   const ADV_DEFAULTS = { pulses: 1, durationMs: 180, delayMs: 1000, preDelayMs: 0 };
@@ -1954,6 +1955,7 @@
   let advCountdownEndAt = 0;
   let advStopSignal = { stop: false, holdActive: false };
   let currentBurstAbort = null;
+  let advRunSeq = 0;
   const chartBlockEl = document.getElementById("chartBlock");
   const chartToggleBtn = document.getElementById("btnChartToggle");
   let rampLoaded = false;
@@ -1975,6 +1977,13 @@
   let commandSendQueue = Promise.resolve();
   let commandQueueGeneration = 0;
   let commandFeedbackSeq = 0;
+  const btnSendState = {
+    pressed: false,
+    holding: false,
+    advDepth: 0
+  };
+  let fallbackCmdRoom = null;
+  let fallbackCmdSend = null;
 
   function log(msg, lvl="info"){
     try { window.appLog ? window.appLog(msg, lvl) : console.log(msg); } catch {}
@@ -2006,6 +2015,36 @@
     const pre = Math.max(0, Math.round(plan?.preDelayMs || 0));
     // total = pre-delay + (dur+gap) for each pulse, gap skipped after last
     return pre + (pulses * dur) + (Math.max(0, pulses - 1) * gap);
+  }
+
+  function syncBtnSendVisual(){
+    if (!btnSend) return;
+    const active = !!(btnSendState.pressed || btnSendState.holding || btnSendState.advDepth > 0);
+    btnSend.classList.toggle("pressed", !!btnSendState.pressed);
+    btnSend.classList.toggle("holding", !!btnSendState.holding);
+    btnSend.classList.toggle("adv-running", btnSendState.advDepth > 0);
+    btnSend.setAttribute("aria-pressed", active ? "true" : "false");
+    if (btnSendShell) {
+      btnSendShell.classList.toggle("is-pressed", !!btnSendState.pressed);
+      btnSendShell.classList.toggle("is-holding", !!btnSendState.holding);
+      btnSendShell.classList.toggle("is-adv-running", btnSendState.advDepth > 0);
+    }
+  }
+
+  function setBtnSendPressed(active){
+    btnSendState.pressed = !!active;
+    syncBtnSendVisual();
+  }
+
+  function setBtnSendHolding(active){
+    btnSendState.holding = !!active;
+    syncBtnSendVisual();
+  }
+
+  function resetBtnSendPressState(){
+    btnSendState.pressed = false;
+    btnSendState.holding = false;
+    syncBtnSendVisual();
   }
 
   // ===== Username (mesmo padrao do widget Flowgate) =====
@@ -2560,9 +2599,15 @@
     }
   }
 
+  function nextControlTs(value){
+    const raw = Number.isFinite(value) ? value : Date.now();
+    lastLocalControlTs = Math.max(lastLocalControlTs + 1, raw);
+    return lastLocalControlTs;
+  }
+
   function emitControlPatch(patch, opts = {}){
     if (!patch || typeof patch !== "object") return;
-    const ts = Number.isFinite(opts.ts) ? opts.ts : Date.now();
+    const ts = nextControlTs(opts.ts);
     const payload = { ...patch, origin: CONTROL_ORIGIN, ts };
     sendControlPayload(payload, opts);
   }
@@ -2688,6 +2733,21 @@
     } catch(_){}
   }
 
+  function getFallbackRoomCmdSend(room){
+    if (!room || typeof room.makeAction !== "function") return null;
+    if (fallbackCmdRoom === room && typeof fallbackCmdSend === "function") return fallbackCmdSend;
+    fallbackCmdRoom = room;
+    fallbackCmdSend = null;
+    try {
+      const pair = room.makeAction("cmd");
+      fallbackCmdSend = Array.isArray(pair) ? pair[0] : null;
+    } catch(_) {
+      fallbackCmdRoom = null;
+      fallbackCmdSend = null;
+    }
+    return typeof fallbackCmdSend === "function" ? fallbackCmdSend : null;
+  }
+
   async function sendCommandNow(payload){
     const serialReady = !!(window.SerialBridge && typeof window.SerialBridge.send === 'function' &&
       (window.SerialBridge.isConnected || window.serialConnected || (window.port && window.port.writable)));
@@ -2703,10 +2763,17 @@
       }
     }
 
+    const cmdBus = (window.__TRYSTERO_CMD__ && typeof window.__TRYSTERO_CMD__.send === 'function') ? window.__TRYSTERO_CMD__ : null;
+    if (cmdBus && (!cmdBus.isReady || cmdBus.isReady())) {
+      const ok = cmdBus.send(payload.slice(0, 400), { via: 'maincontrol' });
+      if (!ok) log('Falha Flowgate (cmd): comando nao enviado.', "warn");
+      if (ok) emitCommandFeedback(payload, "cmd-bus");
+      return { ok: !!ok, transport: "cmd-bus", serialConfirmed: false, serialError };
+    }
+
     const room = (window.Flowgate && window.Flowgate.room) ? window.Flowgate.room : window.__TRYSTERO_ROOM__;
     if (room && typeof room.makeAction === 'function') {
-      const pair = room.makeAction('cmd');
-      const sendCmd = Array.isArray(pair) ? pair[0] : null;
+      const sendCmd = getFallbackRoomCmdSend(room);
       if (typeof sendCmd === 'function') {
         try {
           const msg = {
@@ -2722,14 +2789,6 @@
           log(`Falha Flowgate (room cmd): ${e && e.message || e}`, "warn");
         }
       }
-    }
-
-    const cmdBus = (window.__TRYSTERO_CMD__ && typeof window.__TRYSTERO_CMD__.send === 'function') ? window.__TRYSTERO_CMD__ : null;
-    if (cmdBus && (!cmdBus.isReady || cmdBus.isReady())) {
-      const ok = cmdBus.send(payload.slice(0, 400), { via: 'maincontrol' });
-      if (!ok) log('Falha Flowgate (cmd): comando nao enviado.', "warn");
-      if (ok) emitCommandFeedback(payload, "cmd-bus");
-      return { ok: !!ok, transport: "cmd-bus", serialConfirmed: false, serialError };
     }
 
     const chatBus = (window.__TRYSTERO_CHAT__ && typeof window.__TRYSTERO_CHAT__.send === 'function') ? window.__TRYSTERO_CHAT__ : null;
@@ -3812,10 +3871,8 @@
 
   let advButtonLatchDepth = 0;
   function updateAdvButtonLatch(){
-    if (!btnSend) return;
-    const isRunning = advButtonLatchDepth > 0;
-    btnSend.classList.toggle("adv-running", isRunning);
-    if (btnSendShell) btnSendShell.classList.toggle("is-adv-running", isRunning);
+    btnSendState.advDepth = advButtonLatchDepth;
+    syncBtnSendVisual();
   }
   function latchAdvancedButton(){
     advButtonLatchDepth += 1;
@@ -3838,9 +3895,9 @@
     }
   }
 
-  function ensureAdvHoldOff(){
-    if (!advStopSignal || !advStopSignal.holdActive) return;
-    advStopSignal.holdActive = false;
+  function ensureAdvHoldOff(signal = advStopSignal){
+    if (!signal || !signal.holdActive) return;
+    signal.holdActive = false;
     sendCommand("HOLDOFF", { force: true });
   }
 
@@ -3944,8 +4001,7 @@
     if (m !== "ROULETTE") {
       clearRouletteAutoTimer();
       releaseRoulettePointer();
-      if (btnSend) btnSend.classList.remove("holding");
-      if (btnSendShell) btnSendShell.classList.remove("is-holding");
+      setBtnSendHolding(false);
     }
     syncModeUi();
     syncModeReadout();
@@ -4262,41 +4318,46 @@
     return session.phase === "down";
   }
 
-  async function pulseForDuration(durationMs, useHold){
+  async function pulseForDuration(durationMs, useHold, signal = advStopSignal){
     const dur = clampNum(Math.round(durationMs || 0), ADV_LIMITS.durationMs.min, ADV_LIMITS.durationMs.max);
     if (!useHold) {
       sendCommand(buildCmdLine(dur));
-      await waitWithStop(dur);
+      await waitWithStop(dur, signal);
       return;
     }
-    if (!advStopSignal) {
-      advStopSignal = { stop: false, holdActive: false };
+    if (!signal) {
+      signal = { stop: false, holdActive: false };
     }
-    advStopSignal.holdActive = true;
+    signal.holdActive = true;
     sendCommand(`HOLDON ${buildCmdLine()}`);
-    await waitWithStop(dur);
-    ensureAdvHoldOff();
+    await waitWithStop(dur, signal);
+    ensureAdvHoldOff(signal);
   }
 
   // ===== Envio =====
   const sleep = (ms)=> new Promise(r => setTimeout(r, Math.max(0, ms || 0)));
   const ADV_WAIT_SLICE_MS = 60;
-  async function waitWithStop(ms){
+  async function waitWithStop(ms, signal = advStopSignal){
     const total = Math.max(0, Number(ms) || 0);
-    if (!advStopSignal || total === 0) {
-      return advStopSignal ? advStopSignal.stop : false;
+    if (!signal || total === 0) {
+      return signal ? signal.stop : false;
     }
     let remaining = total;
-    while (remaining > 0 && !advStopSignal.stop) {
+    while (remaining > 0 && !signal.stop) {
       const chunk = Math.min(ADV_WAIT_SLICE_MS, remaining);
       await sleep(chunk);
       remaining -= chunk;
     }
-    return advStopSignal.stop;
+    return signal.stop;
   }
   function runBurst(cfg){
     abortCurrentBurst();
-    advStopSignal = { stop: false, holdActive: false };
+    const runSeq = ++advRunSeq;
+    const runSignal = { stop: false, holdActive: false };
+    let aborted = false;
+    let localAbort = { abort: () => { aborted = true; runSignal.stop = true; } };
+    advStopSignal = runSignal;
+    currentBurstAbort = localAbort;
     const normalized = normalizeAdvancedState(cfg || { ...ADV_DEFAULTS });
     const pulses = clampNum(Math.round(normalized.pulses || 1), ADV_LIMITS.pulses.min, ADV_LIMITS.pulses.max);
     const dur = clampNum(Math.round(normalized.durationMs || ADV_DEFAULTS.durationMs), ADV_LIMITS.durationMs.min, ADV_LIMITS.durationMs.max);
@@ -4307,41 +4368,44 @@
     startAdvCountdown({ preDelayMs: preDelay, pulses, durationMs: dur, delayMs: gap });
     (async ()=>{
       try {
-        let aborted = false;
-        let localAbort = { abort: () => { aborted = true; advStopSignal.stop = true; } };
-        currentBurstAbort = localAbort;
         if (preDelay > 0) {
           setAdvLedPhase("gap");
-          aborted = await waitWithStop(preDelay);
+          aborted = await waitWithStop(preDelay, runSignal);
         }
         for (let i=0;i<pulses && !aborted;i++){
           setAdvLedPhase("on");
           // usa estado atual (modo/level/canal) a cada pulso
-          await pulseForDuration(dur, useHold);
-          if (advStopSignal.stop) {
+          await pulseForDuration(dur, useHold, runSignal);
+          if (runSignal.stop) {
             aborted = true;
             break;
           }
           const isLast = i === pulses - 1;
           if (!isLast && gap > 0 && !aborted) {
             setAdvLedPhase("gap");
-            aborted = await waitWithStop(gap);
+            aborted = await waitWithStop(gap, runSignal);
           }
         }
-        const completed = !(aborted || advStopSignal.stop);
-        stopAdvCountdown(completed);
+        const completed = !(aborted || runSignal.stop);
+        if (advRunSeq === runSeq && currentBurstAbort === localAbort) stopAdvCountdown(completed);
       } catch(_){
-        stopAdvCountdown(false);
+        if (advRunSeq === runSeq && currentBurstAbort === localAbort) stopAdvCountdown(false);
       } finally {
         if (currentBurstAbort === localAbort) currentBurstAbort = null;
-        ensureAdvHoldOff();
-        setAdvLedPhase("off");
+        ensureAdvHoldOff(runSignal);
+        if (advRunSeq === runSeq && advStopSignal === runSignal) setAdvLedPhase("off");
         releaseAdvancedButton();
       }
     })();
   }
   function runRouletteBurst(cfg){
-    advStopSignal = { stop: false, holdActive: false };
+    abortCurrentBurst();
+    const runSeq = ++advRunSeq;
+    const runSignal = { stop: false, holdActive: false };
+    let aborted = false;
+    let localAbort = { abort: () => { aborted = true; runSignal.stop = true; } };
+    advStopSignal = runSignal;
+    currentBurstAbort = localAbort;
     const normalized = normalizeAdvancedState({ ...ADV_DEFAULTS, ...(cfg || {}) });
     const pulses = clampNum(Math.round(normalized.pulses || 1), ADV_LIMITS.pulses.min, ADV_LIMITS.pulses.max);
     const gap = clampNum(Math.round(normalized.delayMs || ADV_DEFAULTS.delayMs), ADV_LIMITS.delayMs.min, ADV_LIMITS.delayMs.max);
@@ -4353,25 +4417,22 @@
       try {
         clearRouletteAutoTimer();
         releaseRoulettePointer();
-        let aborted = false;
-        let localAbort = { abort: () => { aborted = true; advStopSignal.stop = true; } };
-        currentBurstAbort = localAbort;
         if (preDelay > 0) {
           setAdvLedPhase("gap");
-          aborted = await waitWithStop(preDelay);
+          aborted = await waitWithStop(preDelay, runSignal);
         }
         for (let i = 0; i < pulses && !aborted; i++) {
-          if (advStopSignal.stop) { aborted = true; break; }
+          if (runSignal.stop) { aborted = true; break; }
           setAdvLedPhase("on");
           if (!startRoulettePointer()) {
             aborted = true;
             break;
           }
           const finishPromise = waitForRouletteResult();
-          const holdStopped = await waitWithStop(holdMs);
+          const holdStopped = await waitWithStop(holdMs, runSignal);
           releaseRoulettePointer();
           const finishInfo = await finishPromise;
-          if (holdStopped || advStopSignal.stop || finishInfo.reason === "stopped") {
+          if (holdStopped || runSignal.stop || finishInfo.reason === "stopped") {
             aborted = true;
             break;
           }
@@ -4381,18 +4442,18 @@
           const isLast = i === pulses - 1;
           if (!isLast && gap > 0) {
             setAdvLedPhase("gap");
-            aborted = await waitWithStop(gap);
+            aborted = await waitWithStop(gap, runSignal);
           }
         }
-        const completed = !(aborted || advStopSignal.stop);
-        stopAdvCountdown(completed);
+        const completed = !(aborted || runSignal.stop);
+        if (advRunSeq === runSeq && currentBurstAbort === localAbort) stopAdvCountdown(completed);
       } catch(_){
-        stopAdvCountdown(false);
+        if (advRunSeq === runSeq && currentBurstAbort === localAbort) stopAdvCountdown(false);
       } finally {
         if (currentBurstAbort === localAbort) currentBurstAbort = null;
         releaseRoulettePointer();
         clearRouletteAutoTimer();
-        setAdvLedPhase("off");
+        if (advRunSeq === runSeq && advStopSignal === runSignal) setAdvLedPhase("off");
         releaseAdvancedButton();
       }
     })();
@@ -4431,14 +4492,12 @@
     runBurst(liveCfg);
   }
   function holdOn(){
-    if (btnSend) btnSend.classList.add("holding");
-    if (btnSendShell) btnSendShell.classList.add("is-holding");
+    setBtnSendHolding(true);
     setCountup(HOLD_COUNTUP_SOURCE, Date.now(), "hold");
     if (currentMode === "ROULETTE") {
       clearRouletteAutoTimer();
       if (!startRoulettePointer()) {
-        if (btnSend) btnSend.classList.remove("holding");
-        if (btnSendShell) btnSendShell.classList.remove("is-holding");
+        setBtnSendHolding(false);
         clearCountup(HOLD_COUNTUP_SOURCE);
       }
       return;
@@ -4452,8 +4511,7 @@
     sendLatestCommand(`HOLDON ${buildCmdLine()}`);
   }
   function holdOff(){
-    if (btnSend) btnSend.classList.remove("holding");
-    if (btnSendShell) btnSendShell.classList.remove("is-holding");
+    setBtnSendHolding(false);
     clearCountup(HOLD_COUNTUP_SOURCE);
     flushPendingCommandQueue();
     if (currentMode === "ROULETTE") {
@@ -4500,8 +4558,7 @@
       }
     } catch(_) {}
 
-    btnSend.classList.add("pressed");
-    if (btnSendShell) btnSendShell.classList.add("is-pressed");
+    setBtnSendPressed(true);
     if (canResumeRampImmediately()) {
       holdStarted = true;
       holdOn();
@@ -4526,12 +4583,7 @@
 
     clearTimeout(holdIntentTimer);
     disarmGlobalFailsafe();
-    btnSend.classList.remove("pressed");
-    btnSend.classList.remove("holding");
-    if (btnSendShell) {
-      btnSendShell.classList.remove("is-pressed");
-      btnSendShell.classList.remove("is-holding");
-    }
+    resetBtnSendPressState();
 
     try {
       if (lastPointerId != null && btnSend.releasePointerCapture) {
@@ -5576,7 +5628,7 @@
             if (!payload) return;
             if (payload.__fs_req === "control-state") {
               if (payload.origin && payload.origin === CONTROL_ORIGIN) return;
-              const tsNow = Date.now();
+              const tsNow = nextControlTs();
               const snap = buildControlSnapshot("request-sync");
               sendControlPayload({ ...snap, ts: tsNow, origin: CONTROL_ORIGIN }, { toBus:false, toRoom:true });
               return;
@@ -5669,6 +5721,7 @@
   setAdvancedOpen(advancedOpen, { broadcast:false });
   setAdvancedValuesEnabled(advancedEnabled, { broadcast:false, persist:false });
   stopAdvCountdown(false);
+  syncBtnSendVisual();
   syncLevelInputWidth();
   broadcastBasics("remote-init");
 })();

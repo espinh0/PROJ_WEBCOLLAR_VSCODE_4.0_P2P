@@ -2,7 +2,7 @@
   <div class="card-header d-flex align-items-center flex-wrap gap-3 justify-content-between">
     <div class="d-flex align-items-center gap-2 flex-shrink-0">
       <div class="fw-semibold">Placar</div>
-      <div class="small text-secondary" id="fsm-status">desconectado</div>
+      <div class="small text-secondary host-only" id="fsm-status">desconectado</div>
     </div>
     <div class="fsm-header-right d-flex align-items-center gap-3 flex-wrap ms-auto justify-content-end">
       <div class="btn-group btn-group-sm" role="group" aria-label="Selecionar time">
@@ -27,6 +27,9 @@
     </div>
   </div>
   <div class="card-body">
+    <div class="d-flex justify-content-center mb-2">
+      <span class="fsm-match-status d-none" id="fsm-match-status">-</span>
+    </div>
     <div class="d-flex flex-wrap align-items-stretch gap-3">
       <div id="fsm-home-card" class="flex-grow-1 p-3 rounded-3">
         <div class="text-uppercase text-secondary small mb-1">casa</div>
@@ -159,6 +162,37 @@
   .score-away {
     color: var(--fs-away-color);
   }
+  .fsm-match-status {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 1.65rem;
+    padding: .25rem .7rem;
+    border: 1px solid var(--fs-border);
+    border-radius: 999px;
+    background: rgba(14,10,20,0.72);
+    color: var(--fs-muted);
+    font-size: .78rem;
+    font-weight: 700;
+    letter-spacing: .08em;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+  .fsm-match-status.is-live {
+    color: #86efac;
+    border-color: rgba(134,239,172,0.45);
+    box-shadow: 0 0 14px rgba(34,197,94,0.18);
+  }
+  .fsm-match-status.is-interval {
+    color: #fde68a;
+    border-color: rgba(253,230,138,0.45);
+    box-shadow: 0 0 14px rgba(250,204,21,0.14);
+  }
+  .fsm-match-status.is-ended {
+    color: #fca5a5;
+    border-color: rgba(252,165,165,0.45);
+    box-shadow: 0 0 14px rgba(248,113,113,0.16);
+  }
   .score-blink { animation: scoreBlink 0.9s ease; }
   @keyframes scoreBlink {
     0%   { text-shadow: 0 0 0 rgba(168,85,247,0); transform: scale(1); }
@@ -288,6 +322,7 @@
   const awayNameEl = $('fsm-away-name');
   const homeScoreEl = $('fsm-home-score');
   const awayScoreEl = $('fsm-away-score');
+  const matchStatusEl = $('fsm-match-status');
   const homeCardEl = $('fsm-home-card');
   const awayCardEl = $('fsm-away-card');
   const lastEl = $('fsm-last');
@@ -470,6 +505,41 @@
     el.classList.add('score-blink');
   }
 
+  function resolveMatchStatus(payload){
+    const rawStatus = String(
+      payload?.matchStatus ??
+      payload?.statusText ??
+      payload?.status ??
+      payload?.state ??
+      ''
+    ).trim();
+    const normalized = norm(rawStatus);
+    if (payload?.ended === true || /(encerr|final|finished|termin|ended|\bft\b|fim)/i.test(rawStatus)) {
+      return { key:'ended', label:'Encerrado' };
+    }
+    if (/(intervalo|half[\s-]?time|\bht\b)/i.test(rawStatus) || normalized.includes('intervalo')) {
+      return { key:'interval', label:'Intervalo' };
+    }
+    if (rawStatus || payload?.live === true || payload?.isLive === true) {
+      return { key:'live', label:'• Ao vivo' };
+    }
+    return null;
+  }
+
+  function renderMatchStatus(payload){
+    if (!matchStatusEl) return;
+    const status = resolveMatchStatus(payload);
+    matchStatusEl.classList.remove('is-live','is-interval','is-ended');
+    if (!status) {
+      matchStatusEl.classList.add('d-none');
+      matchStatusEl.textContent = '-';
+      return;
+    }
+    matchStatusEl.textContent = status.label;
+    matchStatusEl.classList.remove('d-none');
+    matchStatusEl.classList.add(`is-${status.key}`);
+  }
+
   function renderScore(payload, peerId){
     if (!payload || typeof payload !== 'object') return;
     const incomingTs = Number.isFinite(payload.ts) ? payload.ts : (payload.ts ? Number(payload.ts) : 0);
@@ -489,6 +559,7 @@
     if (awayScoreEl) awayScoreEl.textContent = aScore;
     if (homeScoreEl) homeScoreEl.classList.toggle('fs-score-ended', ended);
     if (awayScoreEl) awayScoreEl.classList.toggle('fs-score-ended', ended);
+    renderMatchStatus(payload);
     if (ended) setLastScorer(null);
 
     const ts = payload.ts ? new Date(payload.ts).toLocaleTimeString() : '-';
@@ -1264,17 +1335,21 @@
     if (seenScore.has(key)) return;
     seenScore.add(key);
     const prevSnap = lastSnap;
+    const statusText = String(payload.statusText || payload.matchStatus || payload.status || '').trim();
+    const endedByStatus = /(encerr|final|finished|termin|ended|\bft\b|fim)/i.test(statusText);
     const snap = {
       homeName: payload.homeName || '',
       awayName: payload.awayName || '',
       homeScore: Number.isFinite(payload.homeScore) ? payload.homeScore : null,
       awayScore: Number.isFinite(payload.awayScore) ? payload.awayScore : null,
-      ended: payload.ended === true,
+      statusText,
+      matchStatus: String(payload.matchStatus || statusText).trim(),
+      ended: payload.ended === true || endedByStatus,
       ts,
       origin: src,
       reason: payload.reason || 'update'
     };
-    const hash = JSON.stringify([snap.homeName, snap.awayName, snap.homeScore, snap.awayScore, snap.ended]);
+    const hash = JSON.stringify([snap.homeName, snap.awayName, snap.homeScore, snap.awayScore, snap.ended, snap.matchStatus]);
     if (hash === lastScoreHash && ts <= lastScoreTs) return;
     lastScoreHash = hash; lastScoreTs = ts;
     appendLog(`${snap.homeName || 'Casa'} ${Number.isFinite(snap.homeScore) ? snap.homeScore : '-'} x ${Number.isFinite(snap.awayScore) ? snap.awayScore : '-'} ${snap.awayName || 'Fora'} (${payload.reason || 'update'})`, src);

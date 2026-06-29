@@ -537,6 +537,7 @@
     const awayScoreEl = row.querySelector(SEL_LIST.awayScore);
     const homeScore = parseScoreText(homeScoreEl?.textContent);
     const awayScore = parseScoreText(awayScoreEl?.textContent);
+    const statusText = (row.querySelector(SEL_LIST.stage)?.textContent || '').trim();
     const ended = isListRowEnded(row, homeScoreEl, awayScoreEl);
     const link = row.querySelector(SEL_LIST.link);
     return {
@@ -544,6 +545,8 @@
       awayName: names.awayName,
       homeScore,
       awayScore,
+      statusText,
+      matchStatus: statusText,
       href: link?.href || '',
       ended
     };
@@ -661,7 +664,8 @@
 
     let homeName = getName(SEL.homeName);
     let awayName = getName(SEL.awayName);
-    let ended = isEndedStatusText(getMatchStatusText());
+    let statusText = getMatchStatusText();
+    let ended = isEndedStatusText(statusText);
 
     let home = null;
     let away = null;
@@ -685,11 +689,12 @@
         if (!awayName && listSnap.awayName) awayName = listSnap.awayName;
         if (!Number.isInteger(home) && Number.isInteger(listSnap.homeScore)) home = listSnap.homeScore;
         if (!Number.isInteger(away) && Number.isInteger(listSnap.awayScore)) away = listSnap.awayScore;
+        if (!statusText && listSnap.statusText) statusText = listSnap.statusText;
         if (listSnap.ended) ended = true;
       }
     }
 
-    return {homeName, awayName, homeScore:home, awayScore:away, ended};
+    return {homeName, awayName, homeScore:home, awayScore:away, statusText, matchStatus: statusText, ended};
   }
 
   function snapHasData(snap){
@@ -1372,12 +1377,14 @@
       awayName: snap.awayName || '',
       homeScore: Number.isFinite(snap.homeScore) ? snap.homeScore : null,
       awayScore: Number.isFinite(snap.awayScore) ? snap.awayScore : null,
+      statusText: String(snap.statusText || snap.matchStatus || '').trim(),
+      matchStatus: String(snap.matchStatus || snap.statusText || '').trim(),
       ended: !!snap.ended,
       ts: Date.now(),
       origin: getSite(),
       reason: metaReason || ''
     };
-    const hash = JSON.stringify([payload.homeName, payload.awayName, payload.homeScore, payload.awayScore, payload.ended]);
+    const hash = JSON.stringify([payload.homeName, payload.awayName, payload.homeScore, payload.awayScore, payload.ended, payload.matchStatus]);
     const forceSend = targetPeer != null || ['force','connect'].includes(metaReason);
     if (hash === lastScoreHash && !forceSend) return;
     // se for broadcast (sem target), atualiza hash para evitar flood; se for targeted, nao mexe

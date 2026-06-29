@@ -32,17 +32,15 @@
     </div>
     <div class="d-flex flex-wrap align-items-stretch gap-3">
       <div id="fsm-home-card" class="flex-grow-1 p-3 rounded-3">
-        <div class="text-uppercase text-secondary small mb-1">casa</div>
         <div class="d-flex align-items-center justify-content-between">
-          <div class="fw-bold" style="font-size:1.2rem;" id="fsm-home-name">-</div>
+          <div class="fw-bold fsm-team-name" id="fsm-home-name">-</div>
           <div class="display-1 mb-0 score-num score-home" id="fsm-home-score">-</div>
         </div>
       </div>
       <div id="fsm-away-card" class="flex-grow-1 p-3 rounded-3">
-        <div class="text-uppercase text-secondary small mb-1 text-end">visitante</div>
         <div class="d-flex align-items-center justify-content-between">
           <div class="display-1 mb-0 score-num score-away" id="fsm-away-score">-</div>
-          <div class="fw-bold text-end" style="font-size:1.2rem;" id="fsm-away-name">-</div>
+          <div class="fw-bold fsm-team-name text-end" id="fsm-away-name">-</div>
         </div>
       </div>
     </div>
@@ -149,6 +147,10 @@
     word-break: break-word;
     overflow-wrap: anywhere;
     color: var(--fs-text);
+  }
+  .fsm-team-name {
+    font-size: 1.85rem;
+    line-height: 1.05;
   }
   .score-num {
     font-family: 'Anton', sans-serif;
@@ -273,6 +275,11 @@
   }
   :root:not(.host-on) .host-only {
     display: none !important;
+  }
+  @media (max-width: 576px) {
+    .fsm-team-name {
+      font-size: 1.45rem;
+    }
   }
 </style>
 

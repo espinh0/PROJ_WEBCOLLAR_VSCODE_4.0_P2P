@@ -100,9 +100,6 @@
   #fsm-away-card {
     flex: 1 1 0;
     min-width: 0;
-    background: var(--fs-surface-alt);
-    border: 1px solid var(--fs-border);
-    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02), 0 10px 24px rgba(0,0,0,0.45);
     transition: border-width .2s ease, box-shadow .2s ease;
     position: relative;
     overflow: hidden;
@@ -128,10 +125,6 @@
   #fsm-home-card.fs-target-active,
   #fsm-away-card.fs-target-active {
     border-width: 4px;
-    box-shadow:
-      inset 0 0 0 1px rgba(255,255,255,0.04),
-      0 16px 32px rgba(0,0,0,0.6),
-      0 0 26px rgba(168,85,247,0.35);
   }
   #fsm-home-card.fs-last-scorer::before,
   #fsm-away-card.fs-last-scorer::before {

@@ -863,7 +863,7 @@
           </div>
         </div>
         <div id="flashscore-browser-body" class="card-body p-0">
-          <iframe id="flashscore-browser-iframe" loading="lazy" tabindex="-1" style="width: 100%; height: 70vh; border: 0;" src="about:blank" data-initial-src="https://www.flashscore.com.br/basquete/"></iframe>
+          <iframe id="flashscore-browser-iframe" loading="lazy" tabindex="-1" style="width: 100%; height: 70vh; border: 0;" src="about:blank" data-initial-src="https://www.flashscore.com.br/"></iframe>
         </div>
       </div>
     </div>
@@ -1801,7 +1801,7 @@ function mountProfileRows(){
       if (activated || !isHostFlag()) return;
       activated = true;
 
-      const initialSrc = iframe.dataset.initialSrc || 'https://www.flashscore.com.br/basquete/';
+      const initialSrc = iframe.dataset.initialSrc || 'https://www.flashscore.com.br/';
       const storageKey = 'flashscore-browser-last-url';
       const toggleIcon = toggleBtn.querySelector('i');
       const visibilityKey = 'flashscore-browser-visibility';

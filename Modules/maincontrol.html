@@ -99,6 +99,7 @@
     .control-row {
       flex-direction: column;
       align-items: stretch;
+      gap: 10px;
     }
   }
   @media (max-width: 1024px) {
@@ -391,11 +392,18 @@
     justify-content: flex-end;
   }
   @media (max-width: 1024px) {
-    .control-row .mode-toggle,
     .module-btn-group,
     .control-action-group {
       margin-left: 0;
       width: 100%;
+      justify-content: center;
+      align-self: center;
+    }
+    .control-row .mode-toggle {
+      margin-left: auto;
+      margin-right: auto;
+      width: auto;
+      max-width: 100%;
       justify-content: center;
       align-self: center;
     }
@@ -408,6 +416,32 @@
       width: 100%;
       justify-content: center;
       align-self: center;
+    }
+    #controlContent {
+      min-width: 0;
+    }
+    #controlContent .mode-toggle {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      max-width: 100%;
+      gap: 6px;
+      padding: 4px;
+    }
+    #controlContent .mode-btn {
+      min-width: 0;
+      width: 100%;
+      padding: 8px 4px;
+    }
+    #controlContent .mode-btn .mode-icon {
+      font-size: clamp(1.5rem, 7vw, 2rem);
+    }
+    #controlContent .control-action-group,
+    .control-readouts-bar .module-btn-group {
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    #controlContent .control-action-group {
+      align-items: center;
     }
   }
   .mode-btn {
@@ -1136,9 +1170,20 @@
   }
   @media (max-width: 1024px) {
     .control-status-bar {
-      flex-direction: column;
-      align-items: stretch;
+      flex-direction: row-reverse;
+      align-items: flex-start;
       justify-content: flex-start;
+      gap: 10px 12px;
+    }
+    .control-status-actions {
+      flex: 0 0 auto;
+    }
+    .control-status-groups {
+      flex: 1 1 0;
+      justify-content: flex-end;
+    }
+    .control-peer-list {
+      min-width: 0;
     }
   }
   .channel-switch {
@@ -1289,6 +1334,21 @@
     width: 20px;
     height: 20px;
   }
+  @media (max-width: 1024px) {
+    .control-readouts-bar {
+      row-gap: 14px;
+      justify-content: center;
+    }
+    .control-readouts {
+      flex: 1 0 100%;
+      justify-content: center;
+      gap: 1rem 1.35rem;
+    }
+    .control-readouts-bar .module-btn-group {
+      margin-left: auto;
+      margin-right: auto;
+    }
+  }
   @media (max-width: 640px) {
     .glass-background {
       backdrop-filter: none;
@@ -1297,10 +1357,31 @@
       box-shadow: none !important;
     }
     .control-readouts-bar {
+      gap: 10px;
       justify-content: center;
     }
+    .control-readouts-bar .module-btn-group {
+      display: none;
+    }
     .control-readouts {
-      justify-content: center;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.75rem;
+      justify-content: stretch;
+      flex: 1 1 100%;
+    }
+    .control-readouts .control-readout {
+      width: 100%;
+      min-width: 0;
+      text-align: center;
+    }
+    .control-readouts .control-readout-value {
+      font-size: clamp(1.2rem, 8vw, 1.55rem);
+      overflow-wrap: anywhere;
+    }
+    .control-readouts .control-readout-label {
+      font-size: 0.68rem;
+      letter-spacing: 0.06em;
     }
   }
   #remoteControlCard > .control-readouts,

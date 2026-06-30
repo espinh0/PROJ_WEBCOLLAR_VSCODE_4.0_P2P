@@ -268,11 +268,12 @@
     if (kaStatusEl) kaStatusEl.textContent = text;
   }
 
-  function setHoldActiveFromSignal(active, source, command) {
+  function setHoldActiveFromSignal(active, source, command, opts = {}) {
     const next = !!active;
-    if (holdActive === next && window.__COLLAR_HOLD_ACTIVE__ === next) return;
+    const updateGlobal = opts.updateGlobal !== false;
+    if (holdActive === next && (!updateGlobal || window.__COLLAR_HOLD_ACTIVE__ === next)) return;
     holdActive = next;
-    window.__COLLAR_HOLD_ACTIVE__ = next;
+    if (updateGlobal) window.__COLLAR_HOLD_ACTIVE__ = next;
     if (next) {
       holdActiveSince = Date.now();
       console.log('[HB+KA] HOLD ativo por sinal global' + (source ? ' (' + source + ')' : '') + ':', command || '');
@@ -295,7 +296,9 @@
     const detail = ev && ev.detail ? ev.detail : {};
     const state = detail.state || {};
     if (typeof state.on !== 'boolean') return;
-    setHoldActiveFromSignal(state.on, detail.meta && detail.meta.via || 'hold:state', state.cmd || '');
+    if (!state.on && detail.meta && detail.meta.via === 'holdSync.watchdog') return;
+    if (!state.on && window.__COLLAR_HOLD_ACTIVE__ === true) return;
+    setHoldActiveFromSignal(state.on, detail.meta && detail.meta.via || 'hold:state', state.cmd || '', { updateGlobal: false });
   }
 
   function markHoldFromCommandLine(line, source) {
@@ -305,25 +308,23 @@
     if (/^HOLDON\b/.test(upper) || /^DUAL\s+HOLDON\b/.test(upper)) {
       const chMatch = trimmed.match(/\b(SHOCK|VIBRATION|BEEP|LIGHT)\b\s*,\s*\d+\s*,\s*(\d+)\b/i);
       const ch = chMatch ? Number(chMatch[2]) : 0;
-      holdActive = true;
       holdActiveChannel = Number.isFinite(ch) ? ch : 0;
-      holdActiveSince = Date.now();
+      setHoldActiveFromSignal(true, source, trimmed);
       console.log('[HB+KA] HOLDON observado em ' + source + (holdActiveChannel ? ` (canal ${holdActiveChannel})` : '') + ':', trimmed);
       return;
     }
 
     if (/^HOLDOFF\b/.test(upper)) {
-      if (!holdActive) return;
+      if (!holdActive && window.__COLLAR_HOLD_ACTIVE__ !== true) return;
       const now = Date.now();
       const prevChannel = holdActiveChannel;
-      holdActive = false;
       holdActiveChannel = 0;
-      holdActiveSince = 0;
       if (prevChannel && KA_CHANNELS.includes(prevChannel)) {
         lastActivityByCh[prevChannel] = now;
       } else {
         KA_CHANNELS.forEach((ch) => { lastActivityByCh[ch] = now; });
       }
+      setHoldActiveFromSignal(false, source, trimmed);
       console.log('[HB+KA] HOLDOFF observado em ' + source + ':', trimmed);
     }
   }
@@ -334,8 +335,15 @@
       if (window.SerialBridge.send.__hbkaWrapped) return true;
       const originalSend = window.SerialBridge.send.bind(window.SerialBridge);
       const wrappedSend = function(line, ...args) {
+        const result = originalSend(line, ...args);
+        if (result && typeof result.then === 'function') {
+          return result.then((value) => {
+            markHoldFromCommandLine(line, 'TX');
+            return value;
+          });
+        }
         markHoldFromCommandLine(line, 'TX');
-        return originalSend(line, ...args);
+        return result;
       };
       wrappedSend.__hbkaWrapped = true;
       window.SerialBridge.send = wrappedSend;

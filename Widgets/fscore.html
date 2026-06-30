@@ -27,9 +27,6 @@
     </div>
   </div>
   <div class="card-body">
-    <div class="d-flex justify-content-center mb-2">
-      <span class="fsm-match-status d-none" id="fsm-match-status">-</span>
-    </div>
     <div class="d-flex flex-wrap align-items-stretch gap-3">
       <div id="fsm-home-card" class="flex-grow-1 p-3 rounded-3">
         <div class="d-flex align-items-center justify-content-between">
@@ -43,6 +40,9 @@
           <div class="fw-bold fsm-team-name text-end" id="fsm-away-name">-</div>
         </div>
       </div>
+    </div>
+      <div class="d-flex justify-content-center mb-2">
+      <span class="fsm-match-status d-none" id="fsm-match-status">-</span>
     </div>
   </div>
 </div>
@@ -152,7 +152,7 @@
     line-height: 1;
   }
   .score-home {
-    color: var(--fs-home-color);
+    color: var(--fs-away-color);
   }
   .score-away {
     color: var(--fs-away-color);

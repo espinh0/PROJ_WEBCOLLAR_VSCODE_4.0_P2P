@@ -1637,6 +1637,7 @@
     (function initTrysteroCmdSingleton() {
       if (window.__TRYSTERO_CMD__) return;
 
+      const CMD_RETRY_DELAYS_MS = [120, 360, 800];
       const state = { room: null, sendCmd: null, gen: 0 };
 
       function safeUsername() { return (userInput.value || '').trim() || 'eu'; }
@@ -1688,8 +1689,18 @@
       function send(text, meta = {}) {
         const payload = buildPayload(text);
         if (!(state.sendCmd && state.room)) return false;
+        const gen = state.gen;
+        const sendCurrentPayload = () => {
+          if (gen !== state.gen || !(state.sendCmd && state.room)) return false;
+          try {
+            state.sendCmd(payload);
+            return true;
+          } catch {
+            return false;
+          }
+        };
         try {
-          state.sendCmd(payload);
+          if (!sendCurrentPayload()) return false;
           emit({
             id: payload.id,
             key: payload.id,
@@ -1700,6 +1711,9 @@
             ts: payload.timestamp,
             origin: 'trystero-out',
             meta
+          });
+          CMD_RETRY_DELAYS_MS.forEach((delay) => {
+            setTimeout(() => { sendCurrentPayload(); }, delay);
           });
           return true;
         } catch {

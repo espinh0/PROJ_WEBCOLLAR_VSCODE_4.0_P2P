@@ -5,14 +5,7 @@
       <div class="small text-secondary host-only" id="fsm-status">desconectado</div>
     </div>
     <div class="fsm-header-right d-flex align-items-center gap-3 flex-wrap ms-auto justify-content-end">
-      <div class="btn-group btn-group-sm" role="group" aria-label="Selecionar time">
-        <button class="btn btn-outline-info" id="fsm-target-home">Casa</button>
-        <button class="btn btn-outline-info" id="fsm-target-any" aria-label="Ambos" title="Ambos">
-          <i class="fa-solid fa-left-right" aria-hidden="true"></i>
-        </button>
-        <button class="btn btn-outline-info" id="fsm-target-away">Fora</button>
-      </div>
-      <div class="fsm-header-search">
+      <div class="fsm-header-search host-only">
         <div class="input-group input-group-sm">
           <input id="fsm-search-team" type="text" class="form-control" placeholder="Digite o time e Enter" aria-label="Pesquisar time" />
           <button id="fsm-search-btn" class="btn btn-outline-secondary" type="button"><i class="fa-solid fa-magnifying-glass"></i></button>
@@ -43,6 +36,9 @@
     </div>
       <div class="d-flex justify-content-center mb-2">
       <span class="fsm-match-status d-none" id="fsm-match-status">-</span>
+    </div>
+    <div class="fsm-active-rules mt-3 d-none" id="fsm-active-rules">
+      <div class="fsm-active-rules-list" id="fsm-active-rules-list"></div>
     </div>
   </div>
 </div>
@@ -188,6 +184,59 @@
     border-color: rgba(252,165,165,0.45);
     box-shadow: 0 0 14px rgba(248,113,113,0.16);
   }
+  .fsm-active-rules {
+    border-top: 1px solid var(--fs-border);
+    padding-top: 10px;
+  }
+  .fsm-active-rules-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .fsm-active-rules-side {
+    min-width: 0;
+    padding: 8px 10px;
+    border: 1px solid var(--fs-border);
+    border-radius: 8px;
+    background: rgba(14,10,20,0.72);
+  }
+  .fsm-active-rules-side[data-side="away"] {
+    text-align: right;
+  }
+  .fsm-active-rules-title {
+    margin-bottom: 5px;
+    color: var(--fs-text);
+    font-size: .82rem;
+    font-weight: 700;
+    line-height: 1.1;
+    word-break: break-word;
+  }
+  .fsm-active-rule-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    color: var(--fs-muted);
+    font-size: .78rem;
+    line-height: 1.25;
+  }
+  .fsm-active-rules-side[data-side="away"] .fsm-active-rule-row {
+    justify-content: flex-end;
+  }
+  .fsm-active-rule-row i {
+    width: 1em;
+    text-align: center;
+    color: var(--fs-text);
+  }
+  .fsm-active-rule-event {
+    color: var(--fs-text);
+    font-weight: 700;
+  }
+  .fsm-active-rule-empty {
+    color: var(--fs-muted);
+    font-size: .75rem;
+    opacity: .7;
+  }
   .score-blink { animation: scoreBlink 0.9s ease; }
   @keyframes scoreBlink {
     0%   { text-shadow: 0 0 0 rgba(168,85,247,0); transform: scale(1); }
@@ -269,9 +318,86 @@
   :root:not(.host-on) .host-only {
     display: none !important;
   }
+  #fs-remote-card .fsr-mode-picker {
+    display: inline-flex;
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid #1f232c;
+    border-radius: 8px;
+    background: #0b0d12;
+  }
+  #fs-remote-card .fsr-mode-picker .btn {
+    border-radius: 6px;
+  }
+  #fs-remote-card .fsr-rules-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  #fs-remote-card .fsr-team-rules {
+    border: 1px solid #1f232c;
+    border-radius: 8px;
+    background: #0b0d12;
+    overflow: hidden;
+  }
+  #fs-remote-card .fsr-team-rules-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 12px;
+    border-bottom: 1px solid #1f232c;
+    background: #11151d;
+  }
+  #fs-remote-card .fsr-rule-card {
+    padding: 10px 12px;
+    border-bottom: 1px solid #1f232c;
+  }
+  #fs-remote-card .fsr-rule-card:last-child {
+    border-bottom: 0;
+  }
+  #fs-remote-card .fsr-rule-fields {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 10px;
+  }
+  #fs-remote-card .fsr-rule-fields label {
+    margin-bottom: 2px;
+  }
+  #fs-remote-card .fsr-rule-fields .form-control,
+  #fs-remote-card .fsr-rule-fields .form-select {
+    background-color: #090b10;
+    border-color: #273040;
+    color: #e5e7eb;
+  }
+  #fs-remote-card .fsr-profile-panel.is-hidden,
+  #fs-remote-card .fsr-rules-panel.is-hidden,
+  #fs-remote-card .fsr-rule-fields.is-hidden {
+    display: none !important;
+  }
+  @media (max-width: 768px) {
+    #fs-remote-card .fsr-rules-grid {
+      grid-template-columns: 1fr;
+    }
+    .fsm-active-rules-list {
+      grid-template-columns: 1fr;
+    }
+    .fsm-active-rules-side[data-side="away"] {
+      text-align: left;
+    }
+    .fsm-active-rules-side[data-side="away"] .fsm-active-rule-row {
+      justify-content: flex-start;
+    }
+    #fs-remote-card .fsr-rule-fields {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
   @media (max-width: 576px) {
     .fsm-team-name {
       font-size: 1.45rem;
+    }
+    #fs-remote-card .fsr-rule-fields {
+      grid-template-columns: 1fr;
     }
   }
 </style>
@@ -328,11 +454,13 @@
   const lastEl = $('fsm-last');
   const sourceEl = $('fsm-source');
   
-  const targetButtons = {
-    home: $('fsm-target-home'),
-    away: $('fsm-target-away'),
-    any: $('fsm-target-any')
-  };
+  function getTargetButtons(){
+    return {
+      home: $('fsm-target-home'),
+      away: $('fsm-target-away'),
+      any: $('fsm-target-any')
+    };
+  }
   let currentTargetKey = 'any';
   let lastNames = { home:'', away:'' };
   let lastScore = { home:null, away:null };
@@ -370,7 +498,7 @@
   updateScoreCardHighlight(currentTargetKey);
   function setActiveTarget(key){
     currentTargetKey = key;
-    Object.entries(targetButtons).forEach(([k, btn])=>{
+    Object.entries(getTargetButtons()).forEach(([k, btn])=>{
       if (!btn) return;
       btn.classList.toggle('active', k === key);
     });
@@ -379,6 +507,7 @@
   window.__FS_SCORE_MIRROR__ = window.__FS_SCORE_MIRROR__ || {};
   window.__FS_SCORE_MIRROR__.setActiveTarget = setActiveTarget;
   window.__FS_SCORE_MIRROR__.getCurrentTargetKey = () => currentTargetKey;
+  window.__FS_SCORE_MIRROR__.refreshTargetButtons = () => bindTargetButtons(lastNames);
   function detectHostFlag(){
     try {
       const peer = (window.Flowgate && window.Flowgate.localPeer) ? window.Flowgate.localPeer : window.__TRYSTERO_PEER__;
@@ -631,6 +760,7 @@
 
   function bindTargetButtons(names){
     const { homeName, awayName } = names || {};
+    const targetButtons = getTargetButtons();
     const resolvedHome = (homeName || lastNames.home || targetButtons.home?.textContent || 'Casa').trim();
     const resolvedAway = (awayName || lastNames.away || targetButtons.away?.textContent || 'Fora').trim();
     if (targetButtons.home) targetButtons.home.textContent = resolvedHome;
@@ -780,7 +910,6 @@
     </div>
     <div class="p-2 rounded-3 mb-3" style="background:#0b0d12; border:1px solid #1f232c;">
       <div class="d-flex flex-wrap gap-3 align-items-center small text-secondary" id="fsr-preview">
-        <div>Alvo: <span class="badge text-bg-info" id="fsr-prev-target">Ambos</span></div>
         <div>Estado: <span class="badge text-bg-dark" id="fsr-prev-armed">desarmado</span></div>
         <div>Modo: <span class="badge text-bg-secondary" id="fsr-prev-mode">-</span></div>
         <div>Nivel: <span class="badge text-bg-secondary" id="fsr-prev-level">-</span></div>
@@ -793,10 +922,7 @@
       </div>
     </div>
 
-    <p class="small text-secondary mb-2">
-      Este painel recebe o placar via fs-score e aplica comandos de coleira conforme as regras abaixo. Espelho pode usar esta instancia para ver status/alvo.
-    </p>
-    <div class="row g-3">
+    <div class="row g-3 align-items-end">
       <div class="col-12 col-md-4">
         <label class="form-label small text-secondary">Armado</label>
         <div class="form-check form-switch">
@@ -805,7 +931,16 @@
         </div>
       </div>
       <div class="col-12 col-md-4">
-        <label class="form-label small text-secondary">Teste de Pontos</label>
+        <label class="form-label small text-secondary">Modo de disparo</label>
+        <div class="fsr-mode-picker" role="group" aria-label="Modo de disparo">
+          <input class="btn-check" type="radio" name="fsr-trigger-mode" id="fsr-trigger-rules" value="rules" autocomplete="off">
+          <label class="btn btn-sm btn-outline-light" for="fsr-trigger-rules">Regras por evento</label>
+          <input class="btn-check" type="radio" name="fsr-trigger-mode" id="fsr-trigger-profiles" value="profiles" autocomplete="off">
+          <label class="btn btn-sm btn-outline-light" for="fsr-trigger-profiles">Perfis 1/2/3</label>
+        </div>
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label small text-secondary">Teste rapido</label>
         <div class="btn-group btn-group-sm">
             <button id="fsr-test-home-point-btn" class="btn btn-secondary">Casa +1</button>
             <button id="fsr-test-away-point-btn" class="btn btn-secondary">Visitante +1</button>
@@ -815,9 +950,31 @@
 
     <hr class="my-3" />
 
-    <div class="row g-3">
-      <div class="col-12 col-md-6">
-        <div class="fw-semibold mb-2">Perfis 1/2/3 pts</div>
+    <div class="fsr-rules-panel" id="fsr-rules-panel">
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+        <div class="fw-semibold">Regras por evento</div>
+        <div class="small text-secondary">Ative uma regra para exibir seus controles.</div>
+      </div>
+      <div class="fsr-rules-grid" id="fsr-rules-grid"></div>
+    </div>
+
+    <div class="fsr-profile-panel is-hidden" id="fsr-profile-panel">
+      <div class="row g-3">
+        <div class="col-12 col-md-8">
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <div>
+              <div class="fw-semibold">Alvo dos perfis</div>
+              <div class="small text-secondary">Usado somente no modo Perfis 1/2/3.</div>
+            </div>
+            <div class="btn-group btn-group-sm" role="group" aria-label="Selecionar time para perfis">
+              <button class="btn btn-outline-info" id="fsm-target-home">Casa</button>
+              <button class="btn btn-outline-info" id="fsm-target-any" aria-label="Ambos" title="Ambos">
+                <i class="fa-solid fa-left-right" aria-hidden="true"></i>
+              </button>
+              <button class="btn btn-outline-info" id="fsm-target-away">Fora</button>
+            </div>
+          </div>
+          <div class="fw-semibold mb-2">Perfis 1/2/3 pts</div>
         <div class="row g-2 align-items-end">
           <div class="col-12">
             <div class="d-flex text-secondary small">
@@ -831,6 +988,7 @@
           <div class="col-12" data-p="1"></div>
           <div class="col-12" data-p="2"></div>
       <div class="col-12" data-p="3"></div>
+        </div>
         </div>
       </div>
     </div>
@@ -971,11 +1129,53 @@
   window.__FS_REMOTE_READY__ = true;
 
   const STORAGE_KEY_STATE = 'fs_remote_state_v1';
+  const FS_RULE_SIDES = [
+    { key:'home', label:'Time da casa' },
+    { key:'away', label:'Time visitante' }
+  ];
+  const FS_RULE_EVENTS = [
+    { key:'goal', label:'Ponto' },
+    { key:'win', label:'Vitoria' },
+    { key:'loss', label:'Derrota' },
+    { key:'redCard', label:'Cartao vermelho' },
+    { key:'yellowCard', label:'Cartao amarelo' }
+  ];
+  const FS_RULE_MODES = [
+    { key:'SHOCK', label:'Choque' },
+    { key:'VIBRATION', label:'Vibracao' },
+    { key:'LIGHT', label:'Luz' },
+    { key:'BEEP', label:'Beep' },
+    { key:'ROULETTE', label:'Roleta' }
+  ];
+  const DEFAULT_RULE = {
+    enabled: false,
+    mode: 'SHOCK',
+    level: 40,
+    channel: 1,
+    pulses: 1,
+    durationMs: 300,
+    gapMs: 200
+  };
+  function cloneRule(rule){
+    const merged = Object.assign({}, DEFAULT_RULE, rule || {});
+    delete merged.intensity;
+    merged.channel = Math.max(1, Math.min(2, parseInt(merged.channel, 10) || 1));
+    return merged;
+  }
+  function defaultRules(){
+    const rules = {};
+    FS_RULE_SIDES.forEach((side)=>{
+      rules[side.key] = {};
+      FS_RULE_EVENTS.forEach((ev)=>{ rules[side.key][ev.key] = cloneRule(); });
+    });
+    return rules;
+  }
   const DEFAULTS = {
     team: '',
     anySide: true,
     side: 'any',
     armed: true,
+    triggerMode: 'rules',
     mode: 'SHOCK',
     level: 40,
     channel: 1,
@@ -986,7 +1186,8 @@
       1:{pulses:1,lvlMul:1.00,durMul:1.00},
       2:{pulses:2,lvlMul:1.00,durMul:1.15},
       3:{pulses:3,lvlMul:1.10,durMul:1.30}
-    }
+    },
+    rules: defaultRules()
   };
 
   const $ = (id) => document.getElementById(id);
@@ -994,7 +1195,6 @@
   const logEl = $('fsr-log');
   const logClearBtn = $('fsr-log-clear');
   const preview = {
-    target: $('fsr-prev-target'),
     armed: $('fsr-prev-armed'),
     mode: $('fsr-prev-mode'),
     level: $('fsr-prev-level'),
@@ -1005,6 +1205,14 @@
   };
   const inputs = {
     armed: $('fsr-armed'),
+    triggerRules: $('fsr-trigger-rules'),
+    triggerProfiles: $('fsr-trigger-profiles'),
+    rulesPanel: $('fsr-rules-panel'),
+    profilePanel: $('fsr-profile-panel'),
+    rulesGrid: $('fsr-rules-grid'),
+    activeRules: $('fsm-active-rules'),
+    activeRulesList: $('fsm-active-rules-list'),
+    rules: {},
     p1: {},
     p2: {},
     p3: {}
@@ -1059,8 +1267,9 @@
   const norm = (s)=> String(s||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
   const SELF_ID = `fs-config-${Math.random().toString(36).slice(2)}`;
   const fieldTs = {
-    armed: 0, mode: 0, level: 0, channel: 0, gapMs: 0, baseMs: 0, preDelayMs: 0,
+    armed: 0, triggerMode: 0, mode: 0, level: 0, channel: 0, gapMs: 0, baseMs: 0, preDelayMs: 0,
     team: 0, anySide: 0, side: 0,
+    rules: 0,
     profiles: {
       1: { pulses: 0, lvlMul: 0, durMul: 0 },
       2: { pulses: 0, lvlMul: 0, durMul: 0 },
@@ -1070,6 +1279,7 @@
   function markTsFromPayload(payload, ts){
     const stamp = Number.isFinite(ts) ? ts : Date.now();
     if (payload.armed != null) fieldTs.armed = stamp;
+    if (payload.triggerMode != null) fieldTs.triggerMode = stamp;
     if (payload.mode != null) fieldTs.mode = stamp;
     if (payload.level != null) fieldTs.level = stamp;
     if (payload.channel != null) fieldTs.channel = stamp;
@@ -1079,6 +1289,7 @@
     if (payload.team != null) fieldTs.team = stamp;
     if (payload.anySide != null) fieldTs.anySide = stamp;
     if (payload.side != null) fieldTs.side = stamp;
+    if (payload.rules && typeof payload.rules === 'object') fieldTs.rules = stamp;
     if (payload.profiles && typeof payload.profiles === 'object'){
       for (const k of [1,2,3]){
         const pf = payload.profiles[k];
@@ -1106,6 +1317,19 @@
       else {a.push(1);d--;}
     }
     return a;
+  }
+
+  function normalizeRules(rawRules){
+    const merged = defaultRules();
+    if (!rawRules || typeof rawRules !== 'object') return merged;
+    FS_RULE_SIDES.forEach((side)=>{
+      const sideRules = rawRules[side.key];
+      if (!sideRules || typeof sideRules !== 'object') return;
+      FS_RULE_EVENTS.forEach((ev)=>{
+        merged[side.key][ev.key] = cloneRule(sideRules[ev.key]);
+      });
+    });
+    return merged;
   }
 
   function isHostForScoreRelay(){
@@ -1140,7 +1364,9 @@
       const raw = JSON.parse(localStorage.getItem(STORAGE_KEY_STATE) || '{}') || {};
       const merged = Object.assign({}, DEFAULTS, raw);
       delete merged.rouletteMode;
+      merged.triggerMode = merged.triggerMode === 'profiles' ? 'profiles' : 'rules';
       merged.profiles = Object.assign({}, DEFAULTS.profiles, raw.profiles || {});
+      merged.rules = normalizeRules(raw.rules);
       if (!merged.team) merged.anySide = true;
       if (!merged.side) merged.side = merged.anySide ? 'any' : 'home';
       if (merged.anySide && merged.side !== 'any') merged.side = 'any';
@@ -1163,6 +1389,7 @@
   let lastScoreHash = '';
   let lastScoreTs = 0;
   const seenScore = new Set();
+  const seenCardEvents = new Set();
   let processing = false;
   const queue = [];
 
@@ -1229,6 +1456,49 @@
     for (let i=0;i<(pf.pulses||1);i++){
       await pulseOnce(level, dur);
       if (i<(pf.pulses||1)-1) await delay(S.gapMs);
+    }
+  }
+
+  function supportsLevel(mode){
+    const key = String(mode || '').toUpperCase();
+    return key === 'SHOCK' || key === 'VIBRATION';
+  }
+
+  function commandLevelForRule(rule){
+    return clamp(parseInt(rule?.level, 10) || 0, 0, 100);
+  }
+
+  async function pulseRule(rule){
+    const mode = String(rule?.mode || 'SHOCK').toUpperCase();
+    const channel = clamp(parseInt(rule?.channel, 10) || 1, 1, 2);
+    const duration = Math.max(1, parseInt(rule?.durationMs, 10) || 300);
+    const level = supportsLevel(mode) ? commandLevelForRule(rule) : 0;
+    await sendCommand(`HOLDON ${mode},${level},${channel}`);
+    await delay(duration);
+    await sendCommand('HOLDOFF');
+  }
+
+  async function fireRule(side, eventKey){
+    if (!S.armed) {
+      appendLog(`Ignorado (desarmado): ${side}/${eventKey}`, 'fs-remote');
+      return;
+    }
+    const rule = S.rules?.[side]?.[eventKey];
+    if (!rule || !rule.enabled) return;
+    const mode = String(rule.mode || '').toUpperCase();
+    const pulses = Math.max(1, parseInt(rule.pulses, 10) || 1);
+    const gap = Math.max(0, parseInt(rule.gapMs, 10) || 0);
+    appendLog(`Regra ${side}/${eventKey}: ${mode || 'SHOCK'} x${pulses}`, 'fs-remote');
+    if (mode === 'ROULETTE') {
+      for (let i = 0; i < pulses; i++) {
+        await spinRouletteOnce();
+        if (i < pulses - 1) await delay(gap);
+      }
+      return;
+    }
+    for (let i = 0; i < pulses; i++) {
+      await pulseRule(rule);
+      if (i < pulses - 1) await delay(gap);
     }
   }
 
@@ -1327,6 +1597,33 @@
     return null;
   }
 
+  function sideFromEvent(ev){
+    const rawSide = String(ev?.side || ev?.teamSide || ev?.team || '').toLowerCase();
+    if (['home','casa'].includes(rawSide)) return 'home';
+    if (['away','visitor','visitante','fora'].includes(rawSide)) return 'away';
+    return null;
+  }
+
+  function cardTypeFromEvent(ev){
+    const raw = norm(ev?.type || ev?.event || ev?.card || ev?.kind || '');
+    if (raw.includes('red') || raw.includes('vermelho')) return 'redCard';
+    if (raw.includes('yellow') || raw.includes('amarelo')) return 'yellowCard';
+    return null;
+  }
+
+  function extractCardEvents(payload){
+    const lists = [payload?.cards, payload?.events, payload?.cardEvents].filter(Array.isArray);
+    const out = [];
+    lists.forEach((list)=>{
+      list.forEach((ev)=>{
+        const side = sideFromEvent(ev);
+        const type = cardTypeFromEvent(ev);
+        if (side && type) out.push({ side, type, id: ev.id || ev.ts || ev.minute || `${side}:${type}` });
+      });
+    });
+    return out;
+  }
+
   function handleScore(payload, opts = {}){
     if (!payload || typeof payload !== 'object') return;
     const src = payload.origin || payload.peerId || 'fs-remote';
@@ -1349,7 +1646,8 @@
       origin: src,
       reason: payload.reason || 'update'
     };
-    const hash = JSON.stringify([snap.homeName, snap.awayName, snap.homeScore, snap.awayScore, snap.ended, snap.matchStatus]);
+    const cardSnapshot = extractCardEvents(payload).map((ev)=>`${ev.side}:${ev.type}:${ev.id}`).join('|');
+    const hash = JSON.stringify([snap.homeName, snap.awayName, snap.homeScore, snap.awayScore, snap.ended, snap.matchStatus, cardSnapshot]);
     if (hash === lastScoreHash && ts <= lastScoreTs) return;
     lastScoreHash = hash; lastScoreTs = ts;
     appendLog(`${snap.homeName || 'Casa'} ${Number.isFinite(snap.homeScore) ? snap.homeScore : '-'} x ${Number.isFinite(snap.awayScore) ? snap.awayScore : '-'} ${snap.awayName || 'Fora'} (${payload.reason || 'update'})`, src);
@@ -1364,12 +1662,31 @@
 
     const isFirstOrSwapped = !prevSnap || snap.homeName !== prevSnap.homeName || snap.awayName !== prevSnap.awayName;
     lastSnap = snap;
+    syncInputs();
     if (isFirstOrSwapped) return;
 
     const dHome = (Number.isInteger(snap.homeScore) && Number.isInteger(prevSnap.homeScore) && snap.homeScore > prevSnap.homeScore)
       ? (snap.homeScore - prevSnap.homeScore) : 0;
     const dAway = (Number.isInteger(snap.awayScore) && Number.isInteger(prevSnap.awayScore) && snap.awayScore > prevSnap.awayScore)
       ? (snap.awayScore - prevSnap.awayScore) : 0;
+
+    if (S.triggerMode === 'rules') {
+      for (let i = 0; i < dHome; i++) enqueue(()=> fireRule('home', 'goal'));
+      for (let i = 0; i < dAway; i++) enqueue(()=> fireRule('away', 'goal'));
+      const cardEvents = extractCardEvents(payload);
+      cardEvents.forEach((ev)=>{
+        const cardKey = `${snap.homeName}|${snap.awayName}|${ev.side}|${ev.type}|${ev.id}`;
+        if (seenCardEvents.has(cardKey)) return;
+        seenCardEvents.add(cardKey);
+        enqueue(()=> fireRule(ev.side, ev.type));
+      });
+      if (snap.ended && !prevSnap.ended && Number.isInteger(snap.homeScore) && Number.isInteger(snap.awayScore) && snap.homeScore !== snap.awayScore) {
+        const homeWon = snap.homeScore > snap.awayScore;
+        enqueue(()=> fireRule('home', homeWon ? 'win' : 'loss'));
+        enqueue(()=> fireRule('away', homeWon ? 'loss' : 'win'));
+      }
+      return;
+    }
 
     const side = whichSide(S.team, snap);
     if (!side) return;
@@ -1401,7 +1718,103 @@
     handleScore(newPayload);
   }
 
-function mountProfileRows(){
+  function ruleInputId(side, ev, field){
+    return `fsr-rule-${side}-${ev}-${field}`;
+  }
+
+  function ruleFieldHtml(side, ev, field, label, type, attrs = ''){
+    const id = ruleInputId(side, ev, field);
+    return `
+      <div>
+        <label class="form-label small text-secondary" for="${id}">${label}</label>
+        <input class="form-control form-control-sm" id="${id}" data-rule-field="${field}" type="${type}" ${attrs}>
+      </div>`;
+  }
+
+  function ruleLevelHtml(side, ev){
+    const id = ruleInputId(side, ev, 'level');
+    const valueId = ruleInputId(side, ev, 'levelValue');
+    return `
+      <div>
+        <label class="form-label small text-secondary d-flex justify-content-between" for="${id}">
+          <span>Nivel</span>
+          <span id="${valueId}">40%</span>
+        </label>
+        <input class="form-range level-slider" id="${id}" data-rule-field="level" type="range" min="0" max="100" step="1">
+      </div>`;
+  }
+
+  function ruleChannelHtml(side, ev){
+    const id = ruleInputId(side, ev, 'channel');
+    const valueId = ruleInputId(side, ev, 'channelValue');
+    return `
+      <div class="channel-switch form-check form-switch m-0">
+        <span class="channel-switch-label">Canal</span>
+        <span class="channel-switch-toggle">
+          <input class="form-check-input" type="checkbox" id="${id}" data-rule-field="channel" aria-label="Canal 1 ou 2">
+          <span id="${valueId}" class="channel-switch-value">1</span>
+        </span>
+      </div>`;
+  }
+
+  function mountRuleGrid(){
+    const grid = inputs.rulesGrid;
+    if (!grid) return;
+    grid.innerHTML = FS_RULE_SIDES.map((side)=>`
+      <section class="fsr-team-rules" data-rule-side="${side.key}">
+        <div class="fsr-team-rules-header">
+          <div class="fw-semibold">${side.label}</div>
+          <div class="small text-secondary" id="fsr-rule-${side.key}-team-name">${side.key === 'home' ? 'Casa' : 'Visitante'}</div>
+        </div>
+        ${FS_RULE_EVENTS.map((ev)=>`
+          <div class="fsr-rule-card" data-rule-event="${ev.key}">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="${ruleInputId(side.key, ev.key, 'enabled')}" data-rule-field="enabled">
+              <label class="form-check-label fw-semibold" for="${ruleInputId(side.key, ev.key, 'enabled')}">${ev.label}</label>
+            </div>
+            <div class="fsr-rule-fields is-hidden" id="${ruleInputId(side.key, ev.key, 'fields')}">
+              <div>
+                <label class="form-label small text-secondary" for="${ruleInputId(side.key, ev.key, 'mode')}">Modo</label>
+                <select class="form-select form-select-sm" id="${ruleInputId(side.key, ev.key, 'mode')}" data-rule-field="mode">
+                  ${FS_RULE_MODES.map((mode)=>`<option value="${mode.key}">${mode.label}</option>`).join('')}
+                </select>
+              </div>
+              ${ruleLevelHtml(side.key, ev.key)}
+              ${ruleChannelHtml(side.key, ev.key)}
+              ${ruleFieldHtml(side.key, ev.key, 'pulses', 'Pulsos', 'number', 'min="1" max="20" step="1"')}
+              ${ruleFieldHtml(side.key, ev.key, 'durationMs', 'Duracao s', 'number', 'min="0.1" max="20" step="0.1"')}
+              ${ruleFieldHtml(side.key, ev.key, 'gapMs', 'Intervalo ms', 'number', 'min="0" max="20000" step="10"')}
+              <div class="d-flex align-items-end">
+                <button class="btn btn-outline-light btn-sm w-100" id="${ruleInputId(side.key, ev.key, 'test')}" type="button">Testar</button>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </section>
+    `).join('');
+
+    FS_RULE_SIDES.forEach((side)=>{
+      inputs.rules[side.key] = inputs.rules[side.key] || {};
+      FS_RULE_EVENTS.forEach((ev)=>{
+        const refs = {
+          enabled: $(ruleInputId(side.key, ev.key, 'enabled')),
+          fields: $(ruleInputId(side.key, ev.key, 'fields')),
+          mode: $(ruleInputId(side.key, ev.key, 'mode')),
+          level: $(ruleInputId(side.key, ev.key, 'level')),
+          levelValue: $(ruleInputId(side.key, ev.key, 'levelValue')),
+          channel: $(ruleInputId(side.key, ev.key, 'channel')),
+          channelValue: $(ruleInputId(side.key, ev.key, 'channelValue')),
+          pulses: $(ruleInputId(side.key, ev.key, 'pulses')),
+          durationMs: $(ruleInputId(side.key, ev.key, 'durationMs')),
+          gapMs: $(ruleInputId(side.key, ev.key, 'gapMs')),
+          test: $(ruleInputId(side.key, ev.key, 'test'))
+        };
+        inputs.rules[side.key][ev.key] = refs;
+      });
+    });
+  }
+
+  function mountProfileRows(){
     [1,2,3].forEach((p)=>{
       const target = document.querySelector(`#fs-remote-card [data-p="${p}"]`);
       if (!target) return;
@@ -1433,10 +1846,140 @@ function mountProfileRows(){
       if (inputs[`p${p}`].dur) inputs[`p${p}`].dur.value = pf.durMul;
     });
   }
+  mountRuleGrid();
   mountProfileRows();
+
+  function labelForSide(sideKey){
+    const side = FS_RULE_SIDES.find((item)=> item.key === sideKey);
+    if (!side) return sideKey;
+    if (sideKey === 'home') return lastSnap?.homeName || 'Casa';
+    if (sideKey === 'away') return lastSnap?.awayName || 'Visitante';
+    return side.label;
+  }
+
+  function labelForEvent(eventKey){
+    const labels = {
+      goal: 'PONTO',
+      win: 'VIT\u00d3RIA',
+      loss: 'DERROTA',
+      redCard: 'CART\u00c3O VERMELHO',
+      yellowCard: 'CART\u00c3O AMARELO'
+    };
+    return labels[eventKey] || String(FS_RULE_EVENTS.find((item)=> item.key === eventKey)?.label || eventKey).toUpperCase();
+  }
+
+  function iconForMode(mode){
+    const key = String(mode || '').toUpperCase();
+    if (key === 'SHOCK') return 'fa-solid fa-bolt-lightning';
+    if (key === 'VIBRATION') return 'fa-solid fa-mobile-screen-button';
+    if (key === 'LIGHT') return 'fa-solid fa-lightbulb';
+    if (key === 'BEEP') return 'fa-solid fa-volume-high';
+    if (key === 'ROULETTE') return 'fa-solid fa-dice';
+    return 'fa-solid fa-circle';
+  }
+
+  function formatSeconds(value){
+    const num = Number(value);
+    if (!Number.isFinite(num)) return '0s';
+    return `${Number.isInteger(num) ? String(num) : num.toFixed(1).replace(/\.0$/, '')}s`;
+  }
+
+  function renderActiveRules(){
+    const wrap = inputs.activeRules;
+    const list = inputs.activeRulesList;
+    if (!wrap || !list) return;
+    list.innerHTML = '';
+    const activeBySide = { home: [], away: [] };
+    if (S.triggerMode === 'rules') {
+      FS_RULE_SIDES.forEach((side)=>{
+        FS_RULE_EVENTS.forEach((ev)=>{
+          const rule = S.rules?.[side.key]?.[ev.key];
+          if (rule?.enabled) activeBySide[side.key].push({ event: ev.key, rule });
+        });
+      });
+    }
+    const hasActive = Object.values(activeBySide).some((items)=> items.length > 0);
+    wrap.classList.toggle('d-none', !hasActive);
+    if (!hasActive) return;
+
+    FS_RULE_SIDES.forEach((side)=>{
+      const col = document.createElement('div');
+      col.className = 'fsm-active-rules-side';
+      col.dataset.side = side.key;
+
+      const title = document.createElement('div');
+      title.className = 'fsm-active-rules-title';
+      title.textContent = labelForSide(side.key);
+      col.appendChild(title);
+
+      const items = activeBySide[side.key];
+      if (!items.length) {
+        const empty = document.createElement('div');
+        empty.className = 'fsm-active-rule-empty';
+        empty.textContent = 'Nenhuma regra ativa';
+        col.appendChild(empty);
+      }
+
+      items.forEach((item)=>{
+        const row = document.createElement('div');
+        row.className = 'fsm-active-rule-row';
+        const rule = item.rule;
+        const mode = String(rule.mode || 'SHOCK').toUpperCase();
+        const level = supportsLevel(mode) ? `${commandLevelForRule(rule)}%` : '0%';
+        const eventLabel = document.createElement('span');
+        eventLabel.className = 'fsm-active-rule-event';
+        eventLabel.textContent = `${labelForEvent(item.event)}:`;
+        const icon = document.createElement('i');
+        icon.className = iconForMode(mode);
+        icon.setAttribute('aria-hidden', 'true');
+        const detail = document.createElement('span');
+        const pulses = Math.max(1, parseInt(rule.pulses, 10) || 1);
+        const channel = clamp(parseInt(rule.channel, 10) || 1, 1, 2);
+        const durationSec = Math.max(0.1, (parseInt(rule.durationMs, 10) || DEFAULT_RULE.durationMs) / 1000);
+        detail.textContent = `${pulses}x ${mode} ${level} no C${channel} por ${formatSeconds(durationSec)}`;
+        row.append(eventLabel, icon, detail);
+        col.appendChild(row);
+      });
+
+      list.appendChild(col);
+    });
+  }
 
   function syncInputs(){
     if (inputs.armed) inputs.armed.checked = !!S.armed;
+    const triggerMode = S.triggerMode === 'profiles' ? 'profiles' : 'rules';
+    if (inputs.triggerRules) inputs.triggerRules.checked = triggerMode === 'rules';
+    if (inputs.triggerProfiles) inputs.triggerProfiles.checked = triggerMode === 'profiles';
+    if (inputs.rulesPanel) inputs.rulesPanel.classList.toggle('is-hidden', triggerMode !== 'rules');
+    if (inputs.profilePanel) inputs.profilePanel.classList.toggle('is-hidden', triggerMode !== 'profiles');
+    try { window.__FS_SCORE_MIRROR__?.refreshTargetButtons?.(); } catch(_){}
+    FS_RULE_SIDES.forEach((side)=>{
+      const teamName = side.key === 'home' ? (lastSnap?.homeName || 'Casa') : (lastSnap?.awayName || 'Visitante');
+      const teamNameEl = $(`fsr-rule-${side.key}-team-name`);
+      if (teamNameEl) teamNameEl.textContent = teamName;
+      FS_RULE_EVENTS.forEach((ev)=>{
+        const rule = S.rules?.[side.key]?.[ev.key] || cloneRule();
+        const refs = inputs.rules?.[side.key]?.[ev.key];
+        if (!refs) return;
+        if (refs.enabled) refs.enabled.checked = !!rule.enabled;
+        if (refs.fields) refs.fields.classList.toggle('is-hidden', !rule.enabled);
+        if (refs.mode) refs.mode.value = rule.mode ?? DEFAULT_RULE.mode;
+        const levelValue = clamp(parseInt(rule.level, 10) || 0, 0, 100);
+        if (refs.level) {
+          refs.level.value = levelValue;
+          refs.level.style.setProperty('--lvl', `${levelValue}%`);
+        }
+        if (refs.levelValue) refs.levelValue.textContent = `${levelValue}%`;
+        if (refs.channel) refs.channel.checked = (clamp(parseInt(rule.channel, 10) || 1, 1, 2) === 2);
+        if (refs.channelValue) refs.channelValue.textContent = String(clamp(parseInt(rule.channel, 10) || 1, 1, 2));
+        if (refs.pulses) refs.pulses.value = rule.pulses ?? DEFAULT_RULE.pulses;
+        if (refs.durationMs) {
+          const seconds = Math.max(0.1, (parseInt(rule.durationMs, 10) || DEFAULT_RULE.durationMs) / 1000);
+          refs.durationMs.value = Number.isInteger(seconds) ? String(seconds) : seconds.toFixed(1).replace(/\.0$/, '');
+        }
+        if (refs.gapMs) refs.gapMs.value = rule.gapMs ?? DEFAULT_RULE.gapMs;
+      });
+    });
     [1,2,3].forEach((p)=>{
       const pf = S.profiles[p];
       const refs = inputs[`p${p}`];
@@ -1446,7 +1989,6 @@ function mountProfileRows(){
       if (refs.dur) refs.dur.value = pf.durMul ?? '';
     });
     // preview
-    if (preview.target) preview.target.textContent = S.anySide ? 'Ambos' : (S.team || 'Nenhum');
     if (preview.armed) {
       preview.armed.textContent = S.armed ? 'armado' : 'desarmado';
       preview.armed.className = S.armed ? 'badge text-bg-success' : 'badge text-bg-dark';
@@ -1457,21 +1999,28 @@ function mountProfileRows(){
     if (preview.gap) preview.gap.textContent = S.gapMs ? `${S.gapMs}ms` : '-';
     if (preview.base) preview.base.textContent = S.baseMs ? `${S.baseMs}ms` : '-';
     if (preview.preDelay) preview.preDelay.textContent = S.preDelayMs ? `${S.preDelayMs}ms` : '0ms';
+    renderActiveRules();
   }
   function syncMirrorTargetFromState(){
     try{
       const mirror = window.__FS_SCORE_MIRROR__;
       if (!mirror || typeof mirror.setActiveTarget !== 'function') return;
+      if (S?.triggerMode !== 'profiles') {
+        mirror.setActiveTarget(null);
+        return;
+      }
       const fallback = typeof mirror.getCurrentTargetKey === 'function' ? mirror.getCurrentTargetKey() : 'any';
       const side = S?.anySide ? 'any' : (S?.side || fallback);
       mirror.setActiveTarget(side);
     } catch(_){}
   }
   syncInputs();
+  syncMirrorTargetFromState();
 
   function controlSnapshot(includeTarget = false, includeProfiles = true){
     const base = {
       armed: S.armed,
+      triggerMode: S.triggerMode,
       mode: S.mode,
       level: S.level,
       channel: S.channel,
@@ -1485,6 +2034,7 @@ function mountProfileRows(){
       base.side = S.anySide ? 'any' : (S.side || 'home');
     }
     if (includeProfiles) base.profiles = S.profiles;
+    base.rules = S.rules;
     return base;
   }
 
@@ -1535,6 +2085,86 @@ function mountProfileRows(){
 
   function bindInputs(){
     if (inputs.armed) inputs.armed.addEventListener('change', (e)=>{ S.armed = !!e.target.checked; saveState(); broadcastConfig('armed'); syncInputs(); });
+    [inputs.triggerRules, inputs.triggerProfiles].forEach((el)=>{
+      if (!el) return;
+      el.addEventListener('change', (e)=>{
+        if (!e.target.checked) return;
+        S.triggerMode = e.target.value === 'profiles' ? 'profiles' : 'rules';
+        saveState();
+        broadcastConfig('trigger-mode');
+        syncInputs();
+        syncMirrorTargetFromState();
+      });
+    });
+
+    FS_RULE_SIDES.forEach((side)=>{
+      FS_RULE_EVENTS.forEach((ev)=>{
+        const refs = inputs.rules?.[side.key]?.[ev.key];
+        if (!refs) return;
+        const ensureRule = ()=> {
+          S.rules = normalizeRules(S.rules);
+          return S.rules[side.key][ev.key];
+        };
+        refs.enabled?.addEventListener('change', (e)=>{
+          const rule = ensureRule();
+          rule.enabled = !!e.target.checked;
+          saveState();
+          broadcastConfig('rule-change');
+          syncInputs();
+        });
+        refs.mode?.addEventListener('change', (e)=>{
+          const rule = ensureRule();
+          rule.mode = String(e.target.value || 'SHOCK').toUpperCase();
+          saveState();
+          broadcastConfig('rule-change');
+          renderActiveRules();
+        });
+        refs.level?.addEventListener('input', (e)=>{
+          const rule = ensureRule();
+          rule.level = clamp(parseInt(e.target.value, 10) || 0, 0, 100);
+          e.target.value = rule.level;
+          e.target.style.setProperty('--lvl', `${rule.level}%`);
+          if (refs.levelValue) refs.levelValue.textContent = `${rule.level}%`;
+          saveState();
+          broadcastConfig('rule-change');
+          renderActiveRules();
+        });
+        refs.channel?.addEventListener('change', (e)=>{
+          const rule = ensureRule();
+          rule.channel = e.target.checked ? 2 : 1;
+          if (refs.channelValue) refs.channelValue.textContent = String(rule.channel);
+          saveState();
+          broadcastConfig('rule-change');
+          renderActiveRules();
+        });
+        refs.pulses?.addEventListener('change', (e)=>{
+          const rule = ensureRule();
+          rule.pulses = clamp(parseInt(e.target.value, 10) || 1, 1, 20);
+          e.target.value = rule.pulses;
+          saveState();
+          broadcastConfig('rule-change');
+          renderActiveRules();
+        });
+        refs.durationMs?.addEventListener('change', (e)=>{
+          const rule = ensureRule();
+          const seconds = Math.max(0.1, parseFloat(e.target.value) || 0.1);
+          rule.durationMs = Math.round(seconds * 1000);
+          e.target.value = Number.isInteger(seconds) ? String(seconds) : seconds.toFixed(1).replace(/\.0$/, '');
+          saveState();
+          broadcastConfig('rule-change');
+          renderActiveRules();
+        });
+        refs.gapMs?.addEventListener('change', (e)=>{
+          const rule = ensureRule();
+          rule.gapMs = Math.max(0, parseInt(e.target.value, 10) || 0);
+          e.target.value = rule.gapMs;
+          saveState();
+          broadcastConfig('rule-change');
+          renderActiveRules();
+        });
+        refs.test?.addEventListener('click', ()=> enqueue(()=> fireRule(side.key, ev.key)));
+      });
+    });
 
     [1,2,3].forEach((p)=>{
       const refs = inputs[`p${p}`];
@@ -1641,6 +2271,10 @@ function mountProfileRows(){
     if (S.anySide && S.side !== 'any') S.side = 'any';
     if (!S.anySide && S.side === 'any' && nextSide && nextSide !== 'any') S.side = nextSide;
     if (cfg.armed != null && ts > fieldTs.armed) { S.armed = !!cfg.armed; fieldTs.armed = ts; }
+    if (cfg.triggerMode != null && ts > fieldTs.triggerMode) {
+      S.triggerMode = cfg.triggerMode === 'profiles' ? 'profiles' : 'rules';
+      fieldTs.triggerMode = ts;
+    }
     if (cfg.mode && ts > fieldTs.mode) { S.mode = String(cfg.mode); fieldTs.mode = ts; }
     if (cfg.level != null && ts > fieldTs.level) { S.level = clamp(parseInt(cfg.level,10)||0,0,100); fieldTs.level = ts; }
     if (cfg.channel != null && ts > fieldTs.channel) { S.channel = clamp(parseInt(cfg.channel,10)||1,1,99); fieldTs.channel = ts; }
@@ -1661,6 +2295,10 @@ function mountProfileRows(){
         if (cfg.profiles[k].lvlMul != null && ts > fieldTs.profiles[k].lvlMul) { pf.lvlMul = clamp(parseFloat(cfg.profiles[k].lvlMul)||1, 0.1, 3); fieldTs.profiles[k].lvlMul = ts; }
         if (cfg.profiles[k].durMul != null && ts > fieldTs.profiles[k].durMul) { pf.durMul = clamp(parseFloat(cfg.profiles[k].durMul)||1, 0.1, 5); fieldTs.profiles[k].durMul = ts; }
       }
+    }
+    if (cfg.rules && typeof cfg.rules === 'object' && ts > fieldTs.rules) {
+      S.rules = normalizeRules(cfg.rules);
+      fieldTs.rules = ts;
     }
     if (opts.persist !== false) saveState();
     const shouldRelay = cfg.origin && cfg.origin !== SELF_ID && opts.relay !== false;

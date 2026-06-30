@@ -124,6 +124,7 @@
   }
 
   var processed = new Set();
+  var inFlight = new Set();
   var MAX = 500;
   var lastHoldSeqByOrigin = {};
   var latchedHold = {
@@ -383,6 +384,7 @@
     var id  = String(msg.id || msg.key || '');
     if (!id) id = buildFallbackId(msg, text, origin);
     if (processed.has(id)) return;
+    if (inFlight.has(id)) return;
 
     executorLog('received', text, origin, {peerId: msg.peerId, username: msg.username});
 
@@ -400,6 +402,7 @@
     text = prepared.cmd;
 
     var SERIAL = getSerialAdapter();
+    inFlight.add(id);
     try {
       await SERIAL.send(text);
       beginRemoteExecLed(text, 'remote-executor');
@@ -407,6 +410,7 @@
       logLine(`→ chat ▶ collar (${SERIAL.name}): ${text}`);
       executorLog('sent', text, SERIAL.name, {serialAdapter: SERIAL.name});
     } catch(err){
+      inFlight.delete(id);
       latchedHold.active = previousHold.active;
       latchedHold.command = previousHold.command;
       latchedHold.origin = previousHold.origin;
@@ -416,6 +420,7 @@
       executorLog('error', text, SERIAL.name, {error: String(err && err.message || err)});
       return;
     }
+    inFlight.delete(id);
     mark(id);
   }
 

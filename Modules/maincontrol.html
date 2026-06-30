@@ -1365,7 +1365,7 @@
     }
     .control-readouts {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 0.75rem;
       justify-content: stretch;
       flex: 1 1 100%;
@@ -2888,6 +2888,19 @@
     log('Flowgate/SerialBridge indisponivel: comando nao enviado.', "warn");
     return { ok: false, transport: "none", serialConfirmed: false, serialError };
   }
+  function sendCommandImmediate(text, opts = {}){
+    const payload = String(text || '').trim();
+    if (!payload) return Promise.resolve(false);
+    const guard = (opts && typeof opts.guard === "function") ? opts.guard : null;
+    const silentLed = !!opts.silentLed;
+    if (guard && !guard()) return Promise.resolve(false);
+    return Promise.resolve(sendCommandNow(payload))
+      .then((result) => {
+        applyControlSendResult(payload, result, silentLed);
+        if (result && result.serialConfirmed && isValidHoldCommand(payload)) updateGlobalHoldLatch(payload);
+        return !!(result && result.ok);
+      });
+  }
   function sendCommand(text, opts = {}){
     const payload = String(text || '').trim();
     if (!payload) return Promise.resolve(false);
@@ -3979,7 +3992,7 @@
   function ensureAdvHoldOff(signal = advStopSignal){
     if (!signal || !signal.holdActive) return;
     signal.holdActive = false;
-    sendCommand("HOLDOFF", { force: true });
+    sendCommandImmediate("HOLDOFF");
   }
 
   function requestAdvStop(){
@@ -4197,7 +4210,7 @@
       return;
     }
     const version = Number(session.commandVersion) || 0;
-    sendCommand(`HOLDON ${session.mode},${safeLevel},${session.channel}`, {
+    sendCommandImmediate(`HOLDON ${session.mode},${safeLevel},${session.channel}`, {
       guard: () => {
         const active = rampSession;
         return !!active && active.id === session.id && (Number(active.commandVersion) || 0) === version;
@@ -4224,9 +4237,7 @@
       const active = rampSession;
       return !active || active.id === token;
     };
-    sendCommand("HOLDOFF", { guard, force: true });
-    setTimeout(() => sendCommand("HOLDOFF", { guard, force: true }), 40);
-    setTimeout(() => sendCommand("HOLDOFF", { guard, force: true }), 140);
+    sendCommandImmediate("HOLDOFF", { guard });
   }
   function finalizeRampSession(session, opts = {}){
     const token = session?.id;
@@ -4402,7 +4413,7 @@
   async function pulseForDuration(durationMs, useHold, signal = advStopSignal){
     const dur = clampNum(Math.round(durationMs || 0), ADV_LIMITS.durationMs.min, ADV_LIMITS.durationMs.max);
     if (!useHold) {
-      sendCommand(buildCmdLine(dur));
+      sendCommandImmediate(buildCmdLine(dur));
       await waitWithStop(dur, signal);
       return;
     }
@@ -4410,7 +4421,7 @@
       signal = { stop: false, holdActive: false };
     }
     signal.holdActive = true;
-    sendCommand(`HOLDON ${buildCmdLine()}`);
+    sendCommandImmediate(`HOLDON ${buildCmdLine()}`);
     await waitWithStop(dur, signal);
     ensureAdvHoldOff(signal);
   }
@@ -4557,7 +4568,7 @@
     }
     if (!advActive) {
       stopAdvCountdown(false);
-      sendLatestCommand(buildCmdLine());
+      sendCommandImmediate(buildCmdLine());
       return;
     }
     if (!shouldUseAdvancedBurst(liveCfg)) {
@@ -4566,7 +4577,7 @@
       if (useHold) {
         pulseForDuration(liveCfg.durationMs, true);
       } else {
-        sendLatestCommand(buildCmdLine());
+        sendCommandImmediate(buildCmdLine());
       }
       return;
     }
@@ -4589,12 +4600,11 @@
     if (startRampSession()) {
       return;
     }
-    sendLatestCommand(`HOLDON ${buildCmdLine()}`);
+    sendCommandImmediate(`HOLDON ${buildCmdLine()}`);
   }
   function holdOff(){
     setBtnSendHolding(false);
     clearCountup(HOLD_COUNTUP_SOURCE);
-    flushPendingCommandQueue();
     if (currentMode === "ROULETTE") {
       clearRouletteAutoTimer();
       releaseRoulettePointer();
@@ -4603,7 +4613,7 @@
     if (releaseRampSession()) {
       return;
     }
-    sendCommand("HOLDOFF", { force: true });
+    sendCommandImmediate("HOLDOFF");
   }
 
   // ===== Botao: clique unico vs segurar =====
@@ -4675,14 +4685,13 @@
 
     const accidentalHold = holdStarted && !fromFailsafe && pressElapsedMs <= (HOLD_THRESHOLD_MS + HOLD_QUICK_GUARD_MS);
     if (accidentalHold) {
-      flushPendingCommandQueue();
       if (rampSession) {
         abortRampSession({ sendHoldOff: true });
       } else if (currentMode === "ROULETTE") {
         clearRouletteAutoTimer();
         releaseRoulettePointer();
       } else {
-        sendCommand("HOLDOFF", { force: true });
+        sendCommandImmediate("HOLDOFF");
       }
       holdStarted = false;
       sendOnce();

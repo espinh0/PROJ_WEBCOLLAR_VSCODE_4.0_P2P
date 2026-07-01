@@ -1021,7 +1021,7 @@
         <div>Canal: <span class="badge text-bg-secondary" id="fsr-prev-chan">-</span></div>
         <div>Intervalo: <span class="badge text-bg-secondary" id="fsr-prev-gap">-</span></div>
         <div>Duracao base: <span class="badge text-bg-secondary" id="fsr-prev-base">-</span></div>
-        <div>Delay inicial: <span class="badge text-bg-secondary" id="fsr-prev-predelay">-</span></div>
+        <div>Delay global: <span class="badge text-bg-secondary" id="fsr-prev-predelay">-</span></div>
         <div>Ultima atualizacao: <span class="badge text-bg-secondary" id="fsm-last">-</span></div>
         <div>Fonte: <span class="badge text-bg-dark" id="fsm-source">-</span></div>
       </div>
@@ -1049,6 +1049,10 @@
             <button id="fsr-test-home-point-btn" class="btn btn-secondary">Casa +1</button>
             <button id="fsr-test-away-point-btn" class="btn btn-secondary">Visitante +1</button>
         </div>
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label small text-secondary" for="fsr-global-delay">Delay global da transmissao (s)</label>
+        <input class="form-control form-control-sm" id="fsr-global-delay" type="number" min="0" max="180" step="0.5" />
       </div>
     </div>
 
@@ -1331,6 +1335,7 @@
     armed: $('fsr-armed'),
     triggerRules: $('fsr-trigger-rules'),
     triggerProfiles: $('fsr-trigger-profiles'),
+    globalDelay: $('fsr-global-delay'),
     rulesPanel: $('fsr-rules-panel'),
     profilePanel: $('fsr-profile-panel'),
     rulesGrid: $('fsr-rules-grid'),
@@ -1545,12 +1550,22 @@
   let processing = false;
   const queue = [];
 
-  function enqueue(task){ queue.push(task); if(!processing) runNext(); }
+  function globalDispatchDelayMs(){
+    return Math.max(0, parseInt(S.preDelayMs, 10) || 0);
+  }
+  function enqueue(task){
+    queue.push({ task, dueAt: Date.now() + globalDispatchDelayMs() });
+    if(!processing) runNext();
+  }
   async function runNext(){
     if (processing) return;
-    const task = queue.shift(); if (!task) return;
+    const item = queue.shift(); if (!item) return;
     processing = true;
-    try { await task(); } catch(e){ console.warn('task erro', e); }
+    try {
+      const waitMs = Math.max(0, (item.dueAt || 0) - Date.now());
+      if (waitMs > 0) await delay(waitMs);
+      await item.task();
+    } catch(e){ console.warn('task erro', e); }
     processing = false;
     if (queue.length) runNext();
   }
@@ -1771,7 +1786,6 @@
     }
 
     appendLog(`Modo padrão: ${delta}pts`, 'fs-remote');
-    if (S.preDelayMs && S.preDelayMs > 0) await delay(S.preDelayMs);
     for (const v of decompose(delta)){
       await fireProfile(v);
       await delay(S.gapMs);
@@ -2386,6 +2400,10 @@
     if (inputs.triggerProfiles) inputs.triggerProfiles.checked = triggerMode === 'profiles';
     if (inputs.rulesPanel) inputs.rulesPanel.classList.toggle('is-hidden', triggerMode !== 'rules');
     if (inputs.profilePanel) inputs.profilePanel.classList.toggle('is-hidden', triggerMode !== 'profiles');
+    if (inputs.globalDelay) {
+      const seconds = Math.max(0, (parseInt(S.preDelayMs, 10) || 0) / 1000);
+      inputs.globalDelay.value = Number.isInteger(seconds) ? String(seconds) : seconds.toFixed(1).replace(/\.0$/, '');
+    }
     try { window.__FS_SCORE_MIRROR__?.refreshTargetButtons?.(); } catch(_){}
     FS_RULE_SIDES.forEach((side)=>{
       const teamName = side.key === 'home' ? (lastSnap?.homeName || 'Casa') : (lastSnap?.awayName || 'Visitante');
@@ -2516,6 +2534,14 @@
         syncInputs();
         syncMirrorTargetFromState();
       });
+    });
+    inputs.globalDelay?.addEventListener('change', (e)=>{
+      const seconds = Math.max(0, parseFloat(e.target.value) || 0);
+      S.preDelayMs = Math.round(seconds * 1000);
+      e.target.value = Number.isInteger(seconds) ? String(seconds) : seconds.toFixed(1).replace(/\.0$/, '');
+      saveState();
+      broadcastConfig('global-delay');
+      syncInputs();
     });
 
     FS_RULE_SIDES.forEach((side)=>{

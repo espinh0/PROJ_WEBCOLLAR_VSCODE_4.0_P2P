@@ -402,6 +402,24 @@
     return {home, away};
   }
 
+  function hasScorePair(wrapper){
+    const pair = parseScorePairFrom(wrapper);
+    return Number.isInteger(pair.home) && Number.isInteger(pair.away);
+  }
+
+  function getFlashscoreDomMatchState(){
+    if (getSite() !== 'flashscore') return '';
+
+    const scoreWrapper = $(SEL.scoreWrapper);
+    const fixedScoreWrapper = $(SEL.fixedScoreWrapper);
+    if ($(SEL.liveWrapper) || $(SEL.fixedWrapper)) return 'live';
+
+    const scoreHasValue = hasScorePair(scoreWrapper) || hasScorePair(fixedScoreWrapper);
+    if (scoreHasValue) return 'ended';
+
+    return '';
+  }
+
   function parseScoreText(text){
     const num = parseInt(String(text || '').replace(/[^\d]/g, ''), 10);
     return Number.isFinite(num) ? num : null;
@@ -416,7 +434,13 @@
   function isEndedStatusText(text){
     const s = String(text || '').toLowerCase().trim();
     if (!s) return false;
-    return /(encerr|final|finished|termin|ended|\bft\b|fim)/i.test(s);
+    return /(encerr|final|finished|termin|ended|\bft\b|\baet\b|ap[oó]s\s+prorroga|fim)/i.test(s);
+  }
+
+  function isActiveStatusText(text){
+    const s = String(text || '').toLowerCase().trim();
+    if (!s) return false;
+    return /(intervalo|half[\s-]?time|\bht\b|^\d+\s*(?:['’+]|$)|^\d+\+\d+\s*['’]?)/i.test(s);
   }
 
   function eventTypeFromSummaryRow(row){
@@ -723,7 +747,9 @@
     let homeName = getName(SEL.homeName);
     let awayName = getName(SEL.awayName);
     let statusText = getMatchStatusText();
-    let ended = isEndedStatusText(statusText);
+    const domMatchState = getFlashscoreDomMatchState();
+    let ended = isEndedStatusText(statusText) || (domMatchState === 'ended' && !isActiveStatusText(statusText));
+    if (domMatchState === 'live') ended = false;
 
     let home = null;
     let away = null;
@@ -748,7 +774,7 @@
         if (!Number.isInteger(home) && Number.isInteger(listSnap.homeScore)) home = listSnap.homeScore;
         if (!Number.isInteger(away) && Number.isInteger(listSnap.awayScore)) away = listSnap.awayScore;
         if (!statusText && listSnap.statusText) statusText = listSnap.statusText;
-        if (listSnap.ended) ended = true;
+        if (domMatchState !== 'live' && listSnap.ended) ended = true;
       }
     }
 
@@ -1686,10 +1712,10 @@
 
   function startObservers(){
     const site = getSite();
-    const wrapperSelector = site === 'espn' ? SEL_ESPN.liveWrapper : SEL.liveWrapper;
+    const wrapperSelector = site === 'espn' ? SEL_ESPN.liveWrapper : SEL.scoreWrapper;
     const live = $(wrapperSelector);
-    const fixed = $(SEL.fixedWrapper); // fixedWrapper is only for flashscore
-    const opts = { childList:true, subtree:true };
+    const fixed = $(SEL.fixedScoreWrapper); // fixedScoreWrapper is only for flashscore
+    const opts = { childList:true, subtree:true, attributes:true, attributeFilter:['class', 'data-state'] };
     let listObserved = false;
 
     if (live){

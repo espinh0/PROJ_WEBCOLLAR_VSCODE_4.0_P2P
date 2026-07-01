@@ -732,7 +732,7 @@
       ''
     ).trim();
     const normalized = norm(rawStatus);
-    if (payload?.ended === true || /(encerr|final|finished|termin|ended|\bft\b|fim)/i.test(rawStatus)) {
+    if (payload?.ended === true || /(encerr|final|finished|termin|ended|\bft\b|\baet\b|ap[oó]s\s+prorroga|fim)/i.test(rawStatus)) {
       return { key:'ended', label:'Encerrado' };
     }
     if (/(intervalo|half[\s-]?time|\bht\b)/i.test(rawStatus) || normalized.includes('intervalo')) {
@@ -1536,6 +1536,10 @@
     try { localStorage.setItem(STORAGE_KEY_STATE, JSON.stringify(S)); } catch(_){}
   }
 
+  function sameJson(a, b){
+    try { return JSON.stringify(a) === JSON.stringify(b); } catch(_) { return false; }
+  }
+
   let S = loadState();
   let room = null;
   let sendChat = null;
@@ -1846,7 +1850,7 @@
     seenScore.add(key);
     const prevSnap = lastSnap;
     const statusText = String(payload.statusText || payload.matchStatus || payload.status || '').trim();
-    const endedByStatus = /(encerr|final|finished|termin|ended|\bft\b|fim)/i.test(statusText);
+    const endedByStatus = /(encerr|final|finished|termin|ended|\bft\b|\baet\b|ap[oó]s\s+prorroga|fim)/i.test(statusText);
     const cardEvents = extractRuleEvents(payload);
     const snap = {
       homeName: payload.homeName || '',
@@ -2823,13 +2827,19 @@
         if (cfg.profiles[k].durMul != null && ts > fieldTs.profiles[k].durMul) { pf.durMul = clamp(parseFloat(cfg.profiles[k].durMul)||1, 0.1, 5); fieldTs.profiles[k].durMul = ts; }
       }
     }
-    if (cfg.rules && typeof cfg.rules === 'object' && ts > fieldTs.rules) {
-      S.rules = normalizeRules(cfg.rules);
-      fieldTs.rules = ts;
+    if (cfg.rules && typeof cfg.rules === 'object') {
+      const nextRules = normalizeRules(cfg.rules);
+      if (ts > fieldTs.rules || !sameJson(nextRules, S.rules)) {
+        S.rules = nextRules;
+        fieldTs.rules = Math.max(fieldTs.rules, ts);
+      }
     }
-    if (cfg.resultRules && typeof cfg.resultRules === 'object' && ts > fieldTs.resultRules) {
-      S.resultRules = normalizeResultRules(cfg.resultRules, cfg.rules);
-      fieldTs.resultRules = ts;
+    if (cfg.resultRules && typeof cfg.resultRules === 'object') {
+      const nextResultRules = normalizeResultRules(cfg.resultRules, cfg.rules);
+      if (ts > fieldTs.resultRules || !sameJson(nextResultRules, S.resultRules)) {
+        S.resultRules = nextResultRules;
+        fieldTs.resultRules = Math.max(fieldTs.resultRules, ts);
+      }
     }
     if (opts.persist !== false) saveState();
     const shouldRelay = cfg.origin && cfg.origin !== SELF_ID && opts.relay !== false;

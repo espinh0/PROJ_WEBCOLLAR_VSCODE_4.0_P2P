@@ -44,6 +44,8 @@
 </div>
 
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&display=swap');
+
   #fs-mirror-card {
     --fs-accent: var(--cp-color, #a855f7);
     --fs-accent-strong: rgba(168,85,247,0.9);
@@ -142,10 +144,13 @@
     line-height: 1.05;
   }
   .score-num {
-    font-family: 'Anton', sans-serif;
-    letter-spacing: .02em;
-    font-weight: 100;
+    font-family: 'Chakra Petch', sans-serif;
+    letter-spacing: 0;
+    font-weight: 700;
     line-height: 1;
+    text-shadow: none !important;
+    font-variant-numeric: tabular-nums;
+    will-change: transform;
   }
   .score-home {
     color: var(--fs-away-color);
@@ -157,12 +162,13 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 1.65rem;
-    padding: .25rem .7rem;
-    border: 1px solid var(--fs-border);
-    border-radius: 999px;
-    background: rgba(14,10,20,0.72);
-    color: var(--fs-muted);
+    gap: .38rem;
+    min-height: 1.2rem;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: #fff;
     font-size: .78rem;
     font-weight: 700;
     letter-spacing: .08em;
@@ -170,19 +176,25 @@
     text-transform: uppercase;
   }
   .fsm-match-status.is-live {
-    color: #86efac;
-    border-color: rgba(134,239,172,0.45);
-    box-shadow: 0 0 14px rgba(34,197,94,0.18);
+    color: #fff;
+  }
+  .fsm-match-status.is-live::before {
+    content: "";
+    width: .5rem;
+    height: .5rem;
+    border-radius: 999px;
+    background: #ef4444;
+    animation: liveDotPulse 1s ease-in-out infinite;
   }
   .fsm-match-status.is-interval {
     color: #fde68a;
-    border-color: rgba(253,230,138,0.45);
-    box-shadow: 0 0 14px rgba(250,204,21,0.14);
   }
   .fsm-match-status.is-ended {
     color: #fca5a5;
-    border-color: rgba(252,165,165,0.45);
-    box-shadow: 0 0 14px rgba(248,113,113,0.16);
+  }
+  @keyframes liveDotPulse {
+    0%, 100% { opacity: .35; transform: scale(.82); }
+    50% { opacity: 1; transform: scale(1); }
   }
   .fsm-active-rules {
     border-top: 1px solid var(--fs-border);
@@ -202,6 +214,9 @@
   }
   .fsm-active-rules-side[data-side="away"] {
     text-align: right;
+  }
+  .fsm-active-rules-result {
+    grid-column: 1 / -1;
   }
   .fsm-active-rules-title {
     margin-bottom: 5px;
@@ -237,29 +252,22 @@
     font-size: .75rem;
     opacity: .7;
   }
-  .score-blink { animation: scoreBlink 0.9s ease; }
-  @keyframes scoreBlink {
-    0%   { text-shadow: 0 0 0 rgba(168,85,247,0); transform: scale(1); }
-    25%  { text-shadow: 0 0 12px rgba(168,85,247,0.65), 0 0 24px rgba(168,85,247,0.35); transform: scale(1.05); }
-    50%  { text-shadow: 0 0 18px rgba(168,85,247,0.9), 0 0 28px rgba(168,85,247,0.6); transform: scale(1.07); }
-    100% { text-shadow: 0 0 0 rgba(168,85,247,0); transform: scale(1); }
+  .score-roll { animation: scoreRollUp 0.58s cubic-bezier(.2,.8,.2,1); }
+  @keyframes scoreRollUp {
+    0%   { opacity: 0; transform: translateY(0.85em); }
+    45%  { opacity: 1; transform: translateY(-0.12em); }
+    100% { opacity: 1; transform: translateY(0); }
   }
   .fs-last-scorer {
     background: linear-gradient(135deg, rgba(168,85,247,0.25), rgba(12,8,20,0.95)) !important;
     border-color: var(--fs-border) !important;
-    box-shadow: 0 0 0 1px rgba(255,255,255,0.12) inset, 0 0 12px rgba(168,85,247,0.35);
   }
   .fs-last-scorer.fs-target-active {
     border-width: 4px;
-    box-shadow:
-      0 0 0 1px rgba(255,255,255,0.12) inset,
-      0 0 12px rgba(168,85,247,0.35),
-      0 0 0 3px rgba(168,85,247,0.45),
-      0 18px 32px rgba(0,0,0,0.65);
   }
   .fs-score-ended {
     color: #f87171 !important;
-    text-shadow: 0 0 10px rgba(248,113,113,0.4);
+    text-shadow: none !important;
   }
   #fs-mirror-card .btn-outline-info,
   #fs-mirror-card .btn-outline-secondary {
@@ -334,6 +342,11 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
   }
+  #fs-remote-card .fsr-result-rules-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
   #fs-remote-card .fsr-team-rules {
     border: 1px solid #1f232c;
     border-radius: 8px;
@@ -377,6 +390,9 @@
   }
   @media (max-width: 768px) {
     #fs-remote-card .fsr-rules-grid {
+      grid-template-columns: 1fr;
+    }
+    #fs-remote-card .fsr-result-rules-grid {
       grid-template-columns: 1fr;
     }
     .fsm-active-rules-list {
@@ -629,9 +645,9 @@
 
   function flashScore(el){
     if (!el) return;
-    el.classList.remove('score-blink');
+    el.classList.remove('score-roll');
     void el.offsetWidth; // restart animation
-    el.classList.add('score-blink');
+    el.classList.add('score-roll');
   }
 
   function resolveMatchStatus(payload){
@@ -650,7 +666,7 @@
       return { key:'interval', label:'Intervalo' };
     }
     if (rawStatus || payload?.live === true || payload?.isLive === true) {
-      return { key:'live', label:'• Ao vivo' };
+      return { key:'live', label:'Ao vivo' };
     }
     return null;
   }
@@ -924,10 +940,9 @@
 
     <div class="row g-3 align-items-end">
       <div class="col-12 col-md-4">
-        <label class="form-label small text-secondary">Armado</label>
+        <label class="form-label small text-secondary">Ativar</label>
         <div class="form-check form-switch">
           <input class="form-check-input" type="checkbox" role="switch" id="fsr-armed" />
-          <label class="form-check-label" for="fsr-armed">armar/desarmar</label>
         </div>
       </div>
       <div class="col-12 col-md-4">
@@ -956,6 +971,13 @@
         <div class="small text-secondary">Ative uma regra para exibir seus controles.</div>
       </div>
       <div class="fsr-rules-grid" id="fsr-rules-grid"></div>
+      <div class="fsr-result-rules mt-3">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+          <div class="fw-semibold">Resultado final</div>
+          <div class="small text-secondary">Escolha o time vencedor ou empate para avaliar no encerramento da partida.</div>
+        </div>
+        <div class="fsr-result-rules-grid" id="fsr-result-rules-grid"></div>
+      </div>
     </div>
 
     <div class="fsr-profile-panel is-hidden" id="fsr-profile-panel">
@@ -1135,10 +1157,13 @@
   ];
   const FS_RULE_EVENTS = [
     { key:'goal', label:'Ponto' },
-    { key:'win', label:'Vitoria' },
-    { key:'loss', label:'Derrota' },
     { key:'redCard', label:'Cartao vermelho' },
-    { key:'yellowCard', label:'Cartao amarelo' }
+    { key:'yellowCard', label:'Cartao amarelo' },
+    { key:'substitution', label:'Substituicao' }
+  ];
+  const FS_RESULT_EVENTS = [
+    { key:'winner', label:'Vencedor' },
+    { key:'loser', label:'Perdedor' }
   ];
   const FS_RULE_MODES = [
     { key:'SHOCK', label:'Choque' },
@@ -1149,6 +1174,7 @@
   ];
   const DEFAULT_RULE = {
     enabled: false,
+    target: 'any',
     mode: 'SHOCK',
     level: 40,
     channel: 1,
@@ -1159,6 +1185,8 @@
   function cloneRule(rule){
     const merged = Object.assign({}, DEFAULT_RULE, rule || {});
     delete merged.intensity;
+    if (!['any','home','away'].includes(String(merged.target || '').toLowerCase())) merged.target = 'any';
+    else merged.target = String(merged.target || 'any').toLowerCase();
     merged.channel = Math.max(1, Math.min(2, parseInt(merged.channel, 10) || 1));
     return merged;
   }
@@ -1168,6 +1196,11 @@
       rules[side.key] = {};
       FS_RULE_EVENTS.forEach((ev)=>{ rules[side.key][ev.key] = cloneRule(); });
     });
+    return rules;
+  }
+  function defaultResultRules(){
+    const rules = {};
+    FS_RESULT_EVENTS.forEach((ev)=>{ rules[ev.key] = cloneRule(); });
     return rules;
   }
   const DEFAULTS = {
@@ -1187,7 +1220,8 @@
       2:{pulses:2,lvlMul:1.00,durMul:1.15},
       3:{pulses:3,lvlMul:1.10,durMul:1.30}
     },
-    rules: defaultRules()
+    rules: defaultRules(),
+    resultRules: defaultResultRules()
   };
 
   const $ = (id) => document.getElementById(id);
@@ -1210,9 +1244,11 @@
     rulesPanel: $('fsr-rules-panel'),
     profilePanel: $('fsr-profile-panel'),
     rulesGrid: $('fsr-rules-grid'),
+    resultRulesGrid: $('fsr-result-rules-grid'),
     activeRules: $('fsm-active-rules'),
     activeRulesList: $('fsm-active-rules-list'),
     rules: {},
+    resultRules: {},
     p1: {},
     p2: {},
     p3: {}
@@ -1269,7 +1305,7 @@
   const fieldTs = {
     armed: 0, triggerMode: 0, mode: 0, level: 0, channel: 0, gapMs: 0, baseMs: 0, preDelayMs: 0,
     team: 0, anySide: 0, side: 0,
-    rules: 0,
+    rules: 0, resultRules: 0,
     profiles: {
       1: { pulses: 0, lvlMul: 0, durMul: 0 },
       2: { pulses: 0, lvlMul: 0, durMul: 0 },
@@ -1290,6 +1326,7 @@
     if (payload.anySide != null) fieldTs.anySide = stamp;
     if (payload.side != null) fieldTs.side = stamp;
     if (payload.rules && typeof payload.rules === 'object') fieldTs.rules = stamp;
+    if (payload.resultRules && typeof payload.resultRules === 'object') fieldTs.resultRules = stamp;
     if (payload.profiles && typeof payload.profiles === 'object'){
       for (const k of [1,2,3]){
         const pf = payload.profiles[k];
@@ -1332,6 +1369,18 @@
     return merged;
   }
 
+  function normalizeResultRules(rawResultRules, rawRules){
+    const merged = defaultResultRules();
+    const src = rawResultRules && typeof rawResultRules === 'object' ? rawResultRules : {};
+    FS_RESULT_EVENTS.forEach((ev)=>{
+      if (src[ev.key]) merged[ev.key] = cloneRule(src[ev.key]);
+    });
+    if (!src.winner && rawRules?.home?.win) merged.winner = cloneRule(rawRules.home.win);
+    else if (!src.winner && src.draw) merged.winner = cloneRule(src.draw);
+    if (!src.loser && rawRules?.home?.loss) merged.loser = cloneRule(rawRules.home.loss);
+    return merged;
+  }
+
   function isHostForScoreRelay(){
     try {
       if (typeof window.isHost === 'function' && window.isHost()) return true;
@@ -1367,6 +1416,7 @@
       merged.triggerMode = merged.triggerMode === 'profiles' ? 'profiles' : 'rules';
       merged.profiles = Object.assign({}, DEFAULTS.profiles, raw.profiles || {});
       merged.rules = normalizeRules(raw.rules);
+      merged.resultRules = normalizeResultRules(raw.resultRules, raw.rules);
       if (!merged.team) merged.anySide = true;
       if (!merged.side) merged.side = merged.anySide ? 'any' : 'home';
       if (merged.anySide && merged.side !== 'any') merged.side = 'any';
@@ -1502,6 +1552,44 @@
     }
   }
 
+  function resultTargetMatches(rule, sideKey, eventKey){
+    const target = String(rule?.target || 'any').toLowerCase();
+    if (!['winner','loser'].includes(eventKey)) return false;
+    if (target === 'any') return sideKey === 'any';
+    return target === sideKey;
+  }
+
+  function labelForTargetSide(sideKey){
+    if (sideKey === 'home') return lastSnap?.homeName || 'Casa';
+    if (sideKey === 'away') return lastSnap?.awayName || 'Visitante';
+    return 'empate';
+  }
+
+  async function fireResultRule(eventKey, sideKey){
+    if (!S.armed) {
+      appendLog(`Ignorado (desarmado): resultado/${eventKey}`, 'fs-remote');
+      return;
+    }
+    const rule = S.resultRules?.[eventKey];
+    if (!rule || !rule.enabled) return;
+    if (!resultTargetMatches(rule, sideKey, eventKey)) return;
+    const mode = String(rule.mode || '').toUpperCase();
+    const pulses = Math.max(1, parseInt(rule.pulses, 10) || 1);
+    const gap = Math.max(0, parseInt(rule.gapMs, 10) || 0);
+    appendLog(`Resultado ${eventKey} (${labelForTargetSide(sideKey)}): ${mode || 'SHOCK'} x${pulses}`, 'fs-remote');
+    if (mode === 'ROULETTE') {
+      for (let i = 0; i < pulses; i++) {
+        await spinRouletteOnce();
+        if (i < pulses - 1) await delay(gap);
+      }
+      return;
+    }
+    for (let i = 0; i < pulses; i++) {
+      await pulseRule(rule);
+      if (i < pulses - 1) await delay(gap);
+    }
+  }
+
   // Usa a ponte exposta pelo maincontrol para disparar o botão da roleta
   async function spinRouletteOnce(){
     return new Promise(resolve => {
@@ -1604,20 +1692,21 @@
     return null;
   }
 
-  function cardTypeFromEvent(ev){
+  function ruleTypeFromEvent(ev){
     const raw = norm(ev?.type || ev?.event || ev?.card || ev?.kind || '');
     if (raw.includes('red') || raw.includes('vermelho')) return 'redCard';
     if (raw.includes('yellow') || raw.includes('amarelo')) return 'yellowCard';
+    if (raw.includes('substitution') || raw.includes('substituicao')) return 'substitution';
     return null;
   }
 
-  function extractCardEvents(payload){
+  function extractRuleEvents(payload){
     const lists = [payload?.cards, payload?.events, payload?.cardEvents].filter(Array.isArray);
     const out = [];
     lists.forEach((list)=>{
       list.forEach((ev)=>{
         const side = sideFromEvent(ev);
-        const type = cardTypeFromEvent(ev);
+        const type = ruleTypeFromEvent(ev);
         if (side && type) out.push({ side, type, id: ev.id || ev.ts || ev.minute || `${side}:${type}` });
       });
     });
@@ -1634,6 +1723,7 @@
     const prevSnap = lastSnap;
     const statusText = String(payload.statusText || payload.matchStatus || payload.status || '').trim();
     const endedByStatus = /(encerr|final|finished|termin|ended|\bft\b|fim)/i.test(statusText);
+    const cardEvents = extractRuleEvents(payload);
     const snap = {
       homeName: payload.homeName || '',
       awayName: payload.awayName || '',
@@ -1644,9 +1734,10 @@
       ended: payload.ended === true || endedByStatus,
       ts,
       origin: src,
-      reason: payload.reason || 'update'
+      reason: payload.reason || 'update',
+      cards: cardEvents
     };
-    const cardSnapshot = extractCardEvents(payload).map((ev)=>`${ev.side}:${ev.type}:${ev.id}`).join('|');
+    const cardSnapshot = cardEvents.map((ev)=>`${ev.side}:${ev.type}:${ev.id}`).join('|');
     const hash = JSON.stringify([snap.homeName, snap.awayName, snap.homeScore, snap.awayScore, snap.ended, snap.matchStatus, cardSnapshot]);
     if (hash === lastScoreHash && ts <= lastScoreTs) return;
     lastScoreHash = hash; lastScoreTs = ts;
@@ -1663,7 +1754,10 @@
     const isFirstOrSwapped = !prevSnap || snap.homeName !== prevSnap.homeName || snap.awayName !== prevSnap.awayName;
     lastSnap = snap;
     syncInputs();
-    if (isFirstOrSwapped) return;
+    if (isFirstOrSwapped) {
+      cardEvents.forEach((ev)=> seenCardEvents.add(`${snap.homeName}|${snap.awayName}|${ev.side}|${ev.type}|${ev.id}`));
+      return;
+    }
 
     const dHome = (Number.isInteger(snap.homeScore) && Number.isInteger(prevSnap.homeScore) && snap.homeScore > prevSnap.homeScore)
       ? (snap.homeScore - prevSnap.homeScore) : 0;
@@ -1673,17 +1767,20 @@
     if (S.triggerMode === 'rules') {
       for (let i = 0; i < dHome; i++) enqueue(()=> fireRule('home', 'goal'));
       for (let i = 0; i < dAway; i++) enqueue(()=> fireRule('away', 'goal'));
-      const cardEvents = extractCardEvents(payload);
       cardEvents.forEach((ev)=>{
         const cardKey = `${snap.homeName}|${snap.awayName}|${ev.side}|${ev.type}|${ev.id}`;
         if (seenCardEvents.has(cardKey)) return;
         seenCardEvents.add(cardKey);
         enqueue(()=> fireRule(ev.side, ev.type));
       });
-      if (snap.ended && !prevSnap.ended && Number.isInteger(snap.homeScore) && Number.isInteger(snap.awayScore) && snap.homeScore !== snap.awayScore) {
-        const homeWon = snap.homeScore > snap.awayScore;
-        enqueue(()=> fireRule('home', homeWon ? 'win' : 'loss'));
-        enqueue(()=> fireRule('away', homeWon ? 'loss' : 'win'));
+      if (snap.ended && !prevSnap.ended && Number.isInteger(snap.homeScore) && Number.isInteger(snap.awayScore)) {
+        if (snap.homeScore === snap.awayScore) {
+          enqueue(()=> fireResultRule('winner', 'any'));
+        } else {
+          const homeWon = snap.homeScore > snap.awayScore;
+          enqueue(()=> fireResultRule('winner', homeWon ? 'home' : 'away'));
+          enqueue(()=> fireResultRule('loser', homeWon ? 'away' : 'home'));
+        }
       }
       return;
     }
@@ -1757,6 +1854,19 @@
       </div>`;
   }
 
+  function resultTargetHtml(ev){
+    const id = ruleInputId('result', ev, 'target');
+    return `
+      <div>
+        <label class="form-label small text-secondary" for="${id}">Time</label>
+        <select class="form-select form-select-sm" id="${id}" data-result-field="target">
+          <option value="any">Empate</option>
+          <option value="home">Casa</option>
+          <option value="away">Visitante</option>
+        </select>
+      </div>`;
+  }
+
   function mountRuleGrid(){
     const grid = inputs.rulesGrid;
     if (!grid) return;
@@ -1814,6 +1924,58 @@
     });
   }
 
+  function mountResultRulesGrid(){
+    const grid = inputs.resultRulesGrid;
+    if (!grid) return;
+    grid.innerHTML = FS_RESULT_EVENTS.map((ev)=>`
+      <section class="fsr-team-rules" data-result-event="${ev.key}">
+        <div class="fsr-team-rules-header">
+          <div class="fw-semibold">${ev.label}</div>
+        </div>
+        <div class="fsr-rule-card">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="${ruleInputId('result', ev.key, 'enabled')}" data-result-field="enabled">
+            <label class="form-check-label fw-semibold" for="${ruleInputId('result', ev.key, 'enabled')}">Ativar ${ev.label}</label>
+          </div>
+          <div class="fsr-rule-fields is-hidden" id="${ruleInputId('result', ev.key, 'fields')}">
+            ${resultTargetHtml(ev.key)}
+            <div>
+              <label class="form-label small text-secondary" for="${ruleInputId('result', ev.key, 'mode')}">Modo</label>
+              <select class="form-select form-select-sm" id="${ruleInputId('result', ev.key, 'mode')}" data-result-field="mode">
+                ${FS_RULE_MODES.map((mode)=>`<option value="${mode.key}">${mode.label}</option>`).join('')}
+              </select>
+            </div>
+            ${ruleLevelHtml('result', ev.key)}
+            ${ruleChannelHtml('result', ev.key)}
+            ${ruleFieldHtml('result', ev.key, 'pulses', 'Pulsos', 'number', 'min="1" max="20" step="1"')}
+            ${ruleFieldHtml('result', ev.key, 'durationMs', 'Duracao s', 'number', 'min="0.1" max="20" step="0.1"')}
+            ${ruleFieldHtml('result', ev.key, 'gapMs', 'Intervalo ms', 'number', 'min="0" max="20000" step="10"')}
+            <div class="d-flex align-items-end">
+              <button class="btn btn-outline-light btn-sm w-100" id="${ruleInputId('result', ev.key, 'test')}" type="button">Testar</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    `).join('');
+
+    FS_RESULT_EVENTS.forEach((ev)=>{
+      inputs.resultRules[ev.key] = {
+        enabled: $(ruleInputId('result', ev.key, 'enabled')),
+        fields: $(ruleInputId('result', ev.key, 'fields')),
+        target: $(ruleInputId('result', ev.key, 'target')),
+        mode: $(ruleInputId('result', ev.key, 'mode')),
+        level: $(ruleInputId('result', ev.key, 'level')),
+        levelValue: $(ruleInputId('result', ev.key, 'levelValue')),
+        channel: $(ruleInputId('result', ev.key, 'channel')),
+        channelValue: $(ruleInputId('result', ev.key, 'channelValue')),
+        pulses: $(ruleInputId('result', ev.key, 'pulses')),
+        durationMs: $(ruleInputId('result', ev.key, 'durationMs')),
+        gapMs: $(ruleInputId('result', ev.key, 'gapMs')),
+        test: $(ruleInputId('result', ev.key, 'test'))
+      };
+    });
+  }
+
   function mountProfileRows(){
     [1,2,3].forEach((p)=>{
       const target = document.querySelector(`#fs-remote-card [data-p="${p}"]`);
@@ -1847,6 +2009,7 @@
     });
   }
   mountRuleGrid();
+  mountResultRulesGrid();
   mountProfileRows();
 
   function labelForSide(sideKey){
@@ -1860,12 +2023,25 @@
   function labelForEvent(eventKey){
     const labels = {
       goal: 'PONTO',
-      win: 'VIT\u00d3RIA',
-      loss: 'DERROTA',
       redCard: 'CART\u00c3O VERMELHO',
-      yellowCard: 'CART\u00c3O AMARELO'
+      yellowCard: 'CART\u00c3O AMARELO',
+      substitution: 'SUBSTITUI\u00c7\u00c3O'
     };
     return labels[eventKey] || String(FS_RULE_EVENTS.find((item)=> item.key === eventKey)?.label || eventKey).toUpperCase();
+  }
+
+  function labelForResultEvent(eventKey){
+    const labels = {
+      winner: 'VENCEDOR',
+      loser: 'PERDEDOR'
+    };
+    return labels[eventKey] || String(FS_RESULT_EVENTS.find((item)=> item.key === eventKey)?.label || eventKey).toUpperCase();
+  }
+
+  function labelForResultTarget(targetKey){
+    if (targetKey === 'home') return (lastSnap?.homeName || 'Casa').toUpperCase();
+    if (targetKey === 'away') return (lastSnap?.awayName || 'Visitante').toUpperCase();
+    return 'EMPATE';
   }
 
   function iconForMode(mode){
@@ -1890,6 +2066,7 @@
     if (!wrap || !list) return;
     list.innerHTML = '';
     const activeBySide = { home: [], away: [] };
+    const activeResults = [];
     if (S.triggerMode === 'rules') {
       FS_RULE_SIDES.forEach((side)=>{
         FS_RULE_EVENTS.forEach((ev)=>{
@@ -1897,12 +2074,17 @@
           if (rule?.enabled) activeBySide[side.key].push({ event: ev.key, rule });
         });
       });
+      FS_RESULT_EVENTS.forEach((ev)=>{
+        const rule = S.resultRules?.[ev.key];
+        if (rule?.enabled) activeResults.push({ event: ev.key, rule });
+      });
     }
-    const hasActive = Object.values(activeBySide).some((items)=> items.length > 0);
+    const hasSideActive = Object.values(activeBySide).some((items)=> items.length > 0);
+    const hasActive = hasSideActive || activeResults.length > 0;
     wrap.classList.toggle('d-none', !hasActive);
     if (!hasActive) return;
 
-    FS_RULE_SIDES.forEach((side)=>{
+    if (hasSideActive) FS_RULE_SIDES.forEach((side)=>{
       const col = document.createElement('div');
       col.className = 'fsm-active-rules-side';
       col.dataset.side = side.key;
@@ -1943,6 +2125,67 @@
 
       list.appendChild(col);
     });
+
+    if (activeResults.length) {
+      const resultCol = document.createElement('div');
+      resultCol.className = 'fsm-active-rules-side fsm-active-rules-result';
+      const title = document.createElement('div');
+      title.className = 'fsm-active-rules-title';
+      title.textContent = 'Resultado final';
+      resultCol.appendChild(title);
+      activeResults.forEach((item)=>{
+        const row = document.createElement('div');
+        row.className = 'fsm-active-rule-row';
+        const rule = item.rule;
+        const mode = String(rule.mode || 'SHOCK').toUpperCase();
+        const level = supportsLevel(mode) ? `${commandLevelForRule(rule)}%` : '0%';
+        const eventLabel = document.createElement('span');
+        eventLabel.className = 'fsm-active-rule-event';
+        eventLabel.textContent = `${labelForResultEvent(item.event)} (${labelForResultTarget(rule.target)}):`;
+        const icon = document.createElement('i');
+        icon.className = iconForMode(mode);
+        icon.setAttribute('aria-hidden', 'true');
+        const detail = document.createElement('span');
+        const pulses = Math.max(1, parseInt(rule.pulses, 10) || 1);
+        const channel = clamp(parseInt(rule.channel, 10) || 1, 1, 2);
+        const durationSec = Math.max(0.1, (parseInt(rule.durationMs, 10) || DEFAULT_RULE.durationMs) / 1000);
+        detail.textContent = `${pulses}x ${mode} ${level} no C${channel} por ${formatSeconds(durationSec)}`;
+        row.append(eventLabel, icon, detail);
+        resultCol.appendChild(row);
+      });
+      list.appendChild(resultCol);
+    }
+  }
+
+  function syncRuleRefs(refs, rule){
+    if (!refs) return;
+    const currentRule = rule || cloneRule();
+    if (refs.enabled) refs.enabled.checked = !!currentRule.enabled;
+    if (refs.fields) refs.fields.classList.toggle('is-hidden', !currentRule.enabled);
+    if (refs.target) {
+      const homeOpt = refs.target.querySelector('option[value="home"]');
+      const awayOpt = refs.target.querySelector('option[value="away"]');
+      const drawOpt = refs.target.querySelector('option[value="any"]');
+      if (drawOpt) drawOpt.textContent = 'Empate';
+      if (homeOpt) homeOpt.textContent = lastSnap?.homeName || 'Casa';
+      if (awayOpt) awayOpt.textContent = lastSnap?.awayName || 'Visitante';
+      refs.target.value = currentRule.target || 'any';
+    }
+    if (refs.mode) refs.mode.value = currentRule.mode ?? DEFAULT_RULE.mode;
+    const levelValue = clamp(parseInt(currentRule.level, 10) || 0, 0, 100);
+    if (refs.level) {
+      refs.level.value = levelValue;
+      refs.level.style.setProperty('--lvl', `${levelValue}%`);
+    }
+    if (refs.levelValue) refs.levelValue.textContent = `${levelValue}%`;
+    if (refs.channel) refs.channel.checked = (clamp(parseInt(currentRule.channel, 10) || 1, 1, 2) === 2);
+    if (refs.channelValue) refs.channelValue.textContent = String(clamp(parseInt(currentRule.channel, 10) || 1, 1, 2));
+    if (refs.pulses) refs.pulses.value = currentRule.pulses ?? DEFAULT_RULE.pulses;
+    if (refs.durationMs) {
+      const seconds = Math.max(0.1, (parseInt(currentRule.durationMs, 10) || DEFAULT_RULE.durationMs) / 1000);
+      refs.durationMs.value = Number.isInteger(seconds) ? String(seconds) : seconds.toFixed(1).replace(/\.0$/, '');
+    }
+    if (refs.gapMs) refs.gapMs.value = currentRule.gapMs ?? DEFAULT_RULE.gapMs;
   }
 
   function syncInputs(){
@@ -1960,25 +2203,11 @@
       FS_RULE_EVENTS.forEach((ev)=>{
         const rule = S.rules?.[side.key]?.[ev.key] || cloneRule();
         const refs = inputs.rules?.[side.key]?.[ev.key];
-        if (!refs) return;
-        if (refs.enabled) refs.enabled.checked = !!rule.enabled;
-        if (refs.fields) refs.fields.classList.toggle('is-hidden', !rule.enabled);
-        if (refs.mode) refs.mode.value = rule.mode ?? DEFAULT_RULE.mode;
-        const levelValue = clamp(parseInt(rule.level, 10) || 0, 0, 100);
-        if (refs.level) {
-          refs.level.value = levelValue;
-          refs.level.style.setProperty('--lvl', `${levelValue}%`);
-        }
-        if (refs.levelValue) refs.levelValue.textContent = `${levelValue}%`;
-        if (refs.channel) refs.channel.checked = (clamp(parseInt(rule.channel, 10) || 1, 1, 2) === 2);
-        if (refs.channelValue) refs.channelValue.textContent = String(clamp(parseInt(rule.channel, 10) || 1, 1, 2));
-        if (refs.pulses) refs.pulses.value = rule.pulses ?? DEFAULT_RULE.pulses;
-        if (refs.durationMs) {
-          const seconds = Math.max(0.1, (parseInt(rule.durationMs, 10) || DEFAULT_RULE.durationMs) / 1000);
-          refs.durationMs.value = Number.isInteger(seconds) ? String(seconds) : seconds.toFixed(1).replace(/\.0$/, '');
-        }
-        if (refs.gapMs) refs.gapMs.value = rule.gapMs ?? DEFAULT_RULE.gapMs;
+        syncRuleRefs(refs, rule);
       });
+    });
+    FS_RESULT_EVENTS.forEach((ev)=>{
+      syncRuleRefs(inputs.resultRules?.[ev.key], S.resultRules?.[ev.key] || cloneRule());
     });
     [1,2,3].forEach((p)=>{
       const pf = S.profiles[p];
@@ -2035,6 +2264,7 @@
     }
     if (includeProfiles) base.profiles = S.profiles;
     base.rules = S.rules;
+    base.resultRules = S.resultRules;
     return base;
   }
 
@@ -2163,6 +2393,86 @@
           renderActiveRules();
         });
         refs.test?.addEventListener('click', ()=> enqueue(()=> fireRule(side.key, ev.key)));
+      });
+    });
+
+    FS_RESULT_EVENTS.forEach((ev)=>{
+      const refs = inputs.resultRules?.[ev.key];
+      if (!refs) return;
+      const ensureRule = ()=> {
+        S.resultRules = normalizeResultRules(S.resultRules, S.rules);
+        return S.resultRules[ev.key];
+      };
+      refs.enabled?.addEventListener('change', (e)=>{
+        const rule = ensureRule();
+        rule.enabled = !!e.target.checked;
+        saveState();
+        broadcastConfig('result-rule-change');
+        syncInputs();
+      });
+      refs.target?.addEventListener('change', (e)=>{
+        const rule = ensureRule();
+        const target = String(e.target.value || 'any').toLowerCase();
+        rule.target = ['any','home','away'].includes(target) ? target : 'any';
+        e.target.value = rule.target;
+        saveState();
+        broadcastConfig('result-rule-change');
+        renderActiveRules();
+      });
+      refs.mode?.addEventListener('change', (e)=>{
+        const rule = ensureRule();
+        rule.mode = String(e.target.value || 'SHOCK').toUpperCase();
+        saveState();
+        broadcastConfig('result-rule-change');
+        renderActiveRules();
+      });
+      refs.level?.addEventListener('input', (e)=>{
+        const rule = ensureRule();
+        rule.level = clamp(parseInt(e.target.value, 10) || 0, 0, 100);
+        e.target.value = rule.level;
+        e.target.style.setProperty('--lvl', `${rule.level}%`);
+        if (refs.levelValue) refs.levelValue.textContent = `${rule.level}%`;
+        saveState();
+        broadcastConfig('result-rule-change');
+        renderActiveRules();
+      });
+      refs.channel?.addEventListener('change', (e)=>{
+        const rule = ensureRule();
+        rule.channel = e.target.checked ? 2 : 1;
+        if (refs.channelValue) refs.channelValue.textContent = String(rule.channel);
+        saveState();
+        broadcastConfig('result-rule-change');
+        renderActiveRules();
+      });
+      refs.pulses?.addEventListener('change', (e)=>{
+        const rule = ensureRule();
+        rule.pulses = clamp(parseInt(e.target.value, 10) || 1, 1, 20);
+        e.target.value = rule.pulses;
+        saveState();
+        broadcastConfig('result-rule-change');
+        renderActiveRules();
+      });
+      refs.durationMs?.addEventListener('change', (e)=>{
+        const rule = ensureRule();
+        const seconds = Math.max(0.1, parseFloat(e.target.value) || 0.1);
+        rule.durationMs = Math.round(seconds * 1000);
+        e.target.value = Number.isInteger(seconds) ? String(seconds) : seconds.toFixed(1).replace(/\.0$/, '');
+        saveState();
+        broadcastConfig('result-rule-change');
+        renderActiveRules();
+      });
+      refs.gapMs?.addEventListener('change', (e)=>{
+        const rule = ensureRule();
+        rule.gapMs = Math.max(0, parseInt(e.target.value, 10) || 0);
+        e.target.value = rule.gapMs;
+        saveState();
+        broadcastConfig('result-rule-change');
+        renderActiveRules();
+      });
+      refs.test?.addEventListener('click', ()=> {
+        const rule = ensureRule();
+        const target = String(rule.target || 'any').toLowerCase();
+        enqueue(()=> fireResultRule(ev.key, ['home','away'].includes(target) ? target : 'any'));
       });
     });
 
@@ -2299,6 +2609,10 @@
     if (cfg.rules && typeof cfg.rules === 'object' && ts > fieldTs.rules) {
       S.rules = normalizeRules(cfg.rules);
       fieldTs.rules = ts;
+    }
+    if (cfg.resultRules && typeof cfg.resultRules === 'object' && ts > fieldTs.resultRules) {
+      S.resultRules = normalizeResultRules(cfg.resultRules, cfg.rules);
+      fieldTs.resultRules = ts;
     }
     if (opts.persist !== false) saveState();
     const shouldRelay = cfg.origin && cfg.origin !== SELF_ID && opts.relay !== false;

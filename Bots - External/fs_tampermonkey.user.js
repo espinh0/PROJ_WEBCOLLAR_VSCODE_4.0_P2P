@@ -135,6 +135,16 @@
     link: 'a.eventRowLink'
   };
 
+  const SEL_EVENTS = {
+    row: '.smv__verticalSections .smv__participantRow',
+    redIcon: '[data-testid*="red-card"], [class*="red-card"], [class*="redCard"], .redCard-ico',
+    yellowIcon: '[data-testid*="yellow-card"], [class*="yellow-card"], [class*="yellowCard"], .yellowCard-ico',
+    substitutionIcon: '[data-testid*="substitution"], .smv__incidentIconSub',
+    minute: '.smv__timeBox',
+    player: '.smv__playerName',
+    subOut: '.smv__incidentSubOut .smv__playerName, .smv__subDown'
+  };
+
   const getSite = () => {
     return window.location.hostname.includes('espn.com') ? 'espn' : 'flashscore';
   };
@@ -286,6 +296,7 @@
   let trPresenceTimer = null;
   let trScoreHeartbeat = null;
   let lastScoreHash = '';
+  let lastEndedScoreHash = '';
   let lastSnap = null;
   let listTargetTerm = loadListTarget();
   let listTargetTermNorm = normText(listTargetTerm);
@@ -406,6 +417,53 @@
     const s = String(text || '').toLowerCase().trim();
     if (!s) return false;
     return /(encerr|final|finished|termin|ended|\bft\b|fim)/i.test(s);
+  }
+
+  function eventTypeFromSummaryRow(row){
+    if (!row) return null;
+    if (row.querySelector(SEL_EVENTS.redIcon)) return 'redCard';
+    if (row.querySelector(SEL_EVENTS.yellowIcon)) return 'yellowCard';
+    if (row.querySelector(SEL_EVENTS.substitutionIcon)) return 'substitution';
+    const text = normText(row.textContent || '');
+    if (text.includes('cartao vermelho') || text.includes('red card')) return 'redCard';
+    if (text.includes('cartao amarelo') || text.includes('yellow card')) return 'yellowCard';
+    if (text.includes('substituicao') || text.includes('substitution')) return 'substitution';
+    return null;
+  }
+
+  function sideFromSummaryRow(row){
+    if (!row) return null;
+    if (row.classList.contains('smv__homeParticipant')) return 'home';
+    if (row.classList.contains('smv__awayParticipant')) return 'away';
+    return null;
+  }
+
+  function extractSummaryRuleEvents(){
+    if (getSite() !== 'flashscore') return [];
+    const rows = Array.from(document.querySelectorAll(SEL_EVENTS.row));
+    if (!rows.length) return [];
+    const out = [];
+    const seen = new Set();
+    for (const row of rows) {
+      const type = eventTypeFromSummaryRow(row);
+      if (!type) continue;
+      const side = sideFromSummaryRow(row);
+      if (!side) continue;
+      const text = String(row.textContent || '').replace(/\s+/g, ' ').trim();
+      const minute = (row.querySelector(SEL_EVENTS.minute)?.textContent || '').replace(/\s+/g, '').trim();
+      const player = (row.querySelector(SEL_EVENTS.player)?.textContent || '').replace(/\s+/g, ' ').trim();
+      const playerOut = (row.querySelector(SEL_EVENTS.subOut)?.textContent || '').replace(/\s+/g, ' ').trim();
+      const id = `${minute || '-'}:${side}:${type}:${normText(player || text).slice(0, 80)}:${normText(playerOut).slice(0, 80)}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push({ id, side, type, minute, player, playerOut, text });
+    }
+    return out;
+  }
+
+  function cardHash(cards){
+    if (!Array.isArray(cards) || !cards.length) return '';
+    return cards.map((ev)=>`${ev.side}:${ev.type}:${ev.id}`).sort().join('|');
   }
 
   function getMatchStatusText(){
@@ -659,7 +717,7 @@
       
       uiApi?.log?.(`Snap ESPN: ${homeName} ${homeScore} vs ${awayName} ${awayScore}`);
 
-      return {homeName, awayName, homeScore, awayScore, ended: false};
+      return {homeName, awayName, homeScore, awayScore, ended: false, cards: []};
     }
 
     let homeName = getName(SEL.homeName);
@@ -694,7 +752,8 @@
       }
     }
 
-    return {homeName, awayName, homeScore:home, awayScore:away, statusText, matchStatus: statusText, ended};
+    const cards = extractSummaryRuleEvents();
+    return {homeName, awayName, homeScore:home, awayScore:away, statusText, matchStatus: statusText, ended, cards};
   }
 
   function snapHasData(snap){
@@ -1380,15 +1439,21 @@
       statusText: String(snap.statusText || snap.matchStatus || '').trim(),
       matchStatus: String(snap.matchStatus || snap.statusText || '').trim(),
       ended: !!snap.ended,
+      cards: Array.isArray(snap.cards) ? snap.cards : [],
       ts: Date.now(),
       origin: getSite(),
       reason: metaReason || ''
     };
-    const hash = JSON.stringify([payload.homeName, payload.awayName, payload.homeScore, payload.awayScore, payload.ended, payload.matchStatus]);
+    const hash = JSON.stringify([payload.homeName, payload.awayName, payload.homeScore, payload.awayScore, payload.ended, payload.matchStatus, cardHash(payload.cards)]);
     const forceSend = targetPeer != null || ['force','connect'].includes(metaReason);
+    if (payload.ended && targetPeer == null && hash === lastEndedScoreHash && !forceSend) return;
     if (hash === lastScoreHash && !forceSend) return;
     // se for broadcast (sem target), atualiza hash para evitar flood; se for targeted, nao mexe
-    if (targetPeer == null) lastScoreHash = hash;
+    if (targetPeer == null) {
+      lastScoreHash = hash;
+      if (payload.ended) lastEndedScoreHash = hash;
+      else lastEndedScoreHash = '';
+    }
     try { trScoreSend(payload, targetPeer); } catch(_){}
   }
 
@@ -1493,6 +1558,7 @@
 
       if (trScoreHeartbeat) clearInterval(trScoreHeartbeat);
       trScoreHeartbeat = setInterval(()=> {
+        if (lastSnap?.ended) return;
         if (lastSnap) broadcastScore(lastSnap, 'heartbeat');
       }, SCORE_HEARTBEAT_MS);
 
@@ -1558,6 +1624,7 @@
     if (trScoreHeartbeat) { clearInterval(trScoreHeartbeat); trScoreHeartbeat = null; }
     stopPresenceLoop();
     lastScoreHash = '';
+    lastEndedScoreHash = '';
     peers.clear(); peerSeen.clear(); peerReplayTs.clear();
     uiApi?.renderPeers?.();
     uiApi?.setStatus?.('desconectado');
@@ -1597,7 +1664,8 @@
         snap.awayName !== lastSnap.awayName ||
         snap.homeScore !== lastSnap.homeScore ||
         snap.awayScore !== lastSnap.awayScore ||
-        snap.ended !== lastSnap.ended
+        snap.ended !== lastSnap.ended ||
+        cardHash(snap.cards) !== cardHash(lastSnap.cards)
       );
 
       if (changed){

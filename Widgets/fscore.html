@@ -34,8 +34,13 @@
         </div>
       </div>
     </div>
-      <div class="d-flex justify-content-center mb-2">
+    <div class="d-flex justify-content-center mb-2">
       <span class="fsm-match-status d-none" id="fsm-match-status">-</span>
+    </div>
+    <div class="fsm-event-feed-wrap mt-3">
+      <div class="fsr-event-feed" id="fsr-event-feed">
+        <div class="fsr-event-feed-row text-secondary">Aguardando eventos...</div>
+      </div>
     </div>
     <div class="fsm-active-rules mt-3 d-none" id="fsm-active-rules">
       <div class="fsm-active-rules-list" id="fsm-active-rules-list"></div>
@@ -368,6 +373,74 @@
   #fs-remote-card .fsr-rule-card:last-child {
     border-bottom: 0;
   }
+  #fs-mirror-card .fsr-event-feed,
+  #fs-remote-card .fsr-event-feed {
+    max-height: 150px;
+    overflow-y: auto;
+    border: 1px solid #1f232c;
+    border-radius: 8px;
+    background: #090b10;
+  }
+  #fs-mirror-card .fsr-event-feed-row,
+  #fs-remote-card .fsr-event-feed-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-bottom: 1px solid #1f232c;
+    color: #d1d5db;
+    font-size: .82rem;
+  }
+  #fs-mirror-card .fsr-event-feed-row:last-child,
+  #fs-remote-card .fsr-event-feed-row:last-child {
+    border-bottom: 0;
+  }
+  #fs-mirror-card .fsr-event-feed-time,
+  #fs-remote-card .fsr-event-feed-time {
+    margin-left: auto;
+    color: #6b7280;
+    font-size: .75rem;
+  }
+  #fs-mirror-card .fsr-event-label,
+  #fs-remote-card .fsr-event-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
+  #fs-mirror-card .fsr-event-label i,
+  #fs-mirror-card .fsr-event-feed-row i,
+  #fs-remote-card .fsr-event-label i,
+  #fs-remote-card .fsr-event-feed-row i {
+    color: currentColor !important;
+  }
+  #fs-mirror-card .fsr-event-goal,
+  #fs-remote-card .fsr-event-goal {
+    color: #34d399;
+  }
+  #fs-mirror-card .fsr-event-redCard,
+  #fs-remote-card .fsr-event-redCard {
+    color: #ef4444;
+  }
+  #fs-mirror-card .fsr-event-yellowCard,
+  #fs-remote-card .fsr-event-yellowCard {
+    color: #facc15;
+  }
+  #fs-mirror-card .fsr-event-substitution,
+  #fs-remote-card .fsr-event-substitution {
+    color: #38bdf8;
+  }
+  #fs-mirror-card .fsr-event-result,
+  #fs-remote-card .fsr-event-result {
+    color: #c084fc;
+  }
+  .fsm-winner-trophy {
+    color: #facc15;
+    margin-left: .45rem;
+  }
+  .fsm-team-name .fsm-winner-trophy:first-child {
+    margin-left: 0;
+    margin-right: .45rem;
+  }
   #fs-remote-card .fsr-rule-fields {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -685,6 +758,20 @@
     matchStatusEl.classList.add(`is-${status.key}`);
   }
 
+  function renderTeamName(el, name, winner, trophySide = 'right'){
+    if (!el) return;
+    el.textContent = name;
+    if (!winner) return;
+    const icon = document.createElement('i');
+    icon.className = 'fa-solid fa-trophy fsm-winner-trophy';
+    icon.setAttribute('aria-hidden', 'true');
+    if (trophySide === 'left') {
+      el.prepend(icon);
+    } else {
+      el.appendChild(icon);
+    }
+  }
+
   function renderScore(payload, peerId){
     if (!payload || typeof payload !== 'object') return;
     const incomingTs = Number.isFinite(payload.ts) ? payload.ts : (payload.ts ? Number(payload.ts) : 0);
@@ -697,9 +784,11 @@
     const hScore = Number.isFinite(payload.homeScore) ? payload.homeScore : '-';
     const aScore = Number.isFinite(payload.awayScore) ? payload.awayScore : '-';
     const ended = payload.ended === true;
+    const homeWon = ended && hScoreNum != null && aScoreNum != null && hScoreNum > aScoreNum;
+    const awayWon = ended && hScoreNum != null && aScoreNum != null && aScoreNum > hScoreNum;
 
-    if (homeNameEl) homeNameEl.textContent = hName;
-    if (awayNameEl) awayNameEl.textContent = aName;
+    renderTeamName(homeNameEl, hName, homeWon, 'left');
+    renderTeamName(awayNameEl, aName, awayWon, 'right');
     if (homeScoreEl) homeScoreEl.textContent = hScore;
     if (awayScoreEl) awayScoreEl.textContent = aScore;
     if (homeScoreEl) homeScoreEl.classList.toggle('fs-score-ended', ended);
@@ -1163,7 +1252,8 @@
   ];
   const FS_RESULT_EVENTS = [
     { key:'winner', label:'Vencedor' },
-    { key:'loser', label:'Perdedor' }
+    { key:'loser', label:'Perdedor' },
+    { key:'draw', label:'Empate' }
   ];
   const FS_RULE_MODES = [
     { key:'SHOCK', label:'Choque' },
@@ -1245,6 +1335,7 @@
     profilePanel: $('fsr-profile-panel'),
     rulesGrid: $('fsr-rules-grid'),
     resultRulesGrid: $('fsr-result-rules-grid'),
+    eventFeed: $('fsr-event-feed'),
     activeRules: $('fsm-active-rules'),
     activeRulesList: $('fsm-active-rules-list'),
     rules: {},
@@ -1375,9 +1466,19 @@
     FS_RESULT_EVENTS.forEach((ev)=>{
       if (src[ev.key]) merged[ev.key] = cloneRule(src[ev.key]);
     });
+    if (src.winner && String(src.winner.target || '').toLowerCase() === 'any' && !src.draw) {
+      merged.draw = cloneRule(src.winner);
+      merged.draw.target = 'any';
+      merged.winner = cloneRule(src.winner);
+      merged.winner.enabled = false;
+      merged.winner.target = 'home';
+    }
     if (!src.winner && rawRules?.home?.win) merged.winner = cloneRule(rawRules.home.win);
-    else if (!src.winner && src.draw) merged.winner = cloneRule(src.draw);
     if (!src.loser && rawRules?.home?.loss) merged.loser = cloneRule(rawRules.home.loss);
+    ['winner','loser'].forEach((key)=>{
+      if (!['home','away'].includes(String(merged[key]?.target || '').toLowerCase())) merged[key].target = key === 'winner' ? 'home' : 'away';
+    });
+    if (merged.draw) merged.draw.target = 'any';
     return merged;
   }
 
@@ -1440,6 +1541,7 @@
   let lastScoreTs = 0;
   const seenScore = new Set();
   const seenCardEvents = new Set();
+  const recentRuleEvents = [];
   let processing = false;
   const queue = [];
 
@@ -1554,8 +1656,9 @@
 
   function resultTargetMatches(rule, sideKey, eventKey){
     const target = String(rule?.target || 'any').toLowerCase();
+    if (eventKey === 'draw') return sideKey === 'any';
     if (!['winner','loser'].includes(eventKey)) return false;
-    if (target === 'any') return sideKey === 'any';
+    if (target === 'any') return false;
     return target === sideKey;
   }
 
@@ -1707,7 +1810,14 @@
       list.forEach((ev)=>{
         const side = sideFromEvent(ev);
         const type = ruleTypeFromEvent(ev);
-        if (side && type) out.push({ side, type, id: ev.id || ev.ts || ev.minute || `${side}:${type}` });
+        if (side && type) out.push({
+          side,
+          type,
+          id: ev.id || ev.ts || ev.minute || `${side}:${type}`,
+          minute: ev.minute || '',
+          player: ev.player || '',
+          playerOut: ev.playerOut || ''
+        });
       });
     });
     return out;
@@ -1765,21 +1875,34 @@
       ? (snap.awayScore - prevSnap.awayScore) : 0;
 
     if (S.triggerMode === 'rules') {
-      for (let i = 0; i < dHome; i++) enqueue(()=> fireRule('home', 'goal'));
-      for (let i = 0; i < dAway; i++) enqueue(()=> fireRule('away', 'goal'));
+      for (let i = 0; i < dHome; i++) {
+        appendReceivedEvent('goal', 'home', `${snap.homeName || 'Casa'} +1`);
+        enqueue(()=> fireRule('home', 'goal'));
+      }
+      for (let i = 0; i < dAway; i++) {
+        appendReceivedEvent('goal', 'away', `${snap.awayName || 'Visitante'} +1`);
+        enqueue(()=> fireRule('away', 'goal'));
+      }
       cardEvents.forEach((ev)=>{
         const cardKey = `${snap.homeName}|${snap.awayName}|${ev.side}|${ev.type}|${ev.id}`;
         if (seenCardEvents.has(cardKey)) return;
         seenCardEvents.add(cardKey);
+        const detail = [ev.minute, ev.player, ev.playerOut ? `sai ${ev.playerOut}` : ''].filter(Boolean).join(' - ');
+        appendReceivedEvent(ev.type, ev.side, detail);
         enqueue(()=> fireRule(ev.side, ev.type));
       });
       if (snap.ended && !prevSnap.ended && Number.isInteger(snap.homeScore) && Number.isInteger(snap.awayScore)) {
         if (snap.homeScore === snap.awayScore) {
-          enqueue(()=> fireResultRule('winner', 'any'));
+          appendReceivedEvent('draw', 'any', 'fim de jogo');
+          enqueue(()=> fireResultRule('draw', 'any'));
         } else {
           const homeWon = snap.homeScore > snap.awayScore;
-          enqueue(()=> fireResultRule('winner', homeWon ? 'home' : 'away'));
-          enqueue(()=> fireResultRule('loser', homeWon ? 'away' : 'home'));
+          const winnerSide = homeWon ? 'home' : 'away';
+          const loserSide = homeWon ? 'away' : 'home';
+          appendReceivedEvent('winner', winnerSide, 'fim de jogo');
+          appendReceivedEvent('loser', loserSide, 'fim de jogo');
+          enqueue(()=> fireResultRule('winner', winnerSide));
+          enqueue(()=> fireResultRule('loser', loserSide));
         }
       }
       return;
@@ -1855,16 +1978,84 @@
   }
 
   function resultTargetHtml(ev){
+    if (ev === 'draw') return '';
     const id = ruleInputId('result', ev, 'target');
     return `
       <div>
         <label class="form-label small text-secondary" for="${id}">Time</label>
         <select class="form-select form-select-sm" id="${id}" data-result-field="target">
-          <option value="any">Empate</option>
           <option value="home">Casa</option>
           <option value="away">Visitante</option>
         </select>
       </div>`;
+  }
+
+  function eventIconClass(eventKey){
+    if (eventKey === 'goal') return 'fa-solid fa-futbol';
+    if (eventKey === 'redCard' || eventKey === 'yellowCard') return 'fa-solid fa-square';
+    if (eventKey === 'substitution') return 'fa-solid fa-arrows-rotate';
+    if (eventKey === 'winner') return 'fa-solid fa-trophy';
+    if (eventKey === 'draw') return 'fa-solid fa-scale-balanced';
+    if (eventKey === 'loser') return 'fa-solid fa-arrow-trend-down';
+    return 'fa-solid fa-circle';
+  }
+
+  function eventColorClass(eventKey){
+    if (eventKey === 'goal') return 'fsr-event-goal';
+    if (eventKey === 'redCard') return 'fsr-event-redCard';
+    if (eventKey === 'yellowCard') return 'fsr-event-yellowCard';
+    if (eventKey === 'substitution') return 'fsr-event-substitution';
+    if (eventKey === 'winner' || eventKey === 'loser' || eventKey === 'draw') return 'fsr-event-result';
+    return '';
+  }
+
+  function eventLabelHtml(eventKey, text){
+    const label = String(text || labelForEvent(eventKey));
+    return `<span class="fsr-event-label ${eventColorClass(eventKey)}"><i class="${eventIconClass(eventKey)}" aria-hidden="true"></i><span>${label}</span></span>`;
+  }
+
+  function appendReceivedEvent(eventKey, sideKey, detail){
+    const feed = inputs.eventFeed;
+    if (!feed) return;
+    const label = FS_RESULT_EVENTS.some((ev)=>ev.key === eventKey) ? labelForResultEvent(eventKey) : labelForEvent(eventKey);
+    recentRuleEvents.push({
+      eventKey,
+      sideKey,
+      label,
+      sideLabel: labelForTargetSide(sideKey),
+      detail: String(detail || '').trim(),
+      ts: Date.now()
+    });
+    while (recentRuleEvents.length > 80) recentRuleEvents.shift();
+    feed.innerHTML = '';
+    recentRuleEvents.forEach((item)=>{
+      const row = document.createElement('div');
+      row.className = 'fsr-event-feed-row';
+      const icon = document.createElement('i');
+      icon.className = `${eventIconClass(item.eventKey)} ${eventColorClass(item.eventKey)}`;
+      icon.setAttribute('aria-hidden', 'true');
+      const text = document.createElement('span');
+      const detailText = item.detail ? ` - ${item.detail}` : '';
+      text.textContent = `${item.label} (${item.sideLabel})${detailText}`;
+      const time = document.createElement('span');
+      time.className = 'fsr-event-feed-time';
+      time.textContent = new Date(item.ts).toLocaleTimeString();
+      row.append(icon, text, time);
+      feed.appendChild(row);
+    });
+    feed.scrollTop = feed.scrollHeight;
+  }
+
+  function fillEventLabelNode(node, eventKey, text){
+    if (!node) return;
+    node.classList.add('fsr-event-label', eventColorClass(eventKey));
+    node.textContent = '';
+    const icon = document.createElement('i');
+    icon.className = eventIconClass(eventKey);
+    icon.setAttribute('aria-hidden', 'true');
+    const label = document.createElement('span');
+    label.textContent = text;
+    node.append(icon, label);
   }
 
   function mountRuleGrid(){
@@ -1880,7 +2071,7 @@
           <div class="fsr-rule-card" data-rule-event="${ev.key}">
             <div class="form-check">
               <input class="form-check-input" type="checkbox" id="${ruleInputId(side.key, ev.key, 'enabled')}" data-rule-field="enabled">
-              <label class="form-check-label fw-semibold" for="${ruleInputId(side.key, ev.key, 'enabled')}">${ev.label}</label>
+              <label class="form-check-label fw-semibold" for="${ruleInputId(side.key, ev.key, 'enabled')}">${eventLabelHtml(ev.key, ev.label)}</label>
             </div>
             <div class="fsr-rule-fields is-hidden" id="${ruleInputId(side.key, ev.key, 'fields')}">
               <div>
@@ -2033,7 +2224,8 @@
   function labelForResultEvent(eventKey){
     const labels = {
       winner: 'VENCEDOR',
-      loser: 'PERDEDOR'
+      loser: 'PERDEDOR',
+      draw: 'EMPATE'
     };
     return labels[eventKey] || String(FS_RESULT_EVENTS.find((item)=> item.key === eventKey)?.label || eventKey).toUpperCase();
   }
@@ -2065,7 +2257,8 @@
     const list = inputs.activeRulesList;
     if (!wrap || !list) return;
     list.innerHTML = '';
-    const activeBySide = { home: [], away: [] };
+    const activeBySide = {};
+    FS_RULE_SIDES.forEach((side)=>{ activeBySide[side.key] = []; });
     const activeResults = [];
     if (S.triggerMode === 'rules') {
       FS_RULE_SIDES.forEach((side)=>{
@@ -2110,7 +2303,7 @@
         const level = supportsLevel(mode) ? `${commandLevelForRule(rule)}%` : '0%';
         const eventLabel = document.createElement('span');
         eventLabel.className = 'fsm-active-rule-event';
-        eventLabel.textContent = `${labelForEvent(item.event)}:`;
+        fillEventLabelNode(eventLabel, item.event, `${labelForEvent(item.event)}:`);
         const icon = document.createElement('i');
         icon.className = iconForMode(mode);
         icon.setAttribute('aria-hidden', 'true');
@@ -2141,7 +2334,7 @@
         const level = supportsLevel(mode) ? `${commandLevelForRule(rule)}%` : '0%';
         const eventLabel = document.createElement('span');
         eventLabel.className = 'fsm-active-rule-event';
-        eventLabel.textContent = `${labelForResultEvent(item.event)} (${labelForResultTarget(rule.target)}):`;
+        fillEventLabelNode(eventLabel, item.event, `${labelForResultEvent(item.event)} (${labelForResultTarget(rule.target)}):`);
         const icon = document.createElement('i');
         icon.className = iconForMode(mode);
         icon.setAttribute('aria-hidden', 'true');
@@ -2165,11 +2358,9 @@
     if (refs.target) {
       const homeOpt = refs.target.querySelector('option[value="home"]');
       const awayOpt = refs.target.querySelector('option[value="away"]');
-      const drawOpt = refs.target.querySelector('option[value="any"]');
-      if (drawOpt) drawOpt.textContent = 'Empate';
       if (homeOpt) homeOpt.textContent = lastSnap?.homeName || 'Casa';
       if (awayOpt) awayOpt.textContent = lastSnap?.awayName || 'Visitante';
-      refs.target.value = currentRule.target || 'any';
+      refs.target.value = ['home','away'].includes(currentRule.target) ? currentRule.target : 'home';
     }
     if (refs.mode) refs.mode.value = currentRule.mode ?? DEFAULT_RULE.mode;
     const levelValue = clamp(parseInt(currentRule.level, 10) || 0, 0, 100);
@@ -2412,8 +2603,8 @@
       });
       refs.target?.addEventListener('change', (e)=>{
         const rule = ensureRule();
-        const target = String(e.target.value || 'any').toLowerCase();
-        rule.target = ['any','home','away'].includes(target) ? target : 'any';
+        const target = String(e.target.value || 'home').toLowerCase();
+        rule.target = ['home','away'].includes(target) ? target : 'home';
         e.target.value = rule.target;
         saveState();
         broadcastConfig('result-rule-change');

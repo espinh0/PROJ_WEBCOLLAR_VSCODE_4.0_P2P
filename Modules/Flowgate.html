@@ -1093,10 +1093,12 @@
       const api = firebaseApi;
       const baseRef = api.ref(api.db, `${firebaseRoomPath(firebaseRoomKey)}/actions/${action}`);
       const startAtTs = (firebaseSessionStart || Date.now()) - FIREBASE_SESSION_GRACE_MS;
-      const queryRef = api.query(baseRef, api.orderByChild('ts'), api.startAt(startAtTs), api.limitToLast(100));
+      const queryRef = api.query(baseRef, api.limitToLast(100));
       const unsub = api.onChildAdded(queryRef, (snap) => {
         const data = snap.val();
         if (!data || data.__flowgate !== FLOWGATE_PROTO) return;
+        const ts = Number(data.ts || 0);
+        if (ts && ts < startAtTs) return;
         const id = snap.key;
         if (!rememberFirebaseMessage(id)) return;
         const from = String(data.from || '');

@@ -7,6 +7,8 @@
 // @match        https://www.flashscore.com/*
 // @match        https://www.flashscore.com.br/*
 // @match        https://www.flashscore.*/*
+// @match        https://m.flashscore.com.br/*
+// @match        https://www.flashscore.mobi/*
 // @match        https://www.espn.com/*
 // @match        https://www.espn.com.br/*
 // @grant        none
@@ -126,13 +128,13 @@
   };
 
   const SEL_LIST = {
-    row: '.event__match[data-event-row="true"]',
+    row: '.event__match[data-event-row="true"], .event__match, [id^="g_"][class*="event__match"]',
     homeName: '.event__participant--home',
     awayName: '.event__participant--away',
     homeScore: '.event__score--home',
     awayScore: '.event__score--away',
     stage: '.event__stage--block',
-    link: 'a.eventRowLink'
+    link: 'a.eventRowLink, a[href*="/match/"], a[href*="/jogo/"]'
   };
 
   const SEL_EVENTS = {
@@ -509,7 +511,12 @@
   }
 
   function getListRows(){
-    return Array.from(document.querySelectorAll(SEL_LIST.row));
+    const seen = new Set();
+    return Array.from(document.querySelectorAll(SEL_LIST.row)).filter((row)=>{
+      if (!row || seen.has(row)) return false;
+      seen.add(row);
+      return !!(row.querySelector(SEL_LIST.homeName) || row.querySelector(SEL_LIST.awayName));
+    });
   }
 
   function getListRowNames(row){
@@ -686,6 +693,19 @@
     return false;
   }
 
+  function postListSearchResult(term, found, reason, snap){
+    try {
+      window.parent?.postMessage({
+        type: 'fs-list-search-result',
+        term: String(term || ''),
+        found: !!found,
+        reason: reason || '',
+        match: snap || null,
+        ts: Date.now()
+      }, '*');
+    } catch(_){}
+  }
+
   function scheduleListActivation(reason){
     if (listTargetRetryTimer) {
       clearTimeout(listTargetRetryTimer);
@@ -695,10 +715,18 @@
     const attempt = ()=>{
       listTargetRetryTimer = null;
       if (!listTargetTerm) return;
-      if (maybeActivateListMatch(reason || 'target')) return;
+      const tokens = splitSearchTokens(listTargetTerm);
+      const row = tokens.length ? findListRowByTokens(tokens) : null;
+      const snap = row ? extractListSnapshot(row) : null;
+      if (maybeActivateListMatch(reason || 'target')) {
+        postListSearchResult(listTargetTerm, true, reason || 'target', snap);
+        return;
+      }
       listTargetRetryCount += 1;
       if (listTargetRetryCount < 8) {
         listTargetRetryTimer = setTimeout(attempt, 800);
+      } else {
+        postListSearchResult(listTargetTerm, false, 'not-found', null);
       }
     };
     attempt();
@@ -709,7 +737,10 @@
     listTargetTerm = cleaned;
     listTargetTermNorm = normText(cleaned);
     saveListTarget(listTargetTerm);
-    if (cleaned) uiApi?.log?.(`Alvo da lista: ${cleaned} (${reason || 'externo'})`);
+    if (cleaned) {
+      uiApi?.log?.(`Alvo da lista: ${cleaned} (${reason || 'externo'})`);
+      postListSearchResult(cleaned, false, 'received', null);
+    }
     else {
       if (listTargetRetryTimer) {
         clearTimeout(listTargetRetryTimer);
@@ -1010,10 +1041,12 @@
     const api = firebaseApi;
     const baseRef = api.ref(api.db, `${firebaseRoomPath(firebaseRoomKey)}/actions/${action}`);
     const startAtTs = (firebaseSessionStart || Date.now()) - FIREBASE_SESSION_GRACE_MS;
-    const queryRef = api.query(baseRef, api.orderByChild('ts'), api.startAt(startAtTs), api.limitToLast(100));
+    const queryRef = api.query(baseRef, api.limitToLast(100));
     const unsub = api.onChildAdded(queryRef, (snap)=>{
       const data = snap.val();
       if (!data || data.__flowgate !== FLOWGATE_PROTO) return;
+      const ts = Number(data.ts || 0);
+      if (ts && ts < startAtTs) return;
       const id = snap.key || data.id || '';
       if (!rememberFirebaseMessage(id)) return;
       const from = String(data.from || '');

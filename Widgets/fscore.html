@@ -377,9 +377,7 @@
   #fs-remote-card .fsr-event-feed {
     max-height: 150px;
     overflow-y: auto;
-    border: 1px solid #1f232c;
     border-radius: 8px;
-    background: #090b10;
   }
   #fs-mirror-card .fsr-event-feed-row,
   #fs-remote-card .fsr-event-feed-row {
@@ -1365,6 +1363,7 @@
       source: 'fs-mirror'
     }
   ];
+  let lastSearchRequest = { id: '', term: '', at: 0 };
   const flashIframe = document.getElementById('flashscore-browser-iframe');
 
   function setStatus(text){ if (statusEl) statusEl.textContent = text; }
@@ -1548,11 +1547,14 @@
   let lastSnap = null;
   let lastScoreHash = '';
   let lastScoreTs = 0;
+  let lastTestPointTs = 0;
+  let nextHoldOnReadyAt = 0;
   const seenScore = new Set();
   const seenCardEvents = new Set();
   const recentRuleEvents = [];
   let processing = false;
   const queue = [];
+  const HOLD_REARM_GAP_MS = 250;
 
   function globalDispatchDelayMs(){
     return Math.max(0, parseInt(S.preDelayMs, 10) || 0);
@@ -1605,6 +1607,27 @@
 
   const delay = (ms)=> new Promise(r=> setTimeout(r, ms));
 
+  function nextTestPointTimestamp(){
+    const now = Date.now();
+    lastTestPointTs = Math.max(now, lastTestPointTs + 1);
+    return lastTestPointTs;
+  }
+
+  async function waitForHoldRearm(){
+    const waitMs = Math.max(0, nextHoldOnReadyAt - Date.now());
+    if (waitMs > 0) await delay(waitMs);
+  }
+
+  async function sendHoldOn(line){
+    await waitForHoldRearm();
+    await sendCommand(line);
+  }
+
+  async function sendHoldOff(){
+    await sendCommand('HOLDOFF');
+    nextHoldOnReadyAt = Date.now() + HOLD_REARM_GAP_MS;
+  }
+
   function currentMode(){
     const btn = document.querySelector('.mode-btn.active');
     if (btn?.dataset?.mode) return btn.dataset.mode;
@@ -1614,9 +1637,9 @@
   async function pulseOnce(level, dur){
     const lvl = clamp(Math.round(level),0,100);
     const mode = currentMode();
-    await sendCommand(`HOLDON ${mode},${lvl},${S.channel}`);
+    await sendHoldOn(`HOLDON ${mode},${lvl},${S.channel}`);
     await delay(dur);
-    await sendCommand('HOLDOFF');
+    await sendHoldOff();
   }
 
   async function fireProfile(points){
@@ -1644,9 +1667,9 @@
     const channel = clamp(parseInt(rule?.channel, 10) || 1, 1, 2);
     const duration = Math.max(1, parseInt(rule?.durationMs, 10) || 300);
     const level = supportsLevel(mode) ? commandLevelForRule(rule) : 0;
-    await sendCommand(`HOLDON ${mode},${level},${channel}`);
+    await sendHoldOn(`HOLDON ${mode},${level},${channel}`);
     await delay(duration);
-    await sendCommand('HOLDOFF');
+    await sendHoldOff();
   }
 
   async function fireRule(side, eventKey){
@@ -1945,7 +1968,7 @@
         return;
     }
 
-    const newPayload = { ...lastSnap, ts: Date.now(), reason: 'test-point', origin: 'local-test' };
+    const newPayload = { ...lastSnap, ts: nextTestPointTimestamp(), reason: 'test-point', origin: 'local-test' };
 
     if (side === 'home') {
         newPayload.homeScore = (lastSnap.homeScore || 0) + 1;
@@ -2741,7 +2764,9 @@
     ];
     const sendSearchToFlashscore = (term)=>{
       if (!flashIframe || !flashIframe.contentWindow) return false;
-      const payload = { type: 'fs-select-match', term, ts: Date.now(), source: 'fscore' };
+      const requestId = `fs-search:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+      lastSearchRequest = { id: requestId, term, at: Date.now() };
+      const payload = { type: 'fs-select-match', term, requestId, ts: Date.now(), source: 'fscore' };
       searchOrigins.forEach((origin)=>{
         try { flashIframe.contentWindow.postMessage(payload, origin); } catch(_){}
       });
@@ -2760,6 +2785,27 @@
     setSearchStatus(box, 'Enviado ao Flashscore', 'success');
     appendLog(`Pesquisa enviada para lista: ${term}`, box.source || 'fs-remote');
   };
+  window.addEventListener('message', (event)=>{
+    const data = event?.data;
+    if (!data || data.type !== 'fs-list-search-result') return;
+    if (event.origin && !event.origin.includes('flashscore')) return;
+    const term = String(data.term || '').trim();
+    if (lastSearchRequest.term && term && norm(term) !== norm(lastSearchRequest.term)) return;
+    const statusText = data.reason === 'received'
+      ? 'Recebido'
+      : data.found
+        ? 'Abrindo jogo'
+        : 'Nao encontrado';
+    const variant = data.reason === 'received' ? 'info' : data.found ? 'success' : 'warning';
+    searchBoxes.forEach((box)=>{
+      if (!box || !box.lastTerm) return;
+      if (term && norm(box.lastTerm) !== norm(term)) return;
+      setSearchStatus(box, statusText, variant);
+    });
+    if (data.reason !== 'received') {
+      appendLog(data.found ? `Jogo encontrado: ${term}` : `Jogo nao encontrado na lista: ${term}`, 'fs-remote');
+    }
+  });
   searchBoxes.forEach((box)=>{
     if (box.btn) box.btn.addEventListener('click', ()=> triggerSearch(box));
     if (box.input) {

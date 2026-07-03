@@ -75,7 +75,9 @@
       ignored: 0,
       lastLine: "",
       lastOkSig: "",
-      lastOkTs: 0
+      lastOkTs: 0,
+      lastParsedSig: "",
+      lastParsedTs: 0
     }
   };
 
@@ -92,6 +94,9 @@
       return `chart-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     }
   })();
+  let chartEventSeq = 0;
+  const seenChartEventIds = new Set();
+  const seenChartEventQueue = [];
 
   function resetCounters() {
     state.counters = { SHOCK: 0, VIBRATION: 0, LIGHT: 0, BEEP: 0, BTN_STATE: 0 };
@@ -247,13 +252,41 @@
     if (!window.__FS_BUS__ || typeof window.__FS_BUS__.send !== "function") return;
     const ts = Number(meta.ts) || Date.now();
     const source = meta.source || "serial";
-    const eventPayload = { ...payload, ts, origin: CHART_ORIGIN, source };
+    const eventId = meta.eventId || `${CHART_ORIGIN}:${ts}:${++chartEventSeq}`;
+    const eventPayload = { ...payload, ts, eventId, origin: CHART_ORIGIN, source };
     try { window.__FS_BUS__.send({ type: "fs-chart", payload: eventPayload }); } catch(_) {}
+  }
+
+  function serialParsedSignature(parsed, text) {
+    if (!parsed || typeof parsed !== "object") return String(text || "").trim();
+    return [
+      parsed.kind || "",
+      parsed.mode || "",
+      parsed.level ?? "",
+      parsed.channel ?? "",
+      parsed.durationMs ?? "",
+      parsed.btnState ?? "",
+      String(text || "").trim()
+    ].join("|");
+  }
+
+  function rememberChartEventId(eventId) {
+    if (!eventId) return false;
+    const key = String(eventId);
+    if (seenChartEventIds.has(key)) return true;
+    seenChartEventIds.add(key);
+    seenChartEventQueue.push(key);
+    while (seenChartEventQueue.length > 300) {
+      const oldKey = seenChartEventQueue.shift();
+      if (oldKey) seenChartEventIds.delete(oldKey);
+    }
+    return false;
   }
 
   function applyChartEvent(payload) {
     if (!payload || typeof payload !== "object") return;
     if (payload.origin && payload.origin === CHART_ORIGIN) return;
+    if (rememberChartEventId(payload.eventId)) return;
     const ts = Number(payload.ts) || Date.now();
     if (payload.kind === "holdoff") {
       finalizeHold(ts, { durationMs: payload.durationMs, durationSec: payload.durationSec });
@@ -293,6 +326,14 @@
       setStatus(`Serial RX ${state.serialStats.seen} (validos: ${state.serialStats.parsed}).`);
       return;
     }
+    const parsedSig = serialParsedSignature(parsed, text);
+    if (state.serialStats.lastParsedSig === parsedSig && (now - state.serialStats.lastParsedTs) < 40) {
+      debugLog(`Chart serial parse duplicado ignorado em ${now - state.serialStats.lastParsedTs}ms: ${text}`);
+      setStatus(`Serial RX ${state.serialStats.seen} (validos: ${state.serialStats.parsed}).`);
+      return;
+    }
+    state.serialStats.lastParsedSig = parsedSig;
+    state.serialStats.lastParsedTs = now;
     state.serialStats.parsed += 1;
     const ts = Date.now();
     if (parsed.kind === "holdoff") {

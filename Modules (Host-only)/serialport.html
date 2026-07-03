@@ -149,6 +149,7 @@
     }
   }
   ensureSerialBusHelpers();
+  try { window.dispatchEvent(new Event("serial-bus-ready")); } catch {}
 
   function log(msg, level = "info") {
     try {

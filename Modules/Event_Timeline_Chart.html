@@ -64,8 +64,10 @@
     iconCache: {},
     pending: [],
     counters: {},
+    totalDurationSec: 0,
     activeHold: null,
     holdSeq: 0,
+    eventSeq: 0,
     serialListener: null,
     serialBusUnsub: null,
     serialBusReadyHandler: null,
@@ -461,6 +463,8 @@
         hold: false,
         holdId: null,
         durationSec: null,
+        totalDurationSec: 0,
+        eventSeq: 0,
         exec: 0,
         _seed: true
       });
@@ -475,6 +479,8 @@
       hold: payload.hold || false,
       holdId: payload.holdId || null,
       durationSec: payload.durationSec ?? null,
+      totalDurationSec: Number.isFinite(payload.totalDurationSec) ? payload.totalDurationSec : null,
+      eventSeq: Number.isFinite(payload.eventSeq) ? payload.eventSeq : null,
       exec: payload.exec ?? null
     });
     if (ds.data.length > MAX_POINTS) {
@@ -511,20 +517,26 @@
     const explicitDurationSec = Number.isFinite(parsed.durationSec)
       ? Math.max(0, parsed.durationSec)
       : (Number.isFinite(parsed.durationMs) ? Math.max(0, parsed.durationMs / 1000) : null);
+    const resolvedDurationSec = isPulse ? (explicitDurationSec ?? DEFAULT_PULSE_SEC) : null;
     let holdId = null;
     if (isHold) {
       holdId = ++state.holdSeq;
       state.activeHold = { id: holdId, mode, channel: parsed.channel, ts: Number(meta && meta.ts) || Date.now() };
     }
+    if (Number.isFinite(resolvedDurationSec)) {
+      state.totalDurationSec += resolvedDurationSec;
+    }
     return {
       ...parsed,
       idx: ++state.counters[mode],
       exec: state.counters[mode],
+      eventSeq: ++state.eventSeq,
       ts: Number(meta && meta.ts) || Date.now(),
       source: meta && meta.source ? meta.source : "bus",
       hold: isHold,
       holdId,
-      durationSec: isPulse ? (explicitDurationSec ?? DEFAULT_PULSE_SEC) : null
+      durationSec: resolvedDurationSec,
+      totalDurationSec: state.totalDurationSec
     };
   }
 
@@ -535,12 +547,16 @@
       ? Math.max(0, opts.durationSec)
       : (Number.isFinite(opts.durationMs) ? Math.max(0, opts.durationMs / 1000) : null);
     const fallbackSec = Number.isFinite(endTs) ? Math.max(0, (endTs - active.ts) / 1000) : null;
+    const resolvedDurationSec = durationSec != null ? durationSec : fallbackSec;
     let updated = false;
 
     const applyDuration = (point) => {
       if (!point || point.holdId !== active.id) return false;
-      const next = durationSec != null ? durationSec : fallbackSec;
-      if (next != null) point.durationSec = next;
+      if (resolvedDurationSec != null) {
+        point.durationSec = resolvedDurationSec;
+        state.totalDurationSec += resolvedDurationSec;
+        point.totalDurationSec = state.totalDurationSec;
+      }
       return true;
     };
     const ds = state.chart?.data?.datasets?.find((d) => d.mode === active.mode);
@@ -566,6 +582,8 @@
       state.chart.update("none");
     }
     state.pending.length = 0;
+    state.totalDurationSec = 0;
+    state.eventSeq = 0;
     resetCounters();
     setBounds();
     setStatus("Limpo. Aguardando eventos.");
@@ -656,15 +674,7 @@
                 if (ctx.raw && ctx.raw._seed) return "";
                 const ch = ctx.raw && ctx.raw.ch ? ctx.raw.ch : "-";
                 const base = `${ds.label}: ${ctx.parsed.y}% (ch ${ch})`;
-                let total = 0;
-                if (Array.isArray(ds.data)) {
-                  for (const p of ds.data) {
-                    if (!p || !Number.isFinite(p.durationSec)) continue;
-                    if (typeof p.x === "number" && p.x <= ctx.parsed.x) {
-                      total += p.durationSec;
-                    }
-                  }
-                }
+                const total = ctx.raw && Number.isFinite(ctx.raw.totalDurationSec) ? ctx.raw.totalDurationSec : 0;
                 if (ctx.raw && ctx.raw.hold && Number.isFinite(ctx.raw.durationSec)) {
                   return [
                     base,

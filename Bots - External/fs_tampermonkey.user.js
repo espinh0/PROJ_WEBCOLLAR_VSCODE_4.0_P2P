@@ -114,6 +114,8 @@
     awayName: '.duelParticipant__away .participant__participantName a, .duelParticipant__away img.participant__image[alt]',
     liveWrapper: '.duelParticipant__score .detailScore__wrapper.detailScore__live',
     scoreWrapper: '.duelParticipant__score .detailScore__wrapper',
+    penalties: '.duelParticipant__score .detailScore__penalties, .fixedHeaderDuel__score .detailScore__penalties',
+    penaltySummaryHeaders: '[data-testid="wcl-headerSection-text"]',
     fixedWrapper: '.fixedHeaderDuel__score .fixedScore.fixedScore--live',
     fixedScoreWrapper: '.fixedHeaderDuel__score .fixedScore',
     statusText: '.duelParticipant__score .detailScore__status .fixedHeaderDuel__detailStatus, .fixedHeaderDuel__score .fixedScore__status .fixedHeaderDuel__detailStatus'
@@ -142,6 +144,9 @@
     redIcon: '[data-testid*="red-card"], [class*="red-card"], [class*="redCard"], .redCard-ico',
     yellowIcon: '[data-testid*="yellow-card"], [class*="yellow-card"], [class*="yellowCard"], .yellowCard-ico',
     substitutionIcon: '[data-testid*="substitution"], .smv__incidentIconSub',
+    penaltyGoalIcon: '[data-testid*="penalty-goal"], [class*="penalty-goal"]',
+    penaltyMissedIcon: '[data-testid*="penalty-missed"], [class*="penalty-missed"]',
+    ownGoalIcon: '[data-testid*="goal-soccer-own"], [class*="goal-soccer-own"]',
     minute: '.smv__timeBox',
     player: '.smv__playerName',
     subOut: '.smv__incidentSubOut .smv__playerName, .smv__subDown'
@@ -447,10 +452,16 @@
 
   function eventTypeFromSummaryRow(row){
     if (!row) return null;
+    if (row.querySelector(SEL_EVENTS.penaltyGoalIcon)) return 'penaltyGoal';
+    if (row.querySelector(SEL_EVENTS.penaltyMissedIcon)) return 'penaltyMissed';
+    if (row.querySelector(SEL_EVENTS.ownGoalIcon)) return 'ownGoal';
     if (row.querySelector(SEL_EVENTS.redIcon)) return 'redCard';
     if (row.querySelector(SEL_EVENTS.yellowIcon)) return 'yellowCard';
     if (row.querySelector(SEL_EVENTS.substitutionIcon)) return 'substitution';
     const text = normText(row.textContent || '');
+    if (text.includes('penalti perdido') || text.includes('penalty missed') || text.includes('missed penalty')) return 'penaltyMissed';
+    if (text.includes('penalti') || text.includes('penalty')) return 'penaltyGoal';
+    if (text.includes('gol contra') || text.includes('own goal')) return 'ownGoal';
     if (text.includes('cartao vermelho') || text.includes('red card')) return 'redCard';
     if (text.includes('cartao amarelo') || text.includes('yellow card')) return 'yellowCard';
     if (text.includes('substituicao') || text.includes('substitution')) return 'substitution';
@@ -490,6 +501,27 @@
   function cardHash(cards){
     if (!Array.isArray(cards) || !cards.length) return '';
     return cards.map((ev)=>`${ev.side}:${ev.type}:${ev.id}`).sort().join('|');
+  }
+
+  function extractPenaltyScore(){
+    if (getSite() !== 'flashscore') return null;
+    const els = Array.from(document.querySelectorAll(SEL.penalties));
+    Array.from(document.querySelectorAll(SEL.penaltySummaryHeaders)).forEach((el)=>{
+      const text = normText(el?.textContent || '');
+      if (text.includes('penaltis') || text.includes('penalties')) els.push(el);
+    });
+    for (const el of els) {
+      const text = String(el?.textContent || '').replace(/\s+/g, ' ').trim();
+      const match = text.match(/(?:p[eê]n(?:altis?)?)?\s*:?\s*(\d+)\s*-\s*(\d+)/i);
+      if (match) {
+        return {
+          home: parseInt(match[1], 10),
+          away: parseInt(match[2], 10),
+          text
+        };
+      }
+    }
+    return null;
   }
 
   function getMatchStatusText(){
@@ -810,7 +842,8 @@
     }
 
     const cards = extractSummaryRuleEvents();
-    return {homeName, awayName, homeScore:home, awayScore:away, statusText, matchStatus: statusText, ended, cards};
+    const penaltyScore = extractPenaltyScore();
+    return {homeName, awayName, homeScore:home, awayScore:away, penaltyScore, statusText, matchStatus: statusText, ended, cards};
   }
 
   function snapHasData(snap){
@@ -1498,12 +1531,14 @@
       statusText: String(snap.statusText || snap.matchStatus || '').trim(),
       matchStatus: String(snap.matchStatus || snap.statusText || '').trim(),
       ended: !!snap.ended,
+      penaltyScore: snap.penaltyScore || null,
       cards: Array.isArray(snap.cards) ? snap.cards : [],
       ts: Date.now(),
       origin: getSite(),
       reason: metaReason || ''
     };
-    const hash = JSON.stringify([payload.homeName, payload.awayName, payload.homeScore, payload.awayScore, payload.ended, payload.matchStatus, cardHash(payload.cards)]);
+    const penaltyHash = payload.penaltyScore ? `${payload.penaltyScore.home}:${payload.penaltyScore.away}` : '';
+    const hash = JSON.stringify([payload.homeName, payload.awayName, payload.homeScore, payload.awayScore, penaltyHash, payload.ended, payload.matchStatus, cardHash(payload.cards)]);
     const forceSend = targetPeer != null || ['force','connect'].includes(metaReason);
     if (payload.ended && targetPeer == null && hash === lastEndedScoreHash && !forceSend) return;
     if (hash === lastScoreHash && !forceSend) return;
@@ -1723,6 +1758,7 @@
         snap.awayName !== lastSnap.awayName ||
         snap.homeScore !== lastSnap.homeScore ||
         snap.awayScore !== lastSnap.awayScore ||
+        JSON.stringify(snap.penaltyScore || null) !== JSON.stringify(lastSnap.penaltyScore || null) ||
         snap.ended !== lastSnap.ended ||
         cardHash(snap.cards) !== cardHash(lastSnap.cards)
       );

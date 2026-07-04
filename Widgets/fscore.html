@@ -37,6 +37,9 @@
     <div class="d-flex justify-content-center mb-2">
       <span class="fsm-match-status d-none" id="fsm-match-status">-</span>
     </div>
+    <div class="d-flex justify-content-center mb-2">
+      <span class="fsm-penalty-score d-none" id="fsm-penalty-score">-</span>
+    </div>
     <div class="fsm-event-feed-wrap mt-3">
       <div class="fsr-event-feed" id="fsr-event-feed">
         <div class="fsr-event-feed-row text-secondary">Aguardando eventos...</div>
@@ -196,6 +199,18 @@
   }
   .fsm-match-status.is-ended {
     color: #fca5a5;
+  }
+  .fsm-penalty-score {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 1.2rem;
+    color: #fde68a;
+    font-size: .86rem;
+    font-weight: 800;
+    letter-spacing: .08em;
+    line-height: 1;
+    text-transform: uppercase;
   }
   @keyframes liveDotPulse {
     0%, 100% { opacity: .35; transform: scale(.82); }
@@ -536,6 +551,7 @@
   const homeScoreEl = $('fsm-home-score');
   const awayScoreEl = $('fsm-away-score');
   const matchStatusEl = $('fsm-match-status');
+  const penaltyScoreEl = $('fsm-penalty-score');
   const homeCardEl = $('fsm-home-card');
   const awayCardEl = $('fsm-away-card');
   const lastEl = $('fsm-last');
@@ -756,6 +772,22 @@
     matchStatusEl.classList.add(`is-${status.key}`);
   }
 
+  function renderPenaltyScore(payload){
+    if (!penaltyScoreEl) return;
+    const raw = payload?.penaltyScore || payload?.penalties || null;
+    const homeRaw = raw?.home;
+    const awayRaw = raw?.away;
+    const home = Number.isFinite(homeRaw) ? homeRaw : (homeRaw != null ? parseInt(homeRaw, 10) : null);
+    const away = Number.isFinite(awayRaw) ? awayRaw : (awayRaw != null ? parseInt(awayRaw, 10) : null);
+    if (!Number.isFinite(home) || !Number.isFinite(away)) {
+      penaltyScoreEl.classList.add('d-none');
+      penaltyScoreEl.textContent = '-';
+      return;
+    }
+    penaltyScoreEl.textContent = `Pen: ${home} - ${away}`;
+    penaltyScoreEl.classList.remove('d-none');
+  }
+
   function renderTeamName(el, name, winner, trophySide = 'right'){
     if (!el) return;
     el.textContent = name;
@@ -792,6 +824,7 @@
     if (homeScoreEl) homeScoreEl.classList.toggle('fs-score-ended', ended);
     if (awayScoreEl) awayScoreEl.classList.toggle('fs-score-ended', ended);
     renderMatchStatus(payload);
+    renderPenaltyScore(payload);
     if (ended) setLastScorer(null);
 
     const ts = payload.ts ? new Date(payload.ts).toLocaleTimeString() : '-';
@@ -1248,6 +1281,9 @@
   ];
   const FS_RULE_EVENTS = [
     { key:'goal', label:'Ponto' },
+    { key:'penaltyGoal', label:'Gol de penalti' },
+    { key:'penaltyMissed', label:'Penalti perdido' },
+    { key:'ownGoal', label:'Gol contra' },
     { key:'redCard', label:'Cartao vermelho' },
     { key:'yellowCard', label:'Cartao amarelo' },
     { key:'substitution', label:'Substituicao' }
@@ -1838,6 +1874,9 @@
 
   function ruleTypeFromEvent(ev){
     const raw = norm(ev?.type || ev?.event || ev?.card || ev?.kind || '');
+    if (raw.includes('penaltymissed') || raw.includes('penalti perdido') || raw.includes('penalty missed') || raw.includes('missed penalty')) return 'penaltyMissed';
+    if (raw.includes('penaltygoal') || raw.includes('penalti') || raw.includes('penalty')) return 'penaltyGoal';
+    if (raw.includes('owngoal') || raw.includes('gol contra') || raw.includes('own goal')) return 'ownGoal';
     if (raw.includes('red') || raw.includes('vermelho')) return 'redCard';
     if (raw.includes('yellow') || raw.includes('amarelo')) return 'yellowCard';
     if (raw.includes('substitution') || raw.includes('substituicao')) return 'substitution';
@@ -1883,13 +1922,15 @@
       statusText,
       matchStatus: String(payload.matchStatus || statusText).trim(),
       ended: payload.ended === true || endedByStatus,
+      penaltyScore: payload.penaltyScore || payload.penalties || null,
       ts,
       origin: src,
       reason: payload.reason || 'update',
       cards: cardEvents
     };
     const cardSnapshot = cardEvents.map((ev)=>`${ev.side}:${ev.type}:${ev.id}`).join('|');
-    const hash = JSON.stringify([snap.homeName, snap.awayName, snap.homeScore, snap.awayScore, snap.ended, snap.matchStatus, cardSnapshot]);
+    const penaltyHash = snap.penaltyScore ? `${snap.penaltyScore.home}:${snap.penaltyScore.away}` : '';
+    const hash = JSON.stringify([snap.homeName, snap.awayName, snap.homeScore, snap.awayScore, penaltyHash, snap.ended, snap.matchStatus, cardSnapshot]);
     if (hash === lastScoreHash && ts <= lastScoreTs) return;
     lastScoreHash = hash; lastScoreTs = ts;
     appendLog(`${snap.homeName || 'Casa'} ${Number.isFinite(snap.homeScore) ? snap.homeScore : '-'} x ${Number.isFinite(snap.awayScore) ? snap.awayScore : '-'} ${snap.awayName || 'Fora'} (${payload.reason || 'update'})`, src);
@@ -2033,6 +2074,9 @@
 
   function eventIconClass(eventKey){
     if (eventKey === 'goal') return 'fa-solid fa-futbol';
+    if (eventKey === 'penaltyGoal') return 'fa-solid fa-futbol';
+    if (eventKey === 'penaltyMissed') return 'fa-solid fa-ban';
+    if (eventKey === 'ownGoal') return 'fa-solid fa-circle-xmark';
     if (eventKey === 'redCard' || eventKey === 'yellowCard') return 'fa-solid fa-square';
     if (eventKey === 'substitution') return 'fa-solid fa-arrows-rotate';
     if (eventKey === 'winner') return 'fa-solid fa-trophy';
@@ -2043,6 +2087,9 @@
 
   function eventColorClass(eventKey){
     if (eventKey === 'goal') return 'fsr-event-goal';
+    if (eventKey === 'penaltyGoal') return 'fsr-event-goal';
+    if (eventKey === 'penaltyMissed') return 'fsr-event-yellowCard';
+    if (eventKey === 'ownGoal') return 'fsr-event-redCard';
     if (eventKey === 'redCard') return 'fsr-event-redCard';
     if (eventKey === 'yellowCard') return 'fsr-event-yellowCard';
     if (eventKey === 'substitution') return 'fsr-event-substitution';
@@ -2255,6 +2302,9 @@
   function labelForEvent(eventKey){
     const labels = {
       goal: 'PONTO',
+      penaltyGoal: 'GOL DE PENALTI',
+      penaltyMissed: 'PENALTI PERDIDO',
+      ownGoal: 'GOL CONTRA',
       redCard: 'CART\u00c3O VERMELHO',
       yellowCard: 'CART\u00c3O AMARELO',
       substitution: 'SUBSTITUI\u00c7\u00c3O'

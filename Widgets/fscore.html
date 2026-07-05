@@ -774,11 +774,9 @@
 
   function renderPenaltyScore(payload){
     if (!penaltyScoreEl) return;
-    const raw = payload?.penaltyScore || payload?.penalties || null;
-    const homeRaw = raw?.home;
-    const awayRaw = raw?.away;
-    const home = Number.isFinite(homeRaw) ? homeRaw : (homeRaw != null ? parseInt(homeRaw, 10) : null);
-    const away = Number.isFinite(awayRaw) ? awayRaw : (awayRaw != null ? parseInt(awayRaw, 10) : null);
+    const pair = penaltyScorePair(payload);
+    const home = pair?.home;
+    const away = pair?.away;
     if (!Number.isFinite(home) || !Number.isFinite(away)) {
       penaltyScoreEl.classList.add('d-none');
       penaltyScoreEl.textContent = '-';
@@ -786,6 +784,28 @@
     }
     penaltyScoreEl.textContent = `Pen: ${home} - ${away}`;
     penaltyScoreEl.classList.remove('d-none');
+  }
+
+  function numericScore(value){
+    const num = Number(value);
+    return Number.isFinite(num) ? num : null;
+  }
+
+  function penaltyScorePair(payload){
+    const raw = payload?.penaltyScore || payload?.penalties || null;
+    const home = numericScore(raw?.home);
+    const away = numericScore(raw?.away);
+    if (!Number.isFinite(home) || !Number.isFinite(away)) return null;
+    return { home, away };
+  }
+
+  function winnerSideFromScore(payload, hScoreNum, aScoreNum){
+    if (!payload?.ended || !Number.isFinite(hScoreNum) || !Number.isFinite(aScoreNum)) return null;
+    if (hScoreNum > aScoreNum) return 'home';
+    if (aScoreNum > hScoreNum) return 'away';
+    const pens = penaltyScorePair(payload);
+    if (!pens || pens.home === pens.away) return null;
+    return pens.home > pens.away ? 'home' : 'away';
   }
 
   function renderTeamName(el, name, winner, trophySide = 'right'){
@@ -814,8 +834,9 @@
     const hScore = Number.isFinite(payload.homeScore) ? payload.homeScore : '-';
     const aScore = Number.isFinite(payload.awayScore) ? payload.awayScore : '-';
     const ended = payload.ended === true;
-    const homeWon = ended && hScoreNum != null && aScoreNum != null && hScoreNum > aScoreNum;
-    const awayWon = ended && hScoreNum != null && aScoreNum != null && aScoreNum > hScoreNum;
+    const winnerSide = winnerSideFromScore(payload, hScoreNum, aScoreNum);
+    const homeWon = winnerSide === 'home';
+    const awayWon = winnerSide === 'away';
 
     renderTeamName(homeNameEl, hName, homeWon, 'left');
     renderTeamName(awayNameEl, aName, awayWon, 'right');
@@ -1903,6 +1924,30 @@
     return out;
   }
 
+  function numericResultScore(value){
+    const num = Number(value);
+    return Number.isFinite(num) ? num : null;
+  }
+
+  function penaltyResultPair(snap){
+    const raw = snap?.penaltyScore || snap?.penalties || null;
+    const home = numericResultScore(raw?.home);
+    const away = numericResultScore(raw?.away);
+    if (!Number.isFinite(home) || !Number.isFinite(away)) return null;
+    return { home, away };
+  }
+
+  function resultWinnerSide(snap){
+    const home = numericResultScore(snap?.homeScore);
+    const away = numericResultScore(snap?.awayScore);
+    if (!Number.isFinite(home) || !Number.isFinite(away)) return null;
+    if (home > away) return 'home';
+    if (away > home) return 'away';
+    const pens = penaltyResultPair(snap);
+    if (!pens || pens.home === pens.away) return null;
+    return pens.home > pens.away ? 'home' : 'away';
+  }
+
   function handleScore(payload, opts = {}){
     if (!payload || typeof payload !== 'object') return;
     const src = payload.origin || payload.peerId || 'fs-remote';
@@ -1974,13 +2019,12 @@
         enqueue(()=> fireRule(ev.side, ev.type));
       });
       if (snap.ended && !prevSnap.ended && Number.isInteger(snap.homeScore) && Number.isInteger(snap.awayScore)) {
-        if (snap.homeScore === snap.awayScore) {
+        const winnerSide = resultWinnerSide(snap);
+        if (!winnerSide) {
           appendReceivedEvent('draw', 'any', 'fim de jogo');
           enqueue(()=> fireResultRule('draw', 'any'));
         } else {
-          const homeWon = snap.homeScore > snap.awayScore;
-          const winnerSide = homeWon ? 'home' : 'away';
-          const loserSide = homeWon ? 'away' : 'home';
+          const loserSide = winnerSide === 'home' ? 'away' : 'home';
           appendReceivedEvent('winner', winnerSide, 'fim de jogo');
           appendReceivedEvent('loser', loserSide, 'fim de jogo');
           enqueue(()=> fireResultRule('winner', winnerSide));

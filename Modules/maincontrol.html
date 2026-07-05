@@ -1652,7 +1652,7 @@
             <i class="fa-solid fa-flag-checkered"></i>
           </button>
 
-          <button id="btnAudioToggle" class="btn btn-audio-toggle" title="Mostrar audio" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
+          <button id="btnAudioToggle" class="btn btn-audio-toggle host-only" title="Mostrar audio" data-bs-toggle="tooltip" aria-pressed="false" aria-expanded="false">
             <i class="fa-solid fa-headphones"></i>
           </button>
 
@@ -2445,6 +2445,9 @@
   resetPulseMount();
 
   function unloadPulseSequencer(){
+    if (window.__PULSE_SEQUENCE_APP__ && typeof window.__PULSE_SEQUENCE_APP__.stop === "function") {
+      try { window.__PULSE_SEQUENCE_APP__.stop(); } catch(_){}
+    }
     resetPulseMount();
     pulseLoaded = false;
   }
@@ -2604,6 +2607,9 @@
   resetVoiceCommandMount();
 
   function unloadVoiceCommand(){
+    if (window.__VOICE_COMMAND_APP__ && typeof window.__VOICE_COMMAND_APP__.shutdown === "function") {
+      try { window.__VOICE_COMMAND_APP__.shutdown(); } catch(_){}
+    }
     resetVoiceCommandMount();
     voiceLoaded = false;
   }
@@ -2925,14 +2931,35 @@
     flushPendingCommandQueue();
     return sendCommand(text, opts);
   }
+  function isHoldOffCommand(text){
+    return String(text || "").trim().toUpperCase() === "HOLDOFF";
+  }
+  function isModuleCommandAllowed(source, text){
+    const key = String(source || "").toLowerCase();
+    if (!key) return true;
+    if (isHoldOffCommand(text)) return true;
+    if (key === "fscore" || key === "scoreboard") return !!scoreboardOpen;
+    if (key === "audio-collar" || key === "trystero-in") return !!audioOpen;
+    if (key === "sequence") return !!pulseOpen;
+    if (key === "naval") return !!navalOpen;
+    if (key === "voice-command") return !!voiceOpen;
+    return true;
+  }
+  function sendCommandFromApi(text, opts = {}, latest = false){
+    if (!isModuleCommandAllowed(opts?.source, text)) {
+      log(`Comando bloqueado: modulo ${opts.source} colapsado.`, "warn");
+      return Promise.resolve(false);
+    }
+    return latest ? sendLatestCommand(text, opts) : sendCommand(text, opts);
+  }
 
   function installCentralCommandApi(){
     const api = {
       send(text, opts = {}) {
-        return sendCommand(text, opts);
+        return sendCommandFromApi(text, opts, false);
       },
       sendLatest(text, opts = {}) {
-        return sendLatestCommand(text, opts);
+        return sendCommandFromApi(text, opts, true);
       },
       isReady: isSerialReady,
       getTransportReady: isSerialReady
@@ -3687,8 +3714,10 @@
     if (rampOpen) {
       if (!rampLoaded) loadRampControl();
       else syncRampWidgetState("module-open");
-    } else if (rampLoaded) {
-      unloadRampControl();
+    } else {
+      if (rampSession) abortRampSession({ sendHoldOff: true });
+      if (rampLoaded) unloadRampControl();
+      else syncRampWidgetState("module-hidden");
     }
     if (opts?.persist !== false) persistState();
     if (opts?.broadcast !== false) {
@@ -4154,7 +4183,7 @@
     return base;
   }
   function canUseRampControl(){
-    return !!ramp?.enabled && modeSupportsLevel(currentMode) && currentMode !== "ROULETTE";
+    return !!rampOpen && !!ramp?.enabled && modeSupportsLevel(currentMode) && currentMode !== "ROULETTE";
   }
   function getRampDurationMs(fromLevel, toLevel, cfg){
     const safeCfg = normalizeRampState(cfg || ramp);

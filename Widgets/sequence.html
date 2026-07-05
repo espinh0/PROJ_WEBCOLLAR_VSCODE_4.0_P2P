@@ -1121,6 +1121,10 @@
         loop = !!chkLoop.checked;
       });
 
+  window.__PULSE_SEQUENCE_APP__ = {
+        stop: () => stopPlayback(true)
+      };
+
   // ====== Inicial ======
       loadBlocksFromStorage();
       setEdType("PULSE");

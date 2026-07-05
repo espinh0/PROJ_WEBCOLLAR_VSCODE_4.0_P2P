@@ -2770,25 +2770,32 @@
     addLog(`Idioma ativo: ${activeLang}${storedLang ? ' (restaurado)' : ' (detectado)'}`, 'info');
   }
 
-  // Expor API globalmente para callbacks
-  window.__VOICE_COMMAND_APP__ = {
-    addTriggerWord,
-    removeTriggerWord,
-    clearAllTriggerWords,
-    rehydrate: rehydrateWidget
-  };
-
-  // Encerrar reconhecimento ao descarregar
-  window.addEventListener('beforeunload', () => {
+  function shutdownVoiceCommand(){
     stopNetworkLatencyMonitor();
+    stopSoundDetector();
+    stopListening();
     if (transcriptRenderRafId && typeof cancelAnimationFrame === 'function') {
       cancelAnimationFrame(transcriptRenderRafId);
       transcriptRenderRafId = null;
       transcriptRenderScheduled = false;
     }
     if (recognition && isListening) {
-      recognition.stop();
+      try { recognition.stop(); } catch (_) {}
     }
+  }
+
+  // Expor API globalmente para callbacks
+  window.__VOICE_COMMAND_APP__ = {
+    addTriggerWord,
+    removeTriggerWord,
+    clearAllTriggerWords,
+    rehydrate: rehydrateWidget,
+    shutdown: shutdownVoiceCommand
+  };
+
+  // Encerrar reconhecimento ao descarregar
+  window.addEventListener('beforeunload', () => {
+    shutdownVoiceCommand();
   });
 
   function buildVoiceCommandLine(params) {
